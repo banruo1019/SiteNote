@@ -18,6 +18,14 @@ struct ReportsView: View {
         sort: \Note.createdAt
     ) private var allNotes: [Note]
 
+    @Query(
+        filter: #Predicate<LogEntry> { $0.deletedAt == nil },
+        sort: [SortDescriptor(\LogEntry.startAt)]
+    ) private var allEntries: [LogEntry]
+
+    /// "更多导出"折叠状态。默认收起,把噪音按钮藏起来。
+    @State private var advancedExpanded: Bool = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -25,8 +33,13 @@ struct ReportsView: View {
                 VStack(spacing: 0) {
                     AIStatusBar()
                     titleRow
-                    weeklyArea
-                    outputList
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            weeklyArea
+                            monthSummaryArea
+                            outputList
+                        }
+                    }
                 }
             }
             .navigationBarHidden(true)
@@ -168,16 +181,128 @@ struct ReportsView: View {
         return "W\(weekNum) · \(f.string(from: interval.start))–\(f.string(from: endOfWeek))"
     }
 
-    // MARK: - Output list
+    // MARK: - 本月汇总(PM 视角看板)
+
+    /// 本月日历区间 [start, end)。
+    private var monthRange: (start: Date, end: Date) {
+        let cal = Calendar.current
+        let now = Date()
+        let start = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
+        let end = cal.date(byAdding: .month, value: 1, to: start) ?? now
+        return (start, end)
+    }
+
+    private var thisMonthEntries: [LogEntry] {
+        allEntries.filter { $0.startAt >= monthRange.start && $0.startAt < monthRange.end }
+    }
+
+    private var thisMonthNotes: [Note] {
+        allNotes.filter { $0.createdAt >= monthRange.start && $0.createdAt < monthRange.end }
+    }
+
+    /// 本月人员到场总人日(quantity 累计,nil 算 1)。
+    private var monthHeadcount: Int {
+        thisMonthEntries
+            .filter { $0.kind == .person && !$0.isAbsent }
+            .map { $0.quantity ?? 1 }
+            .reduce(0, +)
+    }
+
+    /// 本月机械工时合计(已闭合 session 的小时数)。
+    private var monthPlantHours: Double {
+        thisMonthEntries
+            .filter { $0.kind == .plant }
+            .compactMap { $0.duration }
+            .reduce(0, +) / 3600
+    }
+
+    /// 本月隐患条数。
+    private var monthHazardCount: Int {
+        thisMonthNotes.filter { $0.isHazard }.count
+    }
+
+    private var monthSummaryArea: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("本月汇总")
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(Ink.fgDim)
+
+            HStack(spacing: 10) {
+                summaryCell(value: "\(monthHeadcount)", label: "人日合计", color: Ink.fg)
+                summaryCell(
+                    value: monthPlantHours > 0 ? String(format: "%.0fh", monthPlantHours) : "—",
+                    label: "机械工时",
+                    color: Ink.fg
+                )
+                summaryCell(
+                    value: "\(monthHazardCount)",
+                    label: "隐患",
+                    color: monthHazardCount > 0 ? Ink.red : Ink.fgDim
+                )
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 18)
+        .padding(.bottom, 24)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Ink.line).frame(height: 1)
+        }
+    }
+
+    private func summaryCell(value: String, label: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.system(size: 24, weight: .semibold))
+                .tracking(-0.6)
+                .foregroundStyle(color)
+                .monospacedDigit()
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(Ink.fgDim)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .background(Ink.card, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    // MARK: - Output list(主推 + 折叠"更多")
 
     private var outputList: some View {
-        ScrollView {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            // 主推:周总结 + AI 叙事(用户最高频用)
+            outputRow(icon: "chart.bar", title: "本周总结", sub: "一键生成可复制周报", dest: .weekly)
+            outputRow(icon: "sparkles", title: "AI 日记叙事", sub: "拼成可读的施工日志", dest: .narrative)
+
+            // 更多导出(默认收起,降噪)
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    advancedExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: advancedExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("更多导出")
+                        .font(.system(size: 13, weight: .medium))
+                    Spacer()
+                }
+                .foregroundStyle(Ink.fgDim)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Ink.line).frame(height: 1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if advancedExpanded {
                 outputRow(icon: "doc.text", title: "PDF 巡检日志", sub: "按日期或工地导出", dest: .pdf)
                 outputRow(icon: "cloud.rain", title: "EOT 工期延误", sub: "基于天气的主张 · AI", dest: .eot)
-                outputRow(icon: "chart.bar", title: "本周总结", sub: "一键生成可复制周报", dest: .weekly)
                 outputRow(icon: "map", title: "平面图", sub: "图钉总览", dest: .floorPlan)
-                outputRow(icon: "sparkles", title: "AI 日记叙事", sub: "拼成可读的施工日志", dest: .narrative)
                 outputRow(icon: "sparkles", title: "AI 洞察", sub: "逾期 · 静默 · 隐患积压", dest: .insights)
                 outputRow(icon: "externaldrive", title: "数据备份", sub: "导出 ZIP / 分享", dest: .backup)
             }
