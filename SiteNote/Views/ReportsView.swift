@@ -106,16 +106,25 @@ struct ReportsView: View {
                     .foregroundStyle(Ink.fgDim)
             }
 
-            sparkline
-                .frame(height: 40)
+            // 本周有记录才画折线。全 0 的直线没信息量,改显示提示。
+            if weekNotesCount > 0 {
+                sparkline
+                    .frame(height: 40)
 
-            HStack {
-                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { d in
-                    Text(d)
-                        .font(.system(size: 10))
-                        .foregroundStyle(Ink.dim)
-                        .frame(maxWidth: .infinity)
+                HStack {
+                    ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { d in
+                        Text(d)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Ink.dim)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
+            } else {
+                Text("本周还没有记录,去「记」tab 按住 mic 开始。")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Ink.dim)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 14)
             }
         }
         .padding(.horizontal, 24)

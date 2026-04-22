@@ -235,6 +235,8 @@ struct RecordView: View {
     }
 
     /// 日期 · 天气 · 位置 — 一行小字副标题。
+    /// 位置名有时很长(反向地理编码会返回区 + 州 + 国),用 minimumScaleFactor 兜底,
+    /// 不够时整行缩放而不是挤爆换行。
     private var subtitleRow: some View {
         HStack(spacing: 6) {
             Text(todayDateLabel)
@@ -247,12 +249,13 @@ struct RecordView: View {
                 Image(systemName: "location.fill")
                     .font(.system(size: 9))
                 Text(loc)
-                    .lineLimit(1)
             }
         }
         .font(.system(size: 12, weight: .medium))
         .tracking(-0.1)
         .foregroundStyle(Ink.fgDim)
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
     }
 
     /// 4 档 stat 切换:逾期 / 今天 / 待分类 / 隐患。点击某个就筛到那类,再点还原。
@@ -285,7 +288,7 @@ struct RecordView: View {
                 icon: "exclamationmark.triangle.fill"
             )
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 24)   // 对齐标题 / subtitle / 列表的 24pt 左右边距
         .padding(.bottom, 10)
     }
 
@@ -306,8 +309,10 @@ struct RecordView: View {
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
+                    // 不用大小跳跃表达选中——改用色块底 + 边框 + 加粗标签。
+                    // 之前 34pt vs 26pt 会让整行高度变化,视觉抖动。
                     Text("\(count)")
-                        .font(.system(size: isSelected ? 34 : 26, weight: .semibold))
+                        .font(.system(size: 26, weight: .semibold))
                         .tracking(-0.8)
                         .foregroundStyle(count > 0 ? color : Ink.dim)
                         .monospacedDigit()

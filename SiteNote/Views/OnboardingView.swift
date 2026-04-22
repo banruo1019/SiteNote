@@ -201,6 +201,9 @@ struct OnboardingView: View {
         }
         if step >= 2 {
             UserDefaults.standard.set(true, forKey: Self.dismissedKey)
+            // 顺手把 GestureHintOverlay 也标记已看过——Onboarding Step 3 已经展示过手势,
+            // 不要再让用户在 RecordView 被同样的内容打扰第二次。
+            GestureHintOverlay.markShown()
             withAnimation(.easeOut(duration: 0.25)) {
                 isShown = false
             }
