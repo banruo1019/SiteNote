@@ -164,6 +164,7 @@ struct BrowseView: View {
                     .tracking(-0.8)
                     .foregroundStyle(Ink.fg)
                 Spacer()
+                SearchBarButton()
                 TodayBriefButton()
                 NavigationLink(value: SettingsDestination()) {
                     Image(systemName: "gearshape")
