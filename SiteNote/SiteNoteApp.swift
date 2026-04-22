@@ -14,6 +14,7 @@ struct SiteNoteApp: App {
         let schema = Schema([
             Note.self,
             LogEntry.self,
+            ShareLog.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 

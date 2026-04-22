@@ -585,6 +585,8 @@ struct DataAboutSettingsView: View {
 
             nukeAllSection
 
+            ShareLogStatsSection()
+
             Section("关于") {
                 HStack {
                     Text("版本")
@@ -788,4 +790,85 @@ enum SettingsKeys {
 private struct BackupShareItem: Identifiable {
     let id: UUID = UUID()
     let url: URL
+}
+
+/// 分享/导出统计 Section。展示历史数据让用户感受到产品 last-mile 的累积。
+struct ShareLogStatsSection: View {
+    @Query(sort: [SortDescriptor(\ShareLog.sharedAt, order: .reverse)])
+    private var logs: [ShareLog]
+
+    private var completedCount: Int { logs.filter { $0.completed }.count }
+
+    private var lastShareLabel: String? {
+        guard let last = logs.first(where: { $0.completed }) else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M 月 d 日 HH:mm"
+        return "\(f.string(from: last.sharedAt)) · \(last.channelLabel)"
+    }
+
+    /// channel → count(完成的)。
+    private var channelBreakdown: [(name: String, count: Int)] {
+        let completed = logs.filter { $0.completed }
+        let grouped = Dictionary(grouping: completed, by: { $0.channelLabel })
+        return grouped
+            .map { (name: $0.key, count: $0.value.count) }
+            .sorted { $0.count > $1.count }
+    }
+
+    var body: some View {
+        Section {
+            if logs.isEmpty {
+                Text("还没有分享过。试试每个 tab 右上角的「简报」按钮 →")
+                    .font(.system(size: DesignTokens.FontSize.body))
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack {
+                    Text("总分享次数")
+                        .font(.system(size: DesignTokens.FontSize.body))
+                    Spacer()
+                    Text("\(completedCount)")
+                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Ink.fg)
+                }
+                if let last = lastShareLabel {
+                    HStack {
+                        Text("上次分享")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                        Spacer()
+                        Text(last)
+                            .font(.system(size: DesignTokens.FontSize.body))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if !channelBreakdown.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("分享渠道")
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(0.3)
+                            .textCase(.uppercase)
+                            .foregroundStyle(.secondary)
+                        ForEach(channelBreakdown, id: \.name) { item in
+                            HStack {
+                                Text(item.name)
+                                    .font(.system(size: DesignTokens.FontSize.body))
+                                Spacer()
+                                Text("\(item.count)")
+                                    .font(.system(size: DesignTokens.FontSize.body))
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+            }
+        } header: {
+            Text("分享记录")
+        } footer: {
+            Text("iOS 不告诉我们具体分享给谁,只能记录是哪个 App 接受。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
 }

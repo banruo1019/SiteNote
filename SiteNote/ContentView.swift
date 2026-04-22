@@ -16,6 +16,6 @@ struct ContentView: View {
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: Note.self, LogEntry.self, configurations: config)
+    let container = try! ModelContainer(for: Note.self, LogEntry.self, ShareLog.self, configurations: config)
     return ContentView().modelContainer(container)
 }

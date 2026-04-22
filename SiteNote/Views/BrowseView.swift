@@ -164,6 +164,7 @@ struct BrowseView: View {
                     .tracking(-0.8)
                     .foregroundStyle(Ink.fg)
                 Spacer()
+                TodayBriefButton()
                 NavigationLink(value: SettingsDestination()) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 18, weight: .regular))
@@ -517,6 +518,6 @@ struct BrowseView: View {
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: Note.self, LogEntry.self, configurations: config)
+    let container = try! ModelContainer(for: Note.self, LogEntry.self, ShareLog.self, configurations: config)
     return BrowseView().modelContainer(container)
 }
