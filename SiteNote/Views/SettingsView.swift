@@ -1,0 +1,791 @@
+//
+//  SettingsView.swift
+//  SiteNote
+//
+//  设置首页:只做 5 组导航入口。每组的具体设置项在各自子页。
+//
+
+import SwiftUI
+import SwiftData
+import UIKit
+import UserNotifications
+
+/// 设置首页。5 组导航。
+struct SettingsView: View {
+    var body: some View {
+        Form {
+            Section {
+                NavigationLink {
+                    InputAISettingsView()
+                } label: {
+                    settingsRow(
+                        icon: "mic.and.signal.meter",
+                        color: .blue,
+                        title: "录入与 AI",
+                        subtitle: "识别语言、AI 引擎/Key/开关"
+                    )
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    RemindersSettingsView()
+                } label: {
+                    settingsRow(
+                        icon: "bell.badge",
+                        color: .orange,
+                        title: "提醒",
+                        subtitle: "推送时间、每日汇总"
+                    )
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    SiteResourcesSettingsView()
+                } label: {
+                    settingsRow(
+                        icon: "building.2",
+                        color: .green,
+                        title: "工地资源",
+                        subtitle: "工地标签、平面图、巡检模板、合同条款"
+                    )
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    ReportsExportSettingsView()
+                } label: {
+                    settingsRow(
+                        icon: "doc.text",
+                        color: .purple,
+                        title: "报告与导出",
+                        subtitle: "周报、EOT、PDF、ZIP"
+                    )
+                }
+            }
+
+            Section {
+                NavigationLink {
+                    DataAboutSettingsView()
+                } label: {
+                    settingsRow(
+                        icon: "gearshape.2",
+                        color: .gray,
+                        title: "数据与关于",
+                        subtitle: "清除已完成、版本、反馈"
+                    )
+                }
+            }
+        }
+        .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.inline)
+        .industrialForm()
+    }
+
+    @ViewBuilder
+    private func settingsRow(icon: String, color: Color, title: String, subtitle: String) -> some View {
+        HStack(spacing: DesignTokens.Spacing.medium) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(color)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                Text(subtitle)
+                    .font(.system(size: DesignTokens.FontSize.body))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - 子页 1:录入与 AI
+
+struct InputAISettingsView: View {
+    @AppStorage(SettingsKeys.speechLanguage) private var speechLanguage: String = "zh-CN"
+
+    var body: some View {
+        Form {
+            Section("语音识别") {
+                Picker("识别语言", selection: $speechLanguage) {
+                    Text("中文").tag("zh-CN")
+                    Text("英文").tag("en-US")
+                }
+                .font(.system(size: DesignTokens.FontSize.body))
+            }
+
+            Section {
+                NavigationLink {
+                    AIEngineSettingsView()
+                } label: {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(Ink.fg)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("AI 辅助设置")
+                                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                            Text(aiQuickStatus)
+                                .font(.system(size: DesignTokens.FontSize.body))
+                                .foregroundStyle(Ink.fgDim)
+                        }
+                    }
+                }
+            } header: {
+                Text("AI 辅助")
+            } footer: {
+                Text("选择引擎(OpenAI / 本地)、填 API Key、切换功能开关。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+            }
+        }
+        .navigationTitle("录入与 AI")
+        .navigationBarTitleDisplayMode(.inline)
+        .industrialForm()
+    }
+
+    private var aiQuickStatus: String {
+        let engine = AIService.currentEngine
+        var parts: [String] = []
+        switch engine {
+        case .auto: parts.append("自动")
+        case .openai: parts.append("OpenAI")
+        case .local: parts.append("本地")
+        }
+        if AIService.isOpenAIAvailable { parts.append("OpenAI ✓") }
+        if AIService.isLocalAvailable { parts.append("Apple ✓") }
+        return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - 子页 2:提醒
+
+struct RemindersSettingsView: View {
+    @AppStorage(SettingsKeys.morningReminderHour) private var morningHour: Int = 7
+    @AppStorage(SettingsKeys.morningReminderMinute) private var morningMinute: Int = 30
+    @AppStorage(SettingsKeys.dailyDigestEnabled) private var dailyDigestEnabled: Bool = false
+
+    var body: some View {
+        Form {
+            Section {
+                DatePicker(
+                    "早上推送时间",
+                    selection: morningTimeBinding,
+                    displayedComponents: .hourAndMinute
+                )
+                .font(.system(size: DesignTokens.FontSize.body))
+
+                Toggle(isOn: Binding(
+                    get: { dailyDigestEnabled },
+                    set: { newValue in
+                        dailyDigestEnabled = newValue
+                        NotificationService.shared.updateDailyDigest()
+                    }
+                )) {
+                    HStack {
+                        Image(systemName: "bell.badge")
+                            .foregroundStyle(Ink.fg)
+                        Text("每日汇总提醒")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                    }
+                }
+
+                Text("推送分两级:\n• **普通**:每天早 \(formattedMorningTime) 推一次,最多 7 天\n• **隐患**:早 + 晚 18:00,Day 3+ 加中午 12:00,最多 10 天\n\n每日汇总开启后:每天早 \(formattedMorningTime) 推一条「打开 SiteNote 查看今日任务」。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text("推送时间")
+            } footer: {
+                Text("改动后下次 App 启动时对所有未完成速记生效。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+            }
+        }
+        .navigationTitle("提醒")
+        .navigationBarTitleDisplayMode(.inline)
+        .industrialForm()
+    }
+
+    private var formattedMorningTime: String {
+        String(format: "%02d:%02d", morningHour, morningMinute)
+    }
+
+    private var morningTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                var comps = DateComponents()
+                comps.hour = morningHour
+                comps.minute = morningMinute
+                return Calendar.current.date(from: comps) ?? Date()
+            },
+            set: { newDate in
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                morningHour = comps.hour ?? 7
+                morningMinute = comps.minute ?? 30
+            }
+        )
+    }
+}
+
+// MARK: - 子页 3:工地资源(标签 / 平面图 / 模板 / 条款)
+
+struct SiteResourcesSettingsView: View {
+    @State private var siteTags: [String] = SiteTagsStorage.load()
+    @State private var newTagName: String = ""
+    /// 刷新计数器:从 SubTagsEditorView 返回后 bump 一下,让子标签数量重算。
+    @State private var refreshTick: Int = 0
+
+    @State private var templates: [InspectionTemplate] = InspectionTemplatesStorage.load()
+
+    @State private var clauseRefs: [String] = ClauseRefsStorage.load()
+    @State private var newClauseRef: String = ""
+
+    var body: some View {
+        Form {
+            siteTagsSection
+            subTagsSection
+            floorPlansSection
+            templatesSection
+            clausesSection
+        }
+        .navigationTitle("工地资源")
+        .navigationBarTitleDisplayMode(.inline)
+        .industrialForm()
+        .onAppear {
+            templates = InspectionTemplatesStorage.load()
+            siteTags = SiteTagsStorage.load()
+            clauseRefs = ClauseRefsStorage.load()
+            refreshTick += 1
+        }
+    }
+
+    private var siteTagsSection: some View {
+        Section {
+            ForEach(siteTags, id: \.self) { tag in
+                HStack {
+                    Image(systemName: "building.2.fill")
+                        .foregroundStyle(.green)
+                    Text(tag)
+                        .font(.system(size: DesignTokens.FontSize.body))
+                    Spacer()
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        deleteTag(tag)
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
+                }
+            }
+
+            HStack {
+                TextField("新工地名(如 悉尼 Olympic Park)", text: $newTagName)
+                    .font(.system(size: DesignTokens.FontSize.body))
+                Button("添加") {
+                    addTag()
+                }
+                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                .disabled(newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        } header: {
+            Text("工地标签")
+        } footer: {
+            Text("左滑删除工地。删工地不影响已打过标签的历史 note。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    private var subTagsSection: some View {
+        Section {
+            NavigationLink {
+                SubTagsEditorView()
+            } label: {
+                HStack {
+                    Image(systemName: "tag.fill")
+                        .foregroundStyle(Ink.fg)
+                    Text("子标签管理")
+                        .font(.system(size: DesignTokens.FontSize.body))
+                    Spacer()
+                    let count = SubTagsStorage.load().count
+                    Text(count == 0 ? "未创建" : "\(count) 个")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("子标签")
+        } footer: {
+            Text("全局类型分类(RFI / 缺陷 / 施工 / 开会 / 紧急 等),不按工地分。每个带颜色,平面图图钉会用这颜色。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+        .id(refreshTick)
+    }
+
+    private var floorPlansSection: some View {
+        Section {
+            NavigationLink {
+                FloorPlanManageView()
+            } label: {
+                HStack {
+                    Image(systemName: "map")
+                        .foregroundStyle(.secondary)
+                    Text("管理工地平面图")
+                        .font(.system(size: DesignTokens.FontSize.body))
+                }
+            }
+        } header: {
+            Text("工地平面图")
+        } footer: {
+            Text("上传楼层/工地平面图后,录音时可以在图上点位置,比 GPS 的 \"Willoughby, NSW\" 精确 10 倍。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    private var templatesSection: some View {
+        Section {
+            ForEach(templates) { template in
+                NavigationLink {
+                    TemplateEditorView(existing: template)
+                } label: {
+                    HStack {
+                        Image(systemName: "checklist")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(template.name)
+                                .font(.system(size: DesignTokens.FontSize.body))
+                            Text("\(template.items.count) 项")
+                                .font(.system(size: DesignTokens.FontSize.body))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .onDelete { offsets in
+                for idx in offsets {
+                    InspectionTemplatesStorage.remove(id: templates[idx].id)
+                }
+                templates = InspectionTemplatesStorage.load()
+            }
+
+            NavigationLink {
+                TemplateEditorView(existing: nil)
+            } label: {
+                HStack {
+                    Image(systemName: "plus.circle")
+                    Text("新建模板")
+                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                }
+                .foregroundStyle(Color.accentColor)
+            }
+        } header: {
+            Text("巡检模板")
+        } footer: {
+            Text("录音时可选一个模板跟着检查,漏项会在详情页红字提示。默认提供 3 个典型模板,可改可删。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    private var clausesSection: some View {
+        Section {
+            ForEach(clauseRefs, id: \.self) { ref in
+                HStack {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    Text(ref)
+                        .font(.system(size: DesignTokens.FontSize.body))
+                    Spacer()
+                    Button {
+                        clauseRefs = ClauseRefsStorage.remove(ref)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+
+            HStack {
+                TextField("新条款(如 Clause 19.2 Suspension)", text: $newClauseRef)
+                    .font(.system(size: DesignTokens.FontSize.body))
+                Button("添加") {
+                    addClauseRef()
+                }
+                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                .disabled(newClauseRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        } header: {
+            Text("合同条款库")
+        } footer: {
+            Text("录音时可引用一条,出现在 note 详情和 PDF 导出里,便于争议取证。已预置 AS4000 常用条款。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    private func addTag() {
+        let trimmed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        siteTags = SiteTagsStorage.add(trimmed)
+        newTagName = ""
+    }
+
+    private func deleteTag(_ tag: String) {
+        siteTags = SiteTagsStorage.remove(tag)
+    }
+
+    private func addClauseRef() {
+        let trimmed = newClauseRef.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        clauseRefs = ClauseRefsStorage.add(trimmed)
+        newClauseRef = ""
+    }
+}
+
+// MARK: - 子页 4:报告与导出
+
+struct ReportsExportSettingsView: View {
+    @State private var backupShareURL: URL?
+    @State private var backupError: String?
+
+    var body: some View {
+        Form {
+            Section {
+                NavigationLink {
+                    WeeklySummaryView()
+                } label: {
+                    HStack {
+                        Image(systemName: "chart.bar.doc.horizontal")
+                            .foregroundStyle(.secondary)
+                        Text("本周总结")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                    }
+                }
+                NavigationLink {
+                    EOTReportView()
+                } label: {
+                    HStack {
+                        Image(systemName: "cloud.rain")
+                            .foregroundStyle(.secondary)
+                        Text("EOT 工期延误报告")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                    }
+                }
+            } header: {
+                Text("分析与报告")
+            } footer: {
+                Text("本周总结给项目经理;EOT 基于天气数据生成工期延长主张(交业主/律师)。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+            }
+
+            Section {
+                NavigationLink {
+                    PDFExportView()
+                } label: {
+                    HStack {
+                        Image(systemName: "doc.text")
+                        Text("导出 PDF 巡检日志")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                    }
+                }
+
+                Text("在 iPhone 的「文件」App → 「我的 iPhone」→「SiteNote」可以看到所有录音和照片文件。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+                    .foregroundStyle(.secondary)
+                Button("导出全部数据为 ZIP") {
+                    exportBackup()
+                }
+                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+            } header: {
+                Text("数据导出与备份")
+            } footer: {
+                Text("PDF 用于交业主或法律存档;ZIP 用于整体备份到 iCloud Drive/邮件。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+            }
+        }
+        .navigationTitle("报告与导出")
+        .navigationBarTitleDisplayMode(.inline)
+        .industrialForm()
+        .sheet(item: Binding(
+            get: { backupShareURL.map { BackupShareItem(url: $0) } },
+            set: { _ in backupShareURL = nil }
+        )) { item in
+            ShareSheet(items: [item.url])
+        }
+        .alert("备份出错", isPresented: Binding(
+            get: { backupError != nil },
+            set: { if !$0 { backupError = nil } }
+        )) {
+            Button("知道了") { backupError = nil }
+        } message: {
+            Text(backupError ?? "")
+        }
+    }
+
+    private func exportBackup() {
+        do {
+            let url = try BackupService.createBackupZip()
+            backupShareURL = url
+        } catch {
+            backupError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+}
+
+// MARK: - 子页 5:数据与关于
+
+struct DataAboutSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @State private var showsClearConfirm: Bool = false
+    @State private var clearResultMessage: String?
+
+    /// 一键清空的倒计时:nil = idle,>0 = 正在数,0 = 即将触发。
+    @State private var nukeCountdown: Int? = nil
+    @State private var nukeTask: Task<Void, Never>? = nil
+
+    var body: some View {
+        Form {
+            Section {
+                NavigationLink {
+                    TrashView()
+                } label: {
+                    HStack {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.secondary)
+                        Text("垃圾桶")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                    }
+                }
+            } header: {
+                Text("已删除")
+            } footer: {
+                Text("删除的速记会进入这里,可以恢复或永久删除。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    showsClearConfirm = true
+                } label: {
+                    Text("清除所有已完成记录")
+                        .font(.system(size: DesignTokens.FontSize.body))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let msg = clearResultMessage {
+                    Text(msg)
+                        .font(.system(size: DesignTokens.FontSize.body))
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("数据清理")
+            } footer: {
+                Text("会同时删除对应的录音和照片文件,不可恢复。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+            }
+
+            nukeAllSection
+
+            Section("关于") {
+                HStack {
+                    Text("版本")
+                        .font(.system(size: DesignTokens.FontSize.body))
+                    Spacer()
+                    Text(appVersion)
+                        .font(.system(size: DesignTokens.FontSize.body))
+                        .foregroundStyle(.secondary)
+                }
+                Link(destination: URL(string: "mailto:banruostudio@gmail.com")!) {
+                    HStack {
+                        Text("反馈邮箱")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                        Spacer()
+                        Text("banruostudio@gmail.com")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle("数据与关于")
+        .navigationBarTitleDisplayMode(.inline)
+        .industrialForm()
+        .alert("清除所有已完成记录?", isPresented: $showsClearConfirm) {
+            Button("清除", role: .destructive) { clearCompleted() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("这会删除所有已完成的速记、对应的录音和照片,不可恢复。")
+        }
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        return "\(version) (\(build))"
+    }
+
+    /// 一键清空 Section。倒计时中显示"X 秒后清空 / 取消"条,否则显示按钮。
+    @ViewBuilder
+    private var nukeAllSection: some View {
+        Section {
+            if let countdown = nukeCountdown {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(Ink.red)
+                    Text("\(countdown) 秒后清空所有内容")
+                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                        .foregroundStyle(Ink.red)
+                        .contentTransition(.numericText())
+                    Spacer()
+                    Button("取消") {
+                        cancelNuke()
+                    }
+                    .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                Button(role: .destructive) {
+                    startNukeCountdown()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text("一键清空所有内容")
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        } header: {
+            Text("一键清空")
+        } footer: {
+            Text("清空所有速记(含垃圾桶)、录音、照片、平面图、工地 / 子标签 / 模板 / 条款。不可恢复。按下后 3 秒内可取消。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    private func startNukeCountdown() {
+        nukeTask?.cancel()
+        clearResultMessage = nil
+        nukeCountdown = 3
+        nukeTask = Task { @MainActor in
+            for i in stride(from: 3, through: 1, by: -1) {
+                nukeCountdown = i
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+            }
+            nukeEverything()
+            nukeCountdown = nil
+            nukeTask = nil
+        }
+    }
+
+    private func cancelNuke() {
+        nukeTask?.cancel()
+        nukeTask = nil
+        nukeCountdown = nil
+    }
+
+    /// 硬清空:所有 Note(含垃圾桶) + 所有文件 + 所有用户配置的资源列表。
+    /// 保留:AppStorage 偏好(识别语言、AI Key、早推送时间等)。
+    private func nukeEverything() {
+        // 1. 硬删所有 Note(含已软删/已完成)
+        let descriptor = FetchDescriptor<Note>()
+        var noteCount = 0
+        if let notes = try? modelContext.fetch(descriptor) {
+            noteCount = notes.count
+            for note in notes {
+                NotificationService.shared.cancel(for: note)
+                modelContext.delete(note)
+            }
+        }
+
+        // 2. 一并清掉 Documents 下的三大文件目录(音频/照片/平面图)
+        if let docs = FileManager.default.urls(
+            for: .documentDirectory, in: .userDomainMask
+        ).first {
+            for sub in ["audio", "photos", "floorplans"] {
+                let url = docs.appendingPathComponent(sub, isDirectory: true)
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+
+        // 3. 清 UserDefaults 里的"用户内容"(列表数据,不动偏好)
+        let defaults = UserDefaults.standard
+        for key in [
+            "settings.siteTags",
+            "settings.subTagsGlobalV1",
+            "settings.inspectionTemplates",
+            "settings.clauseRefs",
+            "settings.floorPlans",
+            "settings.siteCentroids.v1"
+        ] {
+            defaults.removeObject(forKey: key)
+        }
+
+        // 4. 干掉所有推送
+        let center = UNUserNotificationCenter.current()
+        center.removeAllPendingNotificationRequests()
+        center.removeAllDeliveredNotifications()
+
+        // 5. 落盘
+        do {
+            try modelContext.save()
+            clearResultMessage = "已清空:\(noteCount) 条速记 + 全部文件与资源"
+        } catch {
+            clearResultMessage = "清空时出错:\(error.localizedDescription)"
+        }
+    }
+
+    private func clearCompleted() {
+        // 包括已软删的已完成 note 一起清(反正已完成+已软删 == 真废弃)。
+        let descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate<Note> { $0.isDone == true }
+        )
+        guard let completed = try? modelContext.fetch(descriptor) else {
+            clearResultMessage = "清除失败(读取数据库出错)"
+            return
+        }
+
+        var count = 0
+        for note in completed {
+            if let audio = note.audioFilePath,
+               let url = VoiceCaptureService.absoluteURL(forRelative: audio) {
+                try? FileManager.default.removeItem(at: url)
+            }
+            for photo in note.photoPaths {
+                if let url = PhotoStorage.absoluteURL(forRelative: photo) {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+            NotificationService.shared.cancel(for: note)
+            modelContext.delete(note)
+            count += 1
+        }
+
+        // 显式落盘:SwiftData 默认自动保存但在某些路径下(比如 sheet 内按钮)不会立即 flush,
+        // 导致 @Query 驱动的列表看着"没变化"。显式 save 保证一致。
+        do {
+            try modelContext.save()
+            clearResultMessage = count == 0 ? "没有已完成的记录可清除" : "已清除 \(count) 条"
+        } catch {
+            clearResultMessage = "清除时出错: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - 共享
+
+/// AppStorage 的键名集中维护。
+enum SettingsKeys {
+    static let speechLanguage = "settings.speechLanguage"
+    static let morningReminderHour = "settings.morningReminderHour"
+    static let morningReminderMinute = "settings.morningReminderMinute"
+    static let aiPolishEnabled = "settings.aiPolishEnabled"
+    static let aiAutoTagEnabled = "settings.aiAutoTagEnabled"
+    static let dailyDigestEnabled = "settings.dailyDigestEnabled"
+}
+
+/// 包装备份 URL 以满足 `.sheet(item:)` 的 Identifiable 要求。
+private struct BackupShareItem: Identifiable {
+    let id: UUID = UUID()
+    let url: URL
+}

@@ -12,7 +12,8 @@ import SwiftData
 struct SiteNoteApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            Note.self,
+            LogEntry.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -26,6 +27,12 @@ struct SiteNoteApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .preferredColorScheme(.light)
+                .tint(Ink.accent)
+                .task {
+                    // 启动时请求通知权限。系统只弹一次对话框，之后直接读之前的选择。
+                    _ = await NotificationService.shared.requestAuthorization()
+                }
         }
         .modelContainer(sharedModelContainer)
     }

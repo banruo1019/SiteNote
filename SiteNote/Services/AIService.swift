@@ -1,0 +1,609 @@
+//
+//  AIService.swift
+//  SiteNote
+//
+//  AI 综合服务。根据用户设置在两个引擎间路由:
+//    - `openai`:OpenAI GPT API(需 API key,云端,质量高)
+//    - `local`:Apple Foundation Models(iOS 26+,本地,隐私)
+//    - `auto`(默认):优先 OpenAI,失败/无 key 自动 fallback 到 local
+//
+//  `suggestTags` 是纯规则,不走 AI 引擎。
+//
+
+import Foundation
+import UIKit
+import Vision
+
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+/// AI 引擎选择。
+enum AIEngine: String, CaseIterable, Identifiable {
+    case auto
+    case openai
+    case local
+
+    var id: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .auto: return "自动(推荐)"
+        case .openai: return "仅 OpenAI GPT"
+        case .local: return "仅本地 Apple Intelligence"
+        }
+    }
+}
+
+@MainActor
+final class AIService {
+
+    static let shared = AIService()
+
+    enum AIError: LocalizedError {
+        case unavailable
+        case generationFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .unavailable:
+                return "当前没有可用的 AI 引擎。请到「设置 → AI 辅助」配置 OpenAI API Key 或启用 Apple Intelligence。"
+            case .generationFailed(let msg):
+                return "AI 生成失败:\(msg)"
+            }
+        }
+    }
+
+    struct TagSuggestion: Equatable {
+        let suggestedSiteTag: String?
+        let suggestedTemplateName: String?
+        let suggestedClauseRef: String?
+        let reasoning: String?
+    }
+
+    struct PhotoAnalysis {
+        let description: String
+        let suggestedHazard: Bool
+        let suggestedAction: String?
+        let rawLabels: [String]
+    }
+
+    // MARK: - 引擎选择
+
+    /// 当前用户设置的引擎。默认 `.auto`。
+    static var currentEngine: AIEngine {
+        let raw = UserDefaults.standard.string(forKey: "settings.aiEngine") ?? AIEngine.auto.rawValue
+        return AIEngine(rawValue: raw) ?? .auto
+    }
+
+    /// 本地 Foundation Models 是否可用。
+    static var isLocalAvailable: Bool {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            return SystemLanguageModel.default.availability == .available
+        }
+        return false
+        #else
+        return false
+        #endif
+    }
+
+    /// OpenAI 是否配置可用(只查 key,不测连通性)。
+    static var isOpenAIAvailable: Bool {
+        OpenAIClient.hasAPIKey
+    }
+
+    /// 为向后兼容保留的旧接口。
+    static var isLanguageModelAvailable: Bool {
+        isLocalAvailable || isOpenAIAvailable
+    }
+
+    // MARK: - 1. 转写修复
+
+    /// 修复语音转写:加标点、纠错、规范数字。
+    func polishTranscription(_ raw: String) async throws -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return raw }
+
+        let prompt = """
+        你是建筑工地语音转写的修复助手。以下是一段语音识别的原始文本,可能有错字、缺标点、\
+        数字格式混乱。请修复为通顺的书面中文,保留所有原意和数字,不要解释、不要添加内容、\
+        不要加引号。只返回修复后的一段文本。
+
+        原文:
+        \(trimmed)
+        """
+
+        return try await runText(prompt: prompt, fallbackToRaw: trimmed)
+    }
+
+    // MARK: - 2. 自动标签推断(纯规则)
+
+    func suggestTags(
+        transcription: String,
+        availableSites: [String],
+        availableTemplates: [InspectionTemplate],
+        availableClauses: [String]
+    ) -> TagSuggestion {
+        let normalized = transcription.lowercased()
+
+        let site = availableSites.first {
+            normalized.contains($0.lowercased())
+        }
+
+        let template = availableTemplates.first { tpl in
+            if normalized.contains(tpl.name.lowercased()) { return true }
+            return tpl.items.contains { normalized.contains($0.lowercased()) }
+        }
+
+        let clause = availableClauses.first {
+            let keyPart = $0.lowercased()
+            return normalized.contains(keyPart)
+                || normalized.contains(extractClauseNumber($0))
+        }
+
+        var reasonParts: [String] = []
+        if let s = site { reasonParts.append("工地「\(s)」") }
+        if let t = template { reasonParts.append("模板「\(t.name)」") }
+        if let c = clause { reasonParts.append("条款「\(c)」") }
+        let reasoning = reasonParts.isEmpty ? nil : "检测到内容涉及: " + reasonParts.joined(separator: "、")
+
+        return TagSuggestion(
+            suggestedSiteTag: site,
+            suggestedTemplateName: template?.name,
+            suggestedClauseRef: clause,
+            reasoning: reasoning
+        )
+    }
+
+    private func extractClauseNumber(_ ref: String) -> String {
+        let digits = ref.filter { $0.isNumber || $0 == "." }
+        return digits.isEmpty ? ref.lowercased() : digits
+    }
+
+    // MARK: - 3. 照片 AI 分析
+
+    func analyzePhoto(_ image: UIImage) async throws -> PhotoAnalysis {
+        let engine = Self.currentEngine
+        let labels = (try? await classifyImage(image)) ?? []
+
+        // OpenAI 可以直接理解图片(多模态),不需要先做 Vision 分类
+        if engine == .openai || engine == .auto, Self.isOpenAIAvailable {
+            if let analysis = try? await analyzePhotoOpenAI(image) {
+                return analysis
+            }
+            if engine == .openai {
+                // 严格 OpenAI 模式不回退
+                throw AIError.generationFailed("OpenAI 图像分析失败")
+            }
+        }
+
+        if engine == .local || engine == .auto, Self.isLocalAvailable {
+            if let analysis = try? await analyzePhotoLocal(labels: labels) {
+                return analysis
+            }
+        }
+
+        // 全部失败:只返回 Vision 原始标签
+        return PhotoAnalysis(
+            description: labels.isEmpty ? "未能识别照片内容" : "识别到: \(labels.prefix(3).joined(separator: "、"))",
+            suggestedHazard: false,
+            suggestedAction: nil,
+            rawLabels: labels
+        )
+    }
+
+    private func analyzePhotoOpenAI(_ image: UIImage) async throws -> PhotoAnalysis {
+        let prompt = """
+        你是澳洲建筑工地的质量安全检查员。看这张照片,用**一句中文**描述你看到的重点(≤30 字),\
+        然后判断是否应该标记为"隐患"(有明显安全或质量问题),最后给一句现场动作建议(≤30 字)。
+
+        用纯文本返回,三行,每行一个字段:
+        描述: ...
+        隐患: 是 / 否
+        建议: ...
+        """
+        let resp = try await OpenAIClient.chatVision(prompt: prompt, image: image)
+        return parseAnalysisResponse(resp, labels: [])
+    }
+
+    private func analyzePhotoLocal(labels: [String]) async throws -> PhotoAnalysis {
+        #if canImport(FoundationModels)
+        guard #available(iOS 26.0, *),
+              SystemLanguageModel.default.availability == .available,
+              !labels.isEmpty else {
+            throw AIError.unavailable
+        }
+
+        let prompt = """
+        你是澳洲建筑工地的质量安全检查员。以下是一张现场照片的 AI 图像识别标签:
+        \(labels.joined(separator: ", "))
+
+        请:
+        1. 用**一句话**中文描述这张照片可能拍了什么(≤30 字)
+        2. 判断是否应该标记为"隐患"
+        3. 给一句现场动作建议(≤30 字)
+
+        用纯文本返回,每行一个字段:
+        描述: ...
+        隐患: 是 / 否
+        建议: ...
+        """
+        let session = LanguageModelSession()
+        let response = try await session.respond(to: prompt)
+        return parseAnalysisResponse(response.content, labels: labels)
+        #else
+        throw AIError.unavailable
+        #endif
+    }
+
+    private func classifyImage(_ image: UIImage) async throws -> [String] {
+        guard let cgImage = image.cgImage else { return [] }
+        let request = VNClassifyImageRequest()
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        try handler.perform([request])
+        // Xcode 26 SDK 的 VNClassifyImageRequest.results 已直接类型化为 [VNClassificationObservation]?,
+        // 不再需要 as? 下转型。
+        let observations = request.results ?? []
+        return observations
+            .sorted { $0.confidence > $1.confidence }
+            .prefix(5)
+            .filter { $0.confidence > 0.1 }
+            .map { $0.identifier }
+    }
+
+    private func parseAnalysisResponse(_ text: String, labels: [String]) -> PhotoAnalysis {
+        var description = ""
+        var hazard = false
+        var action: String?
+
+        for line in text.split(separator: "\n") {
+            let s = line.trimmingCharacters(in: .whitespaces)
+            if s.hasPrefix("描述") || s.hasPrefix("描述:") {
+                description = valueAfterColon(s)
+            } else if s.hasPrefix("隐患") {
+                hazard = s.contains("是") && !s.contains("否")
+            } else if s.hasPrefix("建议") {
+                action = valueAfterColon(s)
+            }
+        }
+
+        if description.isEmpty {
+            description = labels.isEmpty ? text : "识别到: \(labels.prefix(3).joined(separator: "、"))"
+        }
+
+        return PhotoAnalysis(
+            description: description,
+            suggestedHazard: hazard,
+            suggestedAction: action,
+            rawLabels: labels
+        )
+    }
+
+    private func valueAfterColon(_ s: String) -> String {
+        let parts = s.split(whereSeparator: { $0 == ":" || $0 == ":" })
+        guard parts.count >= 2 else { return "" }
+        return parts.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespaces)
+    }
+
+    // MARK: - 通用文本路由(供 NarrativeService 使用)
+
+    /// 给定 prompt,按引擎设置调用 OpenAI 或本地。`fallbackToRaw` 提供降级文本(完全失败时返回它)。
+    /// 需要外部严格失败时应显式调 `runTextStrict`。
+    func runText(prompt: String, fallbackToRaw: String) async throws -> String {
+        let engine = Self.currentEngine
+
+        if engine == .openai || engine == .auto, Self.isOpenAIAvailable {
+            if let result = try? await OpenAIClient.chat(user: prompt) {
+                let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+            if engine == .openai {
+                throw AIError.unavailable
+            }
+        }
+
+        #if canImport(FoundationModels)
+        if engine == .local || engine == .auto,
+           #available(iOS 26.0, *),
+           SystemLanguageModel.default.availability == .available {
+            do {
+                let session = LanguageModelSession()
+                let response = try await session.respond(to: prompt)
+                let content = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !content.isEmpty { return content }
+            } catch {
+                if engine == .local {
+                    throw AIError.generationFailed(error.localizedDescription)
+                }
+            }
+        }
+        #endif
+
+        return fallbackToRaw
+    }
+
+    /// 严格模式:任一引擎都不可用时抛错(用于必需 AI 的功能,如叙事/claim letter)。
+    func runTextStrict(prompt: String) async throws -> String {
+        let engine = Self.currentEngine
+
+        if engine == .openai || engine == .auto, Self.isOpenAIAvailable {
+            do {
+                let result = try await OpenAIClient.chat(user: prompt)
+                let trimmed = result.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            } catch {
+                if engine == .openai {
+                    throw AIError.generationFailed(error.localizedDescription)
+                }
+            }
+        }
+
+        #if canImport(FoundationModels)
+        if engine == .local || engine == .auto,
+           #available(iOS 26.0, *),
+           SystemLanguageModel.default.availability == .available {
+            do {
+                let session = LanguageModelSession()
+                let response = try await session.respond(to: prompt)
+                let content = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !content.isEmpty { return content }
+            } catch {
+                throw AIError.generationFailed(error.localizedDescription)
+            }
+        }
+        #endif
+
+        throw AIError.unavailable
+    }
+
+    // MARK: - 4. LogEntry 抽取(Daily Site Diary v1)
+
+    /// AI 从 Note 抽出的结构化条目草稿。纯值类型,不入 SwiftData;
+    /// 由 `LogEntryIngestor` 消费后才落库成 `LogEntry`。
+    struct LogEntryDraft: Codable {
+        /// LogKind 的 raw value: person / plant / delivery / visitor / event
+        let kind: String
+        let subject: String
+        let quantity: Int?
+        /// 行为词: arrive / leave / absent / event
+        let action: String
+        /// 语音明说的时间(ISO8601)。nil 时调用方用 note.createdAt 兜底。
+        let time: String?
+        let note: String?
+        let confidence: Double
+    }
+
+    /// 从一条 Note 的 transcription 抽出 0~N 条结构化日志草稿。
+    /// 失败或无可抽内容都返回 []。保存流程靠它异步拿 draft,再交给 LogEntryIngestor 落库。
+    func extractLogEntries(from note: Note) async -> [LogEntryDraft] {
+        let text = note.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, Self.isLanguageModelAvailable else { return [] }
+
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        let nowISO = iso.string(from: note.createdAt)
+        let siteLabel = note.siteTag ?? "未指定"
+
+        let prompt = """
+        你是建筑工地日志抽取器。读下面这段现场语音转写,抽出结构化条目:\
+        人员到场 / 机械进出场 / 材料送达 / 访客 / 事件。
+
+        **只返回纯 JSON 数组**。不要 markdown 代码块、不要任何解释文字。\
+        没有可抽取的返回 []。
+
+        每条字段:
+          kind: "person" | "plant" | "delivery" | "visitor" | "event"
+          subject: 主语短词(如 "水工"、"挖机"、"钢筋"、"监理"、"停电")
+          quantity: 整数(只 person 用,"水工4人"→4)| null
+          action: "arrive"(到/开工) | "leave"(走/收工) | "absent"(缺席/没来) | "event"(单点事件)
+          time: ISO8601 时间 | null,规则:
+            - 语音明说具体时间("7 点半"、"上午 10 点"、"下午 3:15") → 结合录音日期给出 ISO
+            - 语音说"现在"、"刚刚"、"马上"、"just now" 等指向当前 → 用录音时间 \(nowISO)
+            - 没说任何时间 → null(**不要瞎填,会显示"—"**)
+          note: 附加说明(缺席原因、上下文)| null
+          confidence: 0.0–1.0(你对这条的置信度)
+
+        # 示例(**重点看 time 字段怎么填**)
+
+        ## 示例 1:没说时间 → time: null
+        输入: 记录,水工来了 4 个,电工来了 2 个,窗户安装工没来,原因是下雨
+        输出: [
+        {"kind":"person","subject":"水工","quantity":4,"action":"arrive","time":null,"note":null,"confidence":0.95},
+        {"kind":"person","subject":"电工","quantity":2,"action":"arrive","time":null,"note":null,"confidence":0.95},
+        {"kind":"person","subject":"窗户安装工","quantity":null,"action":"absent","time":null,"note":"下雨","confidence":0.9}
+        ]
+
+        ## 示例 2:明说具体时间 → 结合录音日期填 ISO
+        (假设录音时间 = 2026-04-23T14:30:00+11:00)
+        输入: 挖机 7 点半到了
+        输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T07:30:00+11:00","note":null,"confidence":0.9}]
+
+        ## 示例 3:说"现在/刚刚" → 用录音时间当 time
+        (假设录音时间 = 2026-04-23T14:30:00+11:00)
+        输入: 挖机现在到了
+        输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T14:30:00+11:00","note":null,"confidence":0.95}]
+
+        ## 示例 4:机械开始(与"到"同义) + 明说时间
+        (假设录音时间 = 2026-04-23T14:30:00+11:00)
+        输入: 挖机早上 9 点开始
+        输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T09:00:00+11:00","note":null,"confidence":0.9}]
+
+        # 不要抽
+        - 是巡检清单、质量观察、隐患描述 → []
+        - 纯工作内容描述("今天浇了梁") → []
+        - 模棱两可、没主语 → []
+
+        # 本次输入
+        录音时间: \(nowISO)
+        工地: \(siteLabel)
+        转写:
+        \"\"\"
+        \(text)
+        \"\"\"
+
+        JSON:
+        """
+
+        let raw: String
+        do {
+            raw = try await runTextStrict(prompt: prompt)
+        } catch {
+            print("[SiteNote] extractLogEntries AI 调用失败: \(error.localizedDescription)")
+            return []
+        }
+
+        return Self.parseLogDraftJSON(raw)
+    }
+
+    // MARK: - 5. 综合分类(omni-classify,Phase B)
+
+    /// AI omni-classify 的 JSON 输出结构。所有字段可空——AI 判断不出就 null。
+    struct ClassificationAIOutput: Codable {
+        let site: String?
+        let subTags: [String]?
+        let deadline: String?
+        let isHazard: Bool?
+        let templateName: String?
+        let clauseRef: String?
+        /// 每个字段一句理由(中文,≤20 字)。字段名就是 site/subTags/deadline/hazard/templateName/clauseRef。
+        let reasoning: [String: String]?
+        /// 每个字段的置信度 0-1。
+        let confidences: [String: Double]?
+    }
+
+    /// 一次 AI 调用同时判断工地 / 子标签 / deadline / 隐患 / 模板 / 条款。
+    /// - 所有"选项"从参数传入(AI 只能从已有列表选,不生成新值)
+    /// - 用于 `NoteClassificationPipeline` 的 Phase B,保存流程后异步跑
+    /// - 失败返回 nil,调用方把 Phase A(GPS)结果留住即可,不阻断
+    func classifyNote(
+        transcription: String,
+        availableSites: [String],
+        availableSubTags: [String],
+        availableTemplates: [String],
+        availableClauses: [String]
+    ) async -> ClassificationAIOutput? {
+        let text = transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, Self.isLanguageModelAvailable else { return nil }
+
+        let sitesList = availableSites.isEmpty ? "(无)" : availableSites.joined(separator: ", ")
+        let subsList = availableSubTags.isEmpty ? "(无)" : availableSubTags.joined(separator: ", ")
+        let tplsList = availableTemplates.isEmpty ? "(无)" : availableTemplates.joined(separator: ", ")
+        let clauseList = availableClauses.isEmpty ? "(无)" : availableClauses.joined(separator: ", ")
+
+        let prompt = """
+        你是建筑工地语音速记的智能分类器。读下面一段转写,从**已有列表**中选出对应项。
+        **不要生成新值**——选不出就填 null。每项给置信度 0.0-1.0 和一句中文理由(≤20 字)。
+        **只返回纯 JSON**,不要 markdown 代码块、不要任何解释。
+
+        可选项:
+          sites:     \(sitesList)
+          subTags:   \(subsList)
+          templates: \(tplsList)
+          clauses:   \(clauseList)
+          deadline:  "inbox" | "today" | "threeDays" | "thisWeek" | "archive"
+
+        JSON schema(所有字段都可 null):
+        {
+          "site":         string|null,   // 只有转写明说工地名(或强烈暗示)才填,否则 null——GPS 规则会兜底
+          "subTags":      [string],      // 从 subTags 里挑 0-3 个,没匹配给空数组 []
+          "deadline":     string|null,   // **只处理明确时间信号**:"今天/明天"→today、"三天内"→threeDays、"这周"→thisWeek、"备忘/记下就行"→archive。"赶紧/有空"这类模糊词给 null
+          "isHazard":     boolean|null,  // 转写明显涉及漏电/裂缝/脚手架松动/坠落/火灾/违规 → true。无明显问题 → null(不要 false,避免覆盖用户自己标的)
+          "templateName": string|null,
+          "clauseRef":    string|null,
+          "reasoning":    { "site": "...", "subTags": "...", ... },
+          "confidences":  { "site": 0.9, ... }
+        }
+
+        # 示例
+        输入: "悉尼 Olympic Park 东区 3 楼混凝土浇筑,配比 C30,钢筋 HRB400。今天下午业主要验收。"
+          (sites 包含 "悉尼 Olympic Park",subTags 包含 "混凝土"、"钢筋",templates 包含 "混凝土浇筑")
+        输出: {
+          "site": "悉尼 Olympic Park",
+          "subTags": ["混凝土", "钢筋"],
+          "deadline": "today",
+          "isHazard": null,
+          "templateName": "混凝土浇筑",
+          "clauseRef": null,
+          "reasoning": {
+            "site": "明说 Olympic Park",
+            "subTags": "提到混凝土/钢筋",
+            "deadline": "下午验收 = 今天",
+            "templateName": "匹配混凝土浇筑模板"
+          },
+          "confidences": {
+            "site": 0.95, "subTags": 0.9, "deadline": 0.9, "templateName": 0.8
+          }
+        }
+
+        # 本次输入
+        \"\"\"
+        \(text)
+        \"\"\"
+
+        JSON:
+        """
+
+        do {
+            let raw = try await runTextStrict(prompt: prompt)
+            return Self.parseClassificationJSON(raw)
+        } catch {
+            print("[SiteNote] classifyNote AI 失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    static func parseClassificationJSON(_ raw: String) -> ClassificationAIOutput? {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("```") {
+            if let firstNewline = s.firstIndex(of: "\n") {
+                s = String(s[s.index(after: firstNewline)...])
+            }
+            if let end = s.range(of: "```", options: .backwards) {
+                s = String(s[..<end.lowerBound])
+            }
+            s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let first = s.firstIndex(of: "{"),
+              let last = s.lastIndex(of: "}"),
+              first <= last else {
+            return nil
+        }
+        let json = String(s[first...last])
+        guard let data = json.data(using: .utf8) else { return nil }
+        do {
+            return try JSONDecoder().decode(ClassificationAIOutput.self, from: data)
+        } catch {
+            print("[SiteNote] classifyNote JSON 解析失败: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// 把 AI 输出(可能带 markdown 代码块包装)解成 draft 数组。任何异常返回 []。
+    static func parseLogDraftJSON(_ raw: String) -> [LogEntryDraft] {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 剥 ```json ... ``` 或 ``` ... ```
+        if s.hasPrefix("```") {
+            if let firstNewline = s.firstIndex(of: "\n") {
+                s = String(s[s.index(after: firstNewline)...])
+            }
+            if let end = s.range(of: "```", options: .backwards) {
+                s = String(s[..<end.lowerBound])
+            }
+            s = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // 若没有 [ 就直接 fail
+        guard let first = s.firstIndex(of: "["),
+              let last = s.lastIndex(of: "]"),
+              first <= last else {
+            return []
+        }
+        let jsonSlice = String(s[first...last])
+        guard let data = jsonSlice.data(using: .utf8) else { return [] }
+        do {
+            return try JSONDecoder().decode([LogEntryDraft].self, from: data)
+        } catch {
+            print("[SiteNote] extractLogEntries JSON 解析失败: \(error.localizedDescription)")
+            return []
+        }
+    }
+}
