@@ -153,8 +153,10 @@ struct DiaryView: View {
             TodayBriefButton()
             NavigationLink(value: SettingsDestination()) {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 18, weight: .regular))
+                    .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(Ink.fgDim)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
             }
         }
         .padding(.horizontal, 24)
@@ -696,6 +698,16 @@ struct DiaryView: View {
 
     // MARK: - Bottom bar
 
+    /// 底部按钮用的日期文案:今天/昨天/具体日期。区分顶部"今日简报"按钮。
+    private var bottomBarDateLabel: String {
+        if Calendar.current.isDateInToday(selectedDate) { return "今日" }
+        if Calendar.current.isDateInYesterday(selectedDate) { return "昨日" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M/d"
+        return f.string(from: selectedDate)
+    }
+
     @ViewBuilder
     private var bottomBar: some View {
         if !todayEntries.isEmpty || !todayNotes.isEmpty {
@@ -710,7 +722,8 @@ struct DiaryView: View {
                         } else {
                             Image(systemName: "doc.richtext")
                         }
-                        Text(isGenerating ? "生成中…" : "一键生成 Site Diary (PDF)")
+                        // 文案带"选中日期" → 区分顶部"📤 简报"(永远是今天)
+                        Text(isGenerating ? "生成中…" : "生成 \(bottomBarDateLabel) 日志 PDF")
                             .font(.system(size: 15, weight: .semibold))
                     }
                     .foregroundStyle(Color.white)

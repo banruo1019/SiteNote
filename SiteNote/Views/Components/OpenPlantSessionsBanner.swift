@@ -69,7 +69,7 @@ struct OpenPlantSessionsBanner: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Ink.red.opacity(0.3), lineWidth: 1)
         )
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 24)   // 和标题行 / statsRow 对齐
         .padding(.top, 4)
     }
 

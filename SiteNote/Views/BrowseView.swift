@@ -168,8 +168,10 @@ struct BrowseView: View {
                 TodayBriefButton()
                 NavigationLink(value: SettingsDestination()) {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 18, weight: .regular))
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundStyle(Ink.fgDim)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
             }
 
@@ -237,14 +239,6 @@ struct BrowseView: View {
             if hasSubTagsWithNotes {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
-                        // 辅助性"其他"标签文字,视觉上和工地分层
-                        Text("其他")
-                            .font(.system(size: 11, weight: .semibold))
-                            .tracking(0.5)
-                            .textCase(.uppercase)
-                            .foregroundStyle(Ink.dim)
-                            .padding(.trailing, 2)
-
                         ForEach(availableSubTags) { sub in
                             let count = allNotes.filter { $0.otherTags.contains(sub.name) }.count
                             if count > 0 {

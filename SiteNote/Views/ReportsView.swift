@@ -72,8 +72,10 @@ struct ReportsView: View {
             TodayBriefButton()
             NavigationLink(value: SettingsDestination()) {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 18, weight: .regular))
+                    .font(.system(size: 17, weight: .regular))
                     .foregroundStyle(Ink.fgDim)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
             }
         }
         .padding(.horizontal, 24)

@@ -221,8 +221,10 @@ struct RecordView: View {
                 TodayBriefButton()
                 NavigationLink(value: SettingsDestination()) {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 18, weight: .regular))
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundStyle(Ink.fgDim)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
                 }
             }
             subtitleRow
@@ -720,29 +722,23 @@ struct RecordView: View {
     }
 
     private var micButton: some View {
-        VStack(spacing: 12) {
-            // 上滑/下滑时按钮上方/下方浮一个状态胶囊。
-            ZStack(alignment: .bottom) {
-                if isDiarySliding {
-                    gestureBadge(text: "日志模式", icon: "person.fill", color: Ink.accentBlue)
-                        .offset(y: -160)
-                        .transition(.scale(scale: 0.6).combined(with: .opacity))
-                }
-                if isCancelSliding {
-                    gestureBadge(text: "取消录音", icon: "xmark", color: Ink.dim)
-                        .offset(y: -160)
-                        .transition(.scale(scale: 0.6).combined(with: .opacity))
-                }
-                micButtonCircle
+        // 只保留圆盘。文字标签在按下时会因状态变长变短,扰乱 cam 的对齐,
+        // 手势状态靠上滑/下滑时的浮动 badge + 颜色 + 图标三重视觉足够表达。
+        ZStack(alignment: .bottom) {
+            if isDiarySliding {
+                gestureBadge(text: "日志模式", icon: "person.fill", color: Ink.accentBlue)
+                    .offset(y: -160)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
-            .animation(.easeOut(duration: 0.15), value: isDiarySliding)
-            .animation(.easeOut(duration: 0.15), value: isCancelSliding)
-
-            Text(micLabel)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(viewModel.isRecording ? Ink.fgDim : Ink.fg)
-                .animation(.none, value: isDiarySliding)
+            if isCancelSliding {
+                gestureBadge(text: "取消录音", icon: "xmark", color: Ink.dim)
+                    .offset(y: -160)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+            micButtonCircle
         }
+        .animation(.easeOut(duration: 0.15), value: isDiarySliding)
+        .animation(.easeOut(duration: 0.15), value: isCancelSliding)
         .frame(maxWidth: .infinity)
     }
 
@@ -819,14 +815,6 @@ struct RecordView: View {
         return "mic.fill"
     }
 
-    /// 按钮下方的文字标签。
-    private var micLabel: String {
-        if !viewModel.isRecording { return "按住说话 · 上滑记日志 · 下滑取消" }
-        if isCancelSliding { return "松开取消录音" }
-        if isDiarySliding { return "松开存为日志" }
-        return "松开保存"
-    }
-
     private func gestureBadge(text: String, icon: String, color: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
@@ -843,26 +831,20 @@ struct RecordView: View {
     }
 
     private var cameraButton: some View {
-        VStack(spacing: 12) {
-            Circle()
-                .fill(Ink.bg)
-                .overlay(Circle().strokeBorder(Ink.fg, lineWidth: 1.5))
-                .frame(width: 132, height: 132)
-                .overlay(
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: 36, weight: .medium))
-                        .foregroundStyle(Ink.fg)
-                )
-                .onTapGesture {
-                    isShowingCamera = true
-                }
-                .sensoryFeedback(.impact(weight: .medium), trigger: isShowingCamera)
-
-            Text("拍照")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Ink.fg)
-        }
-        .frame(maxWidth: .infinity)
+        Circle()
+            .fill(Ink.bg)
+            .overlay(Circle().strokeBorder(Ink.fg, lineWidth: 1.5))
+            .frame(width: 132, height: 132)
+            .overlay(
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 36, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+            )
+            .onTapGesture {
+                isShowingCamera = true
+            }
+            .sensoryFeedback(.impact(weight: .medium), trigger: isShowingCamera)
+            .frame(maxWidth: .infinity)
     }
 
     // MARK: - Undo toast

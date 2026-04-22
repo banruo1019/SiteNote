@@ -27,42 +27,39 @@ struct AIKeyHintBanner: View {
     }
 
     private var content: some View {
-        NavigationLink(value: AIStatusDestination()) {
-            HStack(spacing: 10) {
-                Image(systemName: "wand.and.stars")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Ink.accentBlue)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("配 AI Key 让自动识别更准")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Ink.fg)
-                    Text("可选 OpenAI 或 Apple Intelligence(iOS 26)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Ink.fgDim)
-                }
-                Spacer()
-                Button {
-                    dismissForever()
-                } label: {
-                    Image(systemName: "xmark")
+        // 紧凑单行(过去两行占位过高,把 statsRow 推离标题太远)。
+        HStack(spacing: 8) {
+            NavigationLink(value: AIStatusDestination()) {
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Ink.dim)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
+                        .foregroundStyle(Ink.accentBlue)
+                    Text("配 AI Key 让识别更准")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Ink.accentBlue)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Ink.accentBlue.opacity(0.5))
                 }
-                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Ink.accentBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Ink.accentBlue.opacity(0.25), lineWidth: 1)
-            )
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
+            .buttonStyle(.plain)
+            Spacer()
+            Button {
+                dismissForever()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Ink.accentBlue.opacity(0.07), in: Capsule())
+        .padding(.horizontal, 24)
+        .padding(.top, 4)
     }
 
     private func dismissForever() {

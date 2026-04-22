@@ -53,42 +53,39 @@ struct AIStatusBar: View {
 
     var body: some View {
         NavigationLink(value: AIStatusDestination()) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: "wand.and.stars")
-                    .font(.system(size: 10))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(engineColor)
-                Text("AI:")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Ink.fgDim)
                 Text(engineLabel)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(engineColor)
                 if AIService.isLanguageModelAvailable {
                     Text("·")
+                        .font(.system(size: 11))
                         .foregroundStyle(Ink.dim)
-                    Text("今日识别 \(todayEntryCount)")
-                        .font(.system(size: 10))
+                    Text("今日 \(todayEntryCount) 条")
+                        .font(.system(size: 11))
                         .foregroundStyle(Ink.fgDim)
                         .monospacedDigit()
                     if pendingCount > 0 {
-                        Text("·")
-                            .foregroundStyle(Ink.dim)
-                        HStack(spacing: 2) {
+                        HStack(spacing: 3) {
                             Circle().fill(Ink.red).frame(width: 5, height: 5)
                             Text("\(pendingCount) 待确认")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(Ink.red)
                                 .monospacedDigit()
                         }
+                        .padding(.leading, 2)
                     }
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Ink.dim)
             }
             .padding(.horizontal, 24)
-            .padding(.vertical, 6)
+            .padding(.vertical, 7)
             .background(Ink.card.opacity(0.5))
             .overlay(alignment: .bottom) {
                 Rectangle().fill(Ink.line).frame(height: 0.5)
