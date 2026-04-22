@@ -155,7 +155,7 @@ struct GlobalSearchView: View {
                 .font(.system(size: 13))
                 .foregroundStyle(Ink.fgDim)
             if AIService.isLanguageModelAvailable {
-                Text("打开 AI 语义搜索可以问"漏电的事"这类模糊查询")
+                Text("打开 AI 语义搜索可以问「漏电的事」这类模糊查询")
                     .font(.system(size: 11))
                     .foregroundStyle(Ink.dim)
                     .multilineTextAlignment(.center)
