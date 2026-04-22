@@ -50,6 +50,9 @@ struct RecordView: View {
     /// 松手时调 `cancelRecording()` 丢弃音频。
     @State private var isCancelSliding: Bool = false
 
+    /// 首次进入时的手势教学层。读 UserDefaults 决定是否展示。
+    @State private var showsGestureHint: Bool = GestureHintOverlay.needsToShow
+
     private let listVM = NoteListViewModel()
 
     enum TodoFilter: Hashable {
@@ -130,6 +133,11 @@ struct RecordView: View {
                         .padding(.horizontal, 12)
                         .padding(.bottom, 16)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                // 首次启动:盖一层手势教学
+                if showsGestureHint {
+                    GestureHintOverlay(isShown: $showsGestureHint)
                 }
             }
             .navigationBarHidden(true)

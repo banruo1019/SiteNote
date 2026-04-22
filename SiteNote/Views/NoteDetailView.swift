@@ -840,7 +840,10 @@ struct NoteDetailView: View {
     @ViewBuilder
     private var floorPlanDisclosure: some View {
         let allPlans = FloorPlansStorage.load()
-        if allPlans.isEmpty {
+        // Plan 1.2 降级:只在(平面图库非空 + 这条 note 已经标过位置)时才显示。
+        // 用户从未用过平面图功能 → 详情页不出现这一行,免心智负担。
+        // 想标新位置走 Settings → 工地资源 → 平面图。
+        if allPlans.isEmpty || note.floorPlanRef == nil {
             EmptyView()
         } else {
             DisclosureGroup {
