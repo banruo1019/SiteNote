@@ -23,6 +23,7 @@ struct ReportsView: View {
             ZStack {
                 Ink.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
+                    AIStatusBar()
                     titleRow
                     weeklyArea
                     outputList
@@ -34,6 +35,9 @@ struct ReportsView: View {
             }
             .navigationDestination(for: SettingsDestination.self) { _ in
                 SettingsView()
+            }
+            .navigationDestination(for: AIStatusDestination.self) { _ in
+                InputAISettingsView()
             }
         }
     }

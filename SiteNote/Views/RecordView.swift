@@ -172,6 +172,9 @@ struct RecordView: View {
             .navigationDestination(for: SettingsDestination.self) { _ in
                 SettingsView()
             }
+            .navigationDestination(for: AIStatusDestination.self) { _ in
+                InputAISettingsView()
+            }
             .alert("出错了", isPresented: Binding(
                 get: { viewModel.errorMessage != nil },
                 set: { if !$0 { viewModel.errorMessage = nil } }
@@ -191,8 +194,9 @@ struct RecordView: View {
 
     private var idleTopArea: some View {
         VStack(spacing: 0) {
-            // 固定顶区:标题 + 统计 stats + 开启中机械提示
+            // 固定顶区:AI 状态条 + 标题 + 统计 stats + 开启中机械提示
             VStack(alignment: .leading, spacing: 0) {
+                AIStatusBar()
                 titleBlock
                 OpenPlantSessionsBanner()    // 有未闭合的挖机 session 时才显示
                 statsRow

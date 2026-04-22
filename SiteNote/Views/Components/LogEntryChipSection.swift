@@ -30,17 +30,20 @@ struct LogEntryChipSection: View {
     }
 
     var body: some View {
-        if entries.isEmpty {
-            EmptyView()
-        } else {
+        // 日志 note **永远显示**(包括"AI 未识别 + 手动加"空态)。
+        // 非日志 note **只在有 entries 时**显示——避免普通速记被无关空卡片打扰。
+        if note.isDiaryRecord || !entries.isEmpty {
             card
                 .sheet(item: $editing) { entry in
                     LogEntryEditSheet(entry: entry) { deleted in
-                        if deleted {
+                        // 取消 + 主语为空 = 用户没填,作废这条占位条目;否则保留
+                        if deleted || entry.subject.trimmingCharacters(in: .whitespaces).isEmpty {
                             entry.deletedAt = Date()
                         }
                     }
                 }
+        } else {
+            EmptyView()
         }
     }
 
@@ -52,32 +55,39 @@ struct LogEntryChipSection: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             Divider().overlay(Ink.line)
-            VStack(spacing: 6) {
-                ForEach(entries) { entry in
-                    chipRow(entry)
-                }
-            }
-            if unconfirmedCount > 0 {
-                Divider().overlay(Ink.line).padding(.top, 2)
-                HStack {
-                    Spacer()
-                    Button {
-                        confirmAll()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark.circle.fill")
-                            Text("全部确认")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                        .foregroundStyle(Color.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(Ink.fg)
-                        .clipShape(Capsule())
+            if entries.isEmpty {
+                emptyStateBody
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(entries) { entry in
+                        chipRow(entry)
                     }
-                    .buttonStyle(.plain)
+                }
+                if unconfirmedCount > 0 {
+                    Divider().overlay(Ink.line).padding(.top, 2)
+                    HStack {
+                        Spacer()
+                        Button {
+                            confirmAll()
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                Text("全部确认")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(Color.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Ink.fg)
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
+            // 永远在底部留 "+ 手动加"
+            Divider().overlay(Ink.line).padding(.top, 2)
+            addManualButton
         }
         .padding(14)
         .background(
@@ -211,6 +221,57 @@ struct LogEntryChipSection: View {
         let m = (total % 3600) / 60
         if h == 0 { return "\(m)m" }
         return "\(h)h \(m)m"
+    }
+
+    private var emptyStateBody: some View {
+        VStack(spacing: 8) {
+            Image(systemName: AIService.isLanguageModelAvailable ? "wand.and.stars" : "wand.and.stars.inverse")
+                .font(.system(size: 24, weight: .light))
+                .foregroundStyle(Ink.dim)
+            Text(AIService.isLanguageModelAvailable ? "AI 没识别到人员/机械/事件" : "AI 未配置,无法自动识别")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Ink.fgDim)
+            Text("可以手动加一条")
+                .font(.system(size: 11))
+                .foregroundStyle(Ink.dim)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+    }
+
+    /// "+ 手动加一条" 按钮——建空 LogEntry 立刻打开 EditSheet 让用户填。
+    /// 主语为空时取消会自动作废(在 sheet 的 onClose 处理)。
+    private var addManualButton: some View {
+        Button {
+            createPlaceholderEntry()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle.fill")
+                Text("手动加一条")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer()
+            }
+            .foregroundStyle(Ink.fg)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func createPlaceholderEntry() {
+        let new = LogEntry(
+            kind: .person,
+            subject: "",
+            startAt: Date(),
+            startAtExplicit: false,
+            sourceNoteID: note.id,
+            confidence: 1.0,
+            userConfirmed: false
+        )
+        // 沿用源 note 的工地标签
+        new.siteTag = note.siteTag
+        modelContext.insert(new)
+        editing = new
     }
 
     private func confirmAll() {

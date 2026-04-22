@@ -90,6 +90,7 @@ struct DiaryView: View {
             ZStack {
                 Ink.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
+                    AIStatusBar()
                     titleRow
                     filterBar
                     summaryStrip
@@ -107,6 +108,9 @@ struct DiaryView: View {
             }
             .navigationDestination(for: SettingsDestination.self) { _ in
                 SettingsView()
+            }
+            .navigationDestination(for: AIStatusDestination.self) { _ in
+                InputAISettingsView()
             }
             .onAppear { availableSites = SiteTagsStorage.load() }
             .onChange(of: isActive) { _, active in

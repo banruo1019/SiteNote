@@ -55,6 +55,7 @@ struct BrowseView: View {
             ZStack {
                 Ink.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
+                    AIStatusBar()
                     titleAndSearch
                     filterRow
                     Divider().overlay(Ink.line)
@@ -70,6 +71,9 @@ struct BrowseView: View {
             .onChange(of: aiSearchEnabled) { _, _ in runSemanticSearchIfNeeded() }
             .navigationDestination(for: Note.self) { note in
                 NoteRouter(note: note)
+            }
+            .navigationDestination(for: AIStatusDestination.self) { _ in
+                InputAISettingsView()
             }
         }
     }

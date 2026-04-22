@@ -89,6 +89,13 @@ enum NoteClassificationPipeline {
     static func apply(suggestion: NoteClassificationSuggestion, to note: Note) {
         if let s = suggestion.site {
             note.siteTag = s.value
+            // 冷启动:AI 提议的新工地(不在 SiteTagsStorage 里)→ 用户点确认即视为加入。
+            // 第二条 note 起,这个工地就出现在所有 site picker 里。
+            let knownSites = SiteTagsStorage.load()
+            if !knownSites.contains(s.value) {
+                SiteTagsStorage.add(s.value)
+                print("[SiteNote] Pipeline: AI 提议的新工地 \(s.value) 已自动加入 SiteTagsStorage")
+            }
             // GPS 学习:用户确认后,把这条 note 的坐标喂给中心点。
             if let lat = note.latitude, let lng = note.longitude {
                 SiteCentroidsStorage.observe(siteName: s.value, latitude: lat, longitude: lng)

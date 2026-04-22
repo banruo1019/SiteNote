@@ -491,8 +491,11 @@ final class AIService {
         let clauseList = availableClauses.isEmpty ? "(无)" : availableClauses.joined(separator: ", ")
 
         let prompt = """
-        你是建筑工地语音速记的智能分类器。读下面一段转写,从**已有列表**中选出对应项。
-        **不要生成新值**——选不出就填 null。每项给置信度 0.0-1.0 和一句中文理由(≤20 字)。
+        你是建筑工地语音速记的智能分类器。读下面一段转写,大多数字段从**已有列表**中选出对应项。
+        **subTags / templates / clauses / deadline 不要生成新值**——选不出就填 null。
+        **site 例外**:用户明说了工地名(如"在 Olympic Park"、"在地铁西区项目")但列表里没有,
+        **可以提议**新工地名,confidence 压到 0.65 表示建议(用户确认后 app 会自动加入工地列表)。
+        每项给置信度 0.0-1.0 和一句中文理由(≤20 字)。
         **只返回纯 JSON**,不要 markdown 代码块、不要任何解释。
 
         可选项:
@@ -504,7 +507,7 @@ final class AIService {
 
         JSON schema(所有字段都可 null):
         {
-          "site":         string|null,   // 只有转写明说工地名(或强烈暗示)才填,否则 null——GPS 规则会兜底
+          "site":         string|null,   // 列表里有 → 用列表的;明说但没列 → 给新工地名(confidence ≤ 0.7);未提 → null
           "subTags":      [string],      // 从 subTags 里挑 0-3 个,没匹配给空数组 []
           "deadline":     string|null,   // **只处理明确时间信号**:"今天/明天"→today、"三天内"→threeDays、"这周"→thisWeek、"备忘/记下就行"→archive。"赶紧/有空"这类模糊词给 null
           "isHazard":     boolean|null,  // 转写明显涉及漏电/裂缝/脚手架松动/坠落/火灾/违规 → true。无明显问题 → null(不要 false,避免覆盖用户自己标的)
