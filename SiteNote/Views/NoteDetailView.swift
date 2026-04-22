@@ -27,6 +27,68 @@ struct NoteDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
+    /// 关联的 LogEntry(用于 diary 模式的"类型"行)。
+    @Query private var logEntries: [LogEntry]
+
+    init(note: Note) {
+        self.note = note
+        let id = note.id
+        _logEntries = Query(
+            filter: #Predicate<LogEntry> {
+                $0.sourceNoteID == id && $0.deletedAt == nil
+            },
+            sort: [SortDescriptor(\LogEntry.createdAt)]
+        )
+    }
+
+    /// 是否日志模式:决定哪些 section 显示 / 隐藏 + 标题样式。
+    private var isDiary: Bool { note.isDiaryRecord }
+
+    /// diary 模式专属:已识别的类型 chip(派生自 LogEntries)。
+    @ViewBuilder
+    private var typeRow: some View {
+        let kindOrder: [LogKind] = [.person, .plant, .delivery, .visitor, .event]
+        let presentKinds = kindOrder.filter { k in logEntries.contains(where: { $0.kind == k }) }
+        if !presentKinds.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.fgDim)
+                Text("类型")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.5)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Ink.dim)
+                ForEach(presentKinds, id: \.self) { k in
+                    HStack(spacing: 3) {
+                        Text(typeIcon(for: k))
+                        Text(k.displayName)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Ink.fg)
+                        Text("\(logEntries.filter { $0.kind == k }.count)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Ink.fgDim)
+                            .monospacedDigit()
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Ink.card, in: Capsule())
+                }
+                Spacer()
+            }
+        }
+    }
+
+    private func typeIcon(for k: LogKind) -> String {
+        switch k {
+        case .person: return "👥"
+        case .plant: return "🚜"
+        case .delivery: return "📦"
+        case .visitor: return "🧑"
+        case .event: return "⚠️"
+        }
+    }
+
     @State private var sharePDFURL: URL?
     @State private var isGeneratingShare: Bool = false
     @State private var showsRescheduleDialog: Bool = false
@@ -61,26 +123,33 @@ struct NoteDetailView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: DesignTokens.Spacing.medium) {
-                titleBlock            // 1. 标题 = 转写内容(大字)+ AI 助手入口
-                NoteClassificationCard(note: note) // 1.4 AI 整体分类建议(工地/标签/deadline/隐患/模板/条款)
-                LogEntryChipSection(note: note)    // 1.5 AI 识别出的工地日志条目(若有)
-                tagsRow               // 2. 标签一排
-                photosBlock           // 3. 照片大图
-                addPhotoRow           // 4. 加照片按钮
-                datesRow              // 5. 创建时间 · 到期时间 并排
-                audioDisclosure       // 6. 录音(折叠)
-                floorPlanDisclosure   // 7. 平面图(折叠)
-                if note.templateName != nil {
-                    templateSection
+                titleBlock            // 1. 标题(diary 模式带"施工日记" badge)
+                NoteClassificationCard(note: note) // 1.4 AI 分类建议(diary 已自动裁剪只剩 site+subTags)
+                tagsRow               // 1.5 工地 + 子标签
+                if isDiary && !logEntries.isEmpty {
+                    typeRow           // 1.6 diary 专属:已识别的类型 chip(👥 人员 · 🚜 机械)
                 }
-                otherMetaDisclosure   // 其他(位置/天气/分享)折叠
-                actionButtonGroup     // 操作按钮
+                LogEntryChipSection(note: note)    // 2. AI 识别的结构化条目
+                photosBlock           // 3. 照片
+                addPhotoRow           // 4. 加照片
+                if !isDiary {
+                    datesRow          // 5. 截止时间(只普通 note)
+                }
+                audioDisclosure       // 6. 录音
+                if !isDiary {
+                    floorPlanDisclosure   // 7. 平面图(只普通 note,日志不需要)
+                }
+                if !isDiary, note.templateName != nil {
+                    templateSection   // 8. 巡检模板(只普通 note)
+                }
+                otherMetaDisclosure   // 9. 位置/天气/分享(两种都有)
+                actionButtonGroup     // 10. 操作按钮(diary 只显示 删除)
             }
             .padding()
         }
         .scrollContentBackground(.hidden)
         .background(Ink.bg.ignoresSafeArea())
-        .navigationTitle("详情")
+        .navigationTitle(isDiary ? "日志" : "详情")
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
             if aiWorking {
@@ -253,9 +322,21 @@ struct NoteDetailView: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
             HStack {
-                Text("内容")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                if isDiary {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 9, weight: .bold))
+                        Text("施工日记")
+                            .font(.system(size: 10, weight: .semibold))
+                            .tracking(0.5)
+                            .textCase(.uppercase)
+                    }
+                    .foregroundStyle(Ink.accentBlue)
+                } else {
+                    Text("内容")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 if hasOriginalDivergence {
                     Button {
@@ -899,48 +980,69 @@ struct NoteDetailView: View {
     /// - 第 1 排:已处理 + 改期(常用主操作,填充色)
     /// - 第 2 排:分享 + 指派(中性 tonal)
     /// - 第 3 排:标记隐患 + 删除(描边 ghost,警示/危险)
+    @ViewBuilder
     private var actionButtonGroup: some View {
-        VStack(spacing: DesignTokens.Spacing.small) {
-            HStack(spacing: DesignTokens.Spacing.small) {
-                doneButton
-                rescheduleButton
-            }
-            HStack(spacing: DesignTokens.Spacing.small) {
-                tonalActionButton(
-                    icon: isGeneratingShare ? "hourglass" : "square.and.arrow.up",
-                    title: isGeneratingShare ? "生成中…" : "分享",
-                    tint: Ink.fg,
-                    bg: Ink.card
-                ) { generateSharePDF() }
+        if isDiary {
+            // 日志只保留:分享 + 删除。todo 类的(完成/改期/指派/标隐患)全部省去。
+            VStack(spacing: DesignTokens.Spacing.small) {
+                HStack(spacing: DesignTokens.Spacing.small) {
+                    tonalActionButton(
+                        icon: isGeneratingShare ? "hourglass" : "square.and.arrow.up",
+                        title: isGeneratingShare ? "生成中…" : "分享",
+                        tint: Ink.fg,
+                        bg: Ink.card
+                    ) { generateSharePDF() }
 
-                tonalActionButton(
-                    icon: note.assignedTo == nil ? "person.fill.badge.plus" : "person.fill",
-                    title: note.assignedTo == nil ? "指派" : "重派",
-                    tint: Ink.fg,
-                    bg: Ink.card
-                ) {
-                    if MessageComposer.canSendMessages {
-                        showsContactPicker = true
-                    } else {
-                        assignError = "当前设备不支持发送短信(可能是 iPad 或模拟器)"
+                    ghostActionButton(
+                        icon: "trash",
+                        title: "删除",
+                        tint: Ink.red
+                    ) { showsDeleteConfirm = true }
+                }
+            }
+        } else {
+            VStack(spacing: DesignTokens.Spacing.small) {
+                HStack(spacing: DesignTokens.Spacing.small) {
+                    doneButton
+                    rescheduleButton
+                }
+                HStack(spacing: DesignTokens.Spacing.small) {
+                    tonalActionButton(
+                        icon: isGeneratingShare ? "hourglass" : "square.and.arrow.up",
+                        title: isGeneratingShare ? "生成中…" : "分享",
+                        tint: Ink.fg,
+                        bg: Ink.card
+                    ) { generateSharePDF() }
+
+                    tonalActionButton(
+                        icon: note.assignedTo == nil ? "person.fill.badge.plus" : "person.fill",
+                        title: note.assignedTo == nil ? "指派" : "重派",
+                        tint: Ink.fg,
+                        bg: Ink.card
+                    ) {
+                        if MessageComposer.canSendMessages {
+                            showsContactPicker = true
+                        } else {
+                            assignError = "当前设备不支持发送短信(可能是 iPad 或模拟器)"
+                        }
                     }
                 }
-            }
-            HStack(spacing: DesignTokens.Spacing.small) {
-                ghostActionButton(
-                    icon: note.isHazard ? "exclamationmark.triangle.fill" : "exclamationmark.triangle",
-                    title: note.isHazard ? "取消隐患" : "标记隐患",
-                    tint: Ink.amber
-                ) {
-                    note.isHazard.toggle()
-                    NotificationService.shared.schedule(for: note)
-                }
+                HStack(spacing: DesignTokens.Spacing.small) {
+                    ghostActionButton(
+                        icon: note.isHazard ? "exclamationmark.triangle.fill" : "exclamationmark.triangle",
+                        title: note.isHazard ? "取消隐患" : "标记隐患",
+                        tint: Ink.amber
+                    ) {
+                        note.isHazard.toggle()
+                        NotificationService.shared.schedule(for: note)
+                    }
 
-                ghostActionButton(
-                    icon: "trash",
-                    title: "删除",
-                    tint: Ink.red
-                ) { showsDeleteConfirm = true }
+                    ghostActionButton(
+                        icon: "trash",
+                        title: "删除",
+                        tint: Ink.red
+                    ) { showsDeleteConfirm = true }
+                }
             }
         }
     }
@@ -1494,7 +1596,7 @@ private struct PhotoAnalysesSheet: Identifiable {
 /// - 工地:单选 radio,列表来自 SiteTagsStorage
 /// - 子标签:**单选** radio,全局共享,来自 SubTagsStorage
 /// - 就地新建工地或子标签(新建子标签需要选颜色)
-/// 工地 / 子标签 picker sheet。NoteDetailView 和 DiaryNoteDetailView 共用。
+/// 工地 / 子标签 picker sheet。
 struct TagPickerSheet: View {
     let currentSiteTag: String?
     let currentOtherTags: [String]
