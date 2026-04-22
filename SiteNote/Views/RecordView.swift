@@ -194,10 +194,11 @@ struct RecordView: View {
 
     private var idleTopArea: some View {
         VStack(spacing: 0) {
-            // 固定顶区:AI 状态条 + 标题 + 统计 stats + 开启中机械提示
+            // 固定顶区:AI 状态条 + 标题 + Key 引导(若需) + 统计 stats + 开启中机械提示
             VStack(alignment: .leading, spacing: 0) {
                 AIStatusBar()
                 titleBlock
+                AIKeyHintBanner()            // AI 没配且没 dismiss 时出现
                 OpenPlantSessionsBanner()    // 有未闭合的挖机 session 时才显示
                 statsRow
             }

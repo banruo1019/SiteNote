@@ -464,6 +464,22 @@ struct BrowseView: View {
             Text("切回「记」按住麦克风开始")
                 .font(.system(size: 12))
                 .foregroundStyle(Ink.dim)
+            // 没建过工地?加个"建第一个"CTA。AI 分类离了它跑不准。
+            if availableTags.isEmpty {
+                NavigationLink(value: SettingsDestination()) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "building.2")
+                        Text("先建第一个工地")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(Color.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Ink.fg, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

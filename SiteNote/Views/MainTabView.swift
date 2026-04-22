@@ -12,8 +12,19 @@ import SwiftData
 
 struct MainTabView: View {
     @State private var selection: AppTab = .record
+    @State private var showsOnboarding: Bool = OnboardingView.needsToShow
 
     var body: some View {
+        ZStack {
+            mainContent
+            if showsOnboarding {
+                OnboardingView(isShown: $showsOnboarding)
+                    .zIndex(100)
+            }
+        }
+    }
+
+    private var mainContent: some View {
         VStack(spacing: 0) {
             // 3 个 tab view 常驻,切换只改 opacity/hit-testing。
             // 不能用 `@ViewBuilder switch`:那会销毁未选中的 view,导致折叠状态、
