@@ -145,7 +145,8 @@ final class NotificationScheduleTests: XCTestCase {
         }
     }
 
-    func test_transcriptionAppearsInBody() {
+    /// 隐私:推送 body 必须**不**含原始 transcription(锁屏脱敏)。
+    func test_transcriptionNeverAppearsInBody() {
         let text = "钢筋质量抽查"
         let items = NotificationService.computeSchedule(
             for: input(daysFromNow: 2, transcription: text),
@@ -153,7 +154,12 @@ final class NotificationScheduleTests: XCTestCase {
             config: cfg
         )
         XCTAssertFalse(items.isEmpty)
-        XCTAssertTrue(items.first!.body.contains(text))
+        for item in items {
+            XCTAssertFalse(
+                item.body.contains(text),
+                "推送 body 不应包含原始 transcription(锁屏脱敏)"
+            )
+        }
     }
 
     // MARK: - 过远的 dueDate 仍然有条目

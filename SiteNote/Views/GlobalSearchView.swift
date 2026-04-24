@@ -68,7 +68,7 @@ struct GlobalSearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14))
                 .foregroundStyle(Ink.fgDim)
-            TextField("搜笔记内容、工地名、工种...", text: $query)
+            TextField("搜速记内容、工地名、工种...", text: $query)
                 .font(.system(size: 14))
                 .focused($queryFocused)
                 .submitLabel(.search)
@@ -151,7 +151,7 @@ struct GlobalSearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 32, weight: .thin))
                 .foregroundStyle(Ink.dim)
-            Text("搜笔记内容 / 工地 / 工种 / 设备")
+            Text("搜速记内容 / 工地 / 工种 / 设备")
                 .font(.system(size: 13))
                 .foregroundStyle(Ink.fgDim)
             if AIService.isLanguageModelAvailable {

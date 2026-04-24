@@ -2,7 +2,7 @@
 //  SubTagsEditorView.swift
 //  SiteNote
 //
-//  全局子标签编辑器。子标签是独立的标签类型(RFI / 缺陷 / 施工 / 开会 / 紧急 ...),
+//  全局分类编辑器。分类是独立的标签类型(RFI / 缺陷 / 施工 / 开会 / 紧急 ...),
 //  和工地正交,不按工地隔离。
 //
 
@@ -22,7 +22,7 @@ struct SubTagsEditorView: View {
                             .font(.system(size: 40, weight: .light))
                             .foregroundStyle(.tertiary)
                             .padding(.top, 20)
-                        Text("还没有子标签")
+                        Text("还没有分类")
                             .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
                         Text("常用分类:RFI、缺陷、施工、开会、紧急、个人")
                             .font(.system(size: DesignTokens.FontSize.body))
@@ -64,7 +64,7 @@ struct SubTagsEditorView: View {
                         }
                     }
                 } footer: {
-                    Text("左滑删除。点行可以改颜色和名字。子标签是全局的,不分工地。颜色会用在平面图图钉上。")
+                    Text("左滑删除。点行可以改颜色和名字。分类是全局的,不分工地。颜色会用在平面图图钉上。")
                         .font(.system(size: 12))
                 }
             }
@@ -75,7 +75,7 @@ struct SubTagsEditorView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "plus.circle.fill")
-                        Text("新建子标签")
+                        Text("新建分类")
                             .fontWeight(.semibold)
                     }
                     .foregroundStyle(Color.accentColor)
@@ -83,7 +83,7 @@ struct SubTagsEditorView: View {
                 .buttonStyle(.plain)
             }
         }
-        .navigationTitle("子标签")
+        .navigationTitle("分类")
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
         .onAppear { subs = SubTagsStorage.load() }
@@ -100,7 +100,7 @@ struct SubTagsEditorView: View {
     }
 }
 
-/// 编辑已有子标签(改名字 / 改颜色)。
+/// 编辑已有分类(改名字 / 改颜色)。
 private struct EditSubTagSheet: View {
     let tag: SubTag
     let onSaved: (SubTag) -> Void
@@ -186,7 +186,7 @@ private struct EditSubTagSheet: View {
                 }
                 .padding()
             }
-            .navigationTitle("编辑子标签")
+            .navigationTitle("编辑分类")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

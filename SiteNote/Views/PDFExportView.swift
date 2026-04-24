@@ -20,7 +20,7 @@ struct PDFExportView: View {
     @State private var selectedTag: String? = nil
     @State private var availableTags: [String] = []
     @State private var availableSubTags: [SubTag] = []
-    /// 子标签过滤。空集 = 不过滤。子标签是全局的,不受工地选择影响。
+    /// 分类过滤。空集 = 不过滤。分类是全局的,不受工地选择影响。
     @State private var selectedSubTags: Set<String> = []
 
     @State private var showsPicker: Bool = false
@@ -41,7 +41,7 @@ struct PDFExportView: View {
         .onAppear {
             availableTags = SiteTagsStorage.load()
             availableSubTags = SubTagsStorage.load()
-            // 清理已删除的子标签选择
+            // 清理已删除的分类选择
             let validNames = Set(availableSubTags.map { $0.name })
             selectedSubTags = selectedSubTags.intersection(validNames)
         }
@@ -122,7 +122,7 @@ struct PDFExportView: View {
                     subTagFilterRow(sub: sub)
                 }
             } header: {
-                Text("子标签筛选(可多选,空=全部)")
+                Text("分类筛选(可多选,空=全部)")
             } footer: {
                 Text("只勾 \"RFI\" 就只导出 RFI 的记录。空着不勾等于不过滤。")
                     .font(.system(size: 12))

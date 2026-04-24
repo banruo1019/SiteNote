@@ -8,7 +8,7 @@
 
 import Foundation
 
-/// 解析中文/英文语音里的截止指示和命令。
+/// 解析中文/英文语音里的到期指示和命令。
 enum ChineseDateParser {
 
     /// 从转写文本里推断 deadline。无法推断返回 nil。

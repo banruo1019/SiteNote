@@ -2,17 +2,17 @@
 //  SubTagsStorage (文件名暂保留 OtherTagsStorage.swift,下一次 Xcode 工程整理时改)
 //  SiteNote
 //
-//  **子标签 = 独立的全局标签类型**(不属于任何工地)。
-//  一条 note 的工地和子标签是正交关系:
+//  **分类 = 独立的全局标签类型**(不属于任何工地)。
+//  一条 note 的工地和分类是正交关系:
 //    - siteTag: 一条属于哪个工地(单选)
 //    - subTag:  一条是什么类型(单选,如 RFI / 缺陷 / 施工 / 开会 / 紧急)
-//  每个子标签带颜色,用在 chip 染色 + 平面图图钉色。
+//  每个分类带颜色,用在 chip 染色 + 平面图图钉色。
 //
 
 import Foundation
 import SwiftUI
 
-/// 一个子标签。全局共享,不按工地隔离。
+/// 一个分类。全局共享,不按工地隔离。
 struct SubTag: Codable, Hashable, Identifiable {
     var id: UUID
     var name: String
@@ -73,7 +73,7 @@ struct SubTag: Codable, Hashable, Identifiable {
     ]
 }
 
-/// 全局子标签持久化。扁平列表,无工地分组。
+/// 全局分类持久化。扁平列表,无工地分组。
 enum SubTagsStorage {
     private static let key = "settings.subTagsGlobalV1"
 

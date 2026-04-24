@@ -6,7 +6,7 @@
 //
 //  布局(自顶向下):
 //  1. titleBlock         — 大字转写内容(可编辑)+ AI 助手菜单入口
-//  2. tagsRow            — 一排 chip:隐患 · 工地 · 子标签 · 已处理 · 模板 · 条款 · 指派 · 平面图
+//  2. tagsRow            — 一排 chip:隐患 · 工地 · 分类 · 已处理 · 模板 · 条款 · 指派 · 平面图
 //  3. photosBlock        — 主图 240pt 大图 + 其余水平缩略图
 //  4. addPhotoRow        — 全宽"加照片"虚线按钮
 //  5. datesRow           — 创建时间 | 到期时间 两等分
@@ -16,6 +16,12 @@
 //  9. otherMetaDisclosure— 位置/天气/上次分享(折叠)
 //  10. actionButtonGroup — 处理/改期/分享/指派/隐患/删除
 //
+//  本文件只保留主 body + 各 section computed vars。
+//  AI 操作 → NoteDetailView+AI.swift
+//  Actions & helpers → NoteDetailView+Actions.swift
+//  TagPickerSheet / NewSubTagSheet / Supporting types → NoteDetailSheets.swift
+//  FullscreenPhotoView → Components/FullscreenPhotoView.swift
+//
 
 import SwiftUI
 import SwiftData
@@ -24,11 +30,11 @@ import PhotosUI
 
 struct NoteDetailView: View {
     @Bindable var note: Note
-    @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) var modelContext
+    @Environment(\.dismiss) var dismiss
 
     /// 关联的 LogEntry(用于 diary 模式的"类型"行)。
-    @Query private var logEntries: [LogEntry]
+    @Query var logEntries: [LogEntry]
 
     init(note: Note) {
         self.note = note
@@ -89,14 +95,14 @@ struct NoteDetailView: View {
         }
     }
 
-    @State private var sharePDFURL: URL?
-    @State private var isGeneratingShare: Bool = false
+    @State var sharePDFURL: URL?
+    @State var isGeneratingShare: Bool = false
     @State private var showsRescheduleDialog: Bool = false
     @State private var fullscreenPhoto: FullscreenPhoto?
     @State private var showsOriginalTranscription: Bool = false
     @State private var isShowingFloorPlanMark: Bool = false
     @State private var editingDetailPhoto: DetailPhotoEdit?
-    @State private var galleryRefreshID: UUID = UUID()
+    @State var galleryRefreshID: UUID = UUID()
     @State private var showsContactPicker: Bool = false
     @State private var pendingAssignee: PendingAssignee?
     @State private var assignError: String?
@@ -109,23 +115,24 @@ struct NoteDetailView: View {
     @State private var showsLibraryPicker: Bool = false
 
     // AI 相关
-    @State private var aiWorking: Bool = false
-    @State private var aiError: String?
-    @State private var polishPreview: PolishPreview?
-    @State private var photoAnalyses: PhotoAnalysesSheet?
+    @State var aiWorking: Bool = false
+    @State var aiError: String?
+    @State var polishPreview: PolishPreview?
+    @State var photoAnalyses: PhotoAnalysesSheet?
 
     // 标签选择
     @State private var showsTagPicker: Bool = false
 
     // 删除确认
     @State private var showsDeleteConfirm: Bool = false
+    @State private var showsConvertConfirm: Bool = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: DesignTokens.Spacing.medium) {
                 titleBlock            // 1. 标题(diary 模式带"施工日记" badge)
                 NoteClassificationCard(note: note) // 1.4 AI 分类建议(diary 已自动裁剪只剩 site+subTags)
-                tagsRow               // 1.5 工地 + 子标签
+                tagsRow               // 1.5 工地 + 分类
                 if isDiary && !logEntries.isEmpty {
                     typeRow           // 1.6 diary 专属:已识别的类型 chip(👥 人员 · 🚜 机械)
                 }
@@ -133,7 +140,7 @@ struct NoteDetailView: View {
                 photosBlock           // 3. 照片
                 addPhotoRow           // 4. 加照片
                 if !isDiary {
-                    datesRow          // 5. 截止时间(只普通 note)
+                    datesRow          // 5. 到期时间(只普通 note)
                 }
                 audioDisclosure       // 6. 录音
                 if !isDiary {
@@ -227,7 +234,7 @@ struct NoteDetailView: View {
                        let lat = note.latitude, let lng = note.longitude {
                         SiteCentroidsStorage.observe(siteName: tag, latitude: lat, longitude: lng)
                     }
-                    // 同步到关联的 LogEntry(避免 DiaryView 工地过滤漏计)。
+                    // 同步到关联的 LogEntry(避免 LogTabView 台账模式工地过滤漏计)。
                     if let ctx = note.modelContext {
                         let noteID = note.id
                         let desc = FetchDescriptor<LogEntry>(
@@ -261,6 +268,17 @@ struct NoteDetailView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("会放到垃圾桶,之后可以在「设置 → 数据与关于 → 垃圾桶」恢复或永久删除。")
+        }
+        .alert(
+            isDiary ? "转为普通记录?" : "转为施工日志?",
+            isPresented: $showsConvertConfirm
+        ) {
+            Button(isDiary ? "转为记录" : "转为日志") { performModeConvert() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text(isDiary
+                 ? "会清除 AI 抽取的工种/机械数据,到期改为「待分类」。"
+                 : "会归档为只记录(不推送提醒)。")
         }
         .alert("加照片", isPresented: $showsPhotoSourceDialog) {
             Button("📸 拍照") { showsCamera = true }
@@ -363,7 +381,7 @@ struct NoteDetailView: View {
         }
     }
 
-    // MARK: - 2. 标签一排(工地 + 子标签 + 状态 + 模板 + 条款 + 指派 + 平面图 ref)
+    // MARK: - 2. 标签一排(工地 + 分类 + 状态 + 模板 + 条款 + 指派 + 平面图 ref)
 
     private var tagsRow: some View {
         let chips = contextChips
@@ -378,7 +396,7 @@ struct NoteDetailView: View {
 
     private var contextChips: [ContextChip] {
         var list: [ContextChip] = []
-        // 颜色收敛:只有 隐患=红、子标签=各自颜色、工地=accent 是"强信号",
+        // 颜色收敛:只有 隐患=红、分类=各自颜色、工地=accent 是"强信号",
         // 其他辅助信息(已处理/模板/条款/指派/平面图)统一用 Ink.fgDim 灰调,
         // 避免满屏彩虹 chip 喧宾夺主。
         if note.isHazard {
@@ -495,7 +513,7 @@ struct NoteDetailView: View {
     }
 
     /// 这条 note 的图钉颜色。和 FloorPlanLookupView 的 pinColor 逻辑一致。
-    private var pinColorForThisNote: Color {
+    var pinColorForThisNote: Color {
         if note.isDone { return .gray }
         if note.isHazard { return .red }
         if let firstSub = note.otherTags.first {
@@ -840,10 +858,9 @@ struct NoteDetailView: View {
     @ViewBuilder
     private var floorPlanDisclosure: some View {
         let allPlans = FloorPlansStorage.load()
-        // Plan 1.2 降级:只在(平面图库非空 + 这条 note 已经标过位置)时才显示。
-        // 用户从未用过平面图功能 → 详情页不出现这一行,免心智负担。
-        // 想标新位置走 Settings → 工地资源 → 平面图。
-        if allPlans.isEmpty || note.floorPlanRef == nil {
+        // 上传过任一平面图就显示入口(不论本 note 是否已标)。
+        // 未标 → 入口里放 CTA "在平面图上标位置";已标 → 入口里放预览 + 改位置。
+        if allPlans.isEmpty {
             EmptyView()
         } else {
             DisclosureGroup {
@@ -1002,6 +1019,7 @@ struct NoteDetailView: View {
                         tint: Ink.red
                     ) { showsDeleteConfirm = true }
                 }
+                convertModeButton
             }
         } else {
             VStack(spacing: DesignTokens.Spacing.small) {
@@ -1046,8 +1064,51 @@ struct NoteDetailView: View {
                         tint: Ink.red
                     ) { showsDeleteConfirm = true }
                 }
+                convertModeButton
             }
         }
+    }
+
+    /// 记录 ↔ 施工日志 切换(录错模式时修正)。
+    private var convertModeButton: some View {
+        Button {
+            showsConvertConfirm = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                Text(isDiary ? "转为普通记录" : "转为施工日志")
+            }
+            .font(.system(size: DesignTokens.FontSize.body, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: 36)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 执行模式切换。diary↔note:切 deadline + 清 LogEntry(日志→记录)+ 重排推送。
+    private func performModeConvert() {
+        if isDiary {
+            // 日志 → 记录:清除该 note 的 LogEntry(AI 抽取的结构化数据可能错位)。
+            if let ctx = note.modelContext {
+                let noteID = note.id
+                let desc = FetchDescriptor<LogEntry>(
+                    predicate: #Predicate<LogEntry> { $0.sourceNoteID == noteID }
+                )
+                for e in (try? ctx.fetch(desc)) ?? [] { ctx.delete(e) }
+            }
+            note.isDiaryRecord = false
+            note.deadline = .inbox  // 回到待分类,让用户重选到期
+        } else {
+            // 记录 → 日志:归档不推送。
+            note.isDiaryRecord = true
+            note.deadline = .archive
+        }
+        NotificationService.shared.schedule(for: note)
     }
 
     private var doneButton: some View {
@@ -1140,808 +1201,6 @@ struct NoteDetailView: View {
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(tint.opacity(0.5), lineWidth: 1)
             )
-        }
-    }
-
-    // MARK: - AI 操作
-
-    private var aiLoadingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.3).ignoresSafeArea()
-            VStack(spacing: DesignTokens.Spacing.medium) {
-                ProgressView().scaleEffect(1.4).tint(.white)
-                Text("AI 处理中…")
-                    .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .padding(DesignTokens.Spacing.large)
-            .background(Color.black.opacity(0.7))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-        }
-    }
-
-    private func runAIPolish() {
-        let current = note.transcription
-        guard !current.isEmpty else { return }
-        aiWorking = true
-        Task {
-            do {
-                let polished = try await AIService.shared.polishTranscription(current)
-                if polished.trimmingCharacters(in: .whitespacesAndNewlines) == current.trimmingCharacters(in: .whitespacesAndNewlines) {
-                    aiError = "润色后和原文相同,无需更新。"
-                } else {
-                    polishPreview = PolishPreview(before: current, after: polished)
-                }
-            } catch {
-                aiError = "润色失败: \(error.localizedDescription)"
-            }
-            aiWorking = false
-        }
-    }
-
-    private func polishPreviewSheet(_ preview: PolishPreview) -> some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.medium) {
-                    Text("AI 润色结果")
-                        .font(.system(size: DesignTokens.FontSize.large, weight: .bold))
-
-                    labeledBlock(title: "原文", text: preview.before, color: .secondary)
-                    labeledBlock(title: "润色后", text: preview.after, color: Ink.fg)
-
-                    HStack(spacing: DesignTokens.Spacing.small) {
-                        Button("保留原文") {
-                            polishPreview = nil
-                        }
-                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: DesignTokens.ButtonSize.minTap)
-                        .background(Color.gray.opacity(0.2))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-
-                        Button {
-                            note.transcription = preview.after
-                            polishPreview = nil
-                        } label: {
-                            Text("采用润色版")
-                                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: DesignTokens.ButtonSize.minTap)
-                                .background(Ink.fg)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("AI 润色")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-    }
-
-    private func labeledBlock(title: String, text: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                .foregroundStyle(color)
-            Text(text)
-                .font(.system(size: DesignTokens.FontSize.large))
-                .textSelection(.enabled)
-                .padding(DesignTokens.Spacing.medium)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Ink.card2)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-        }
-    }
-
-    private func runPhotoAnalysis() {
-        let paths = note.photoPaths
-        guard !paths.isEmpty else { return }
-        aiWorking = true
-        Task {
-            var results: [PhotoAnalysisRow] = []
-            for path in paths {
-                guard let url = PhotoStorage.absoluteURL(forRelative: path),
-                      let image = UIImage(contentsOfFile: url.path) else { continue }
-                do {
-                    let analysis = try await AIService.shared.analyzePhoto(image)
-                    results.append(PhotoAnalysisRow(
-                        path: path,
-                        image: image,
-                        description: analysis.description,
-                        hazard: analysis.suggestedHazard,
-                        action: analysis.suggestedAction
-                    ))
-                } catch {
-                    results.append(PhotoAnalysisRow(
-                        path: path,
-                        image: image,
-                        description: "分析失败: \(error.localizedDescription)",
-                        hazard: false,
-                        action: nil
-                    ))
-                }
-            }
-            aiWorking = false
-            if results.isEmpty {
-                aiError = "没有可分析的照片。"
-            } else {
-                photoAnalyses = PhotoAnalysesSheet(rows: results)
-            }
-        }
-    }
-
-    private func photoAnalysesSheet(_ sheet: PhotoAnalysesSheet) -> some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.medium) {
-                    let anyHazard = sheet.rows.contains { $0.hazard }
-                    if anyHazard && !note.isHazard {
-                        Button {
-                            note.isHazard = true
-                            NotificationService.shared.schedule(for: note)
-                            photoAnalyses = nil
-                        } label: {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                Text("AI 检测到隐患 · 标记这条为隐患")
-                            }
-                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                            .foregroundStyle(Color.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: DesignTokens.ButtonSize.minTap)
-                            .background(Ink.red)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                    }
-
-                    ForEach(sheet.rows) { row in
-                        photoAnalysisRowView(row)
-                    }
-
-                    Button {
-                        let extras = sheet.rows
-                            .map { "• \($0.description)" + ($0.action.map { "\n  建议: \($0)" } ?? "") }
-                            .joined(separator: "\n")
-                        let merged = [note.transcription, "", "[AI 照片分析]", extras]
-                            .filter { !$0.isEmpty }
-                            .joined(separator: "\n")
-                        note.transcription = merged
-                        photoAnalyses = nil
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.bubble")
-                            Text("把分析追加到转写")
-                        }
-                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: DesignTokens.ButtonSize.minTap)
-                        .background(Ink.fg)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("AI 分析照片")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("关闭") { photoAnalyses = nil }
-                }
-            }
-        }
-    }
-
-    private func photoAnalysisRowView(_ row: PhotoAnalysisRow) -> some View {
-        HStack(alignment: .top, spacing: DesignTokens.Spacing.medium) {
-            Image(uiImage: row.image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            VStack(alignment: .leading, spacing: 4) {
-                if row.hazard {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
-                        Text("疑似隐患")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.red)
-                    }
-                }
-                Text(row.description)
-                    .font(.system(size: DesignTokens.FontSize.body))
-                if let action = row.action, !action.isEmpty {
-                    Text("建议: \(action)")
-                        .font(.system(size: DesignTokens.FontSize.body))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-        }
-        .padding(DesignTokens.Spacing.small)
-        .background(Ink.card2)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-
-    // MARK: - Actions & helpers
-
-    private func toggleChecked(item: String) {
-        var set = Set(note.checkedItems)
-        if set.contains(item) {
-            set.remove(item)
-        } else {
-            set.insert(item)
-        }
-        note.checkedItems = Array(set)
-    }
-
-    private func reschedule(to newDeadline: Deadline) {
-        note.deadline = newDeadline
-        note.dueDate = newDeadline.dueDate(from: Date())
-        NotificationService.shared.schedule(for: note)
-    }
-
-    /// 软删:打 deletedAt,取消推送,不碰文件。可在设置→垃圾桶里恢复或永久删除。
-    private func softDeleteNote() {
-        NotificationService.shared.cancel(for: note)
-        note.deletedAt = Date()
-        dismiss()
-    }
-
-    private func writeEditedPhoto(_ image: UIImage, toPath path: String) {
-        guard let url = PhotoStorage.absoluteURL(forRelative: path),
-              let data = image.jpegData(compressionQuality: 0.85) else { return }
-        try? data.write(to: url)
-    }
-
-    /// 把一张新图保存到磁盘并加到当前 note。
-    private func appendPhoto(_ image: UIImage) {
-        let paths = PhotoStorage.save([image])
-        guard !paths.isEmpty else { return }
-        note.photoPaths = note.photoPaths + paths
-        galleryRefreshID = UUID()
-    }
-
-    /// 点"分享"时生成单条 note 的 PDF(不带封面),含平面图+照片。
-    /// 生成完成后设 `sharePDFURL` 触发 ShareSheet。
-    private func generateSharePDF() {
-        guard !isGeneratingShare else { return }
-        isGeneratingShare = true
-        // Note 是 SwiftData 模型,不是 Sendable,只能在 MainActor 上读。
-        // 单条记录 PDF 生成很快(<1s),不阻塞感知。
-        Task { @MainActor in
-            do {
-                let url = try PDFExportService.generatePDF(
-                    notes: [note],
-                    startDate: nil,
-                    endDate: nil,
-                    title: "SiteNote 记录",
-                    includeCoverPage: false,
-                    filenamePrefix: "SiteNote-Note"
-                )
-                sharePDFURL = url
-                isGeneratingShare = false
-            } catch {
-                aiError = "分享 PDF 生成失败: \(error.localizedDescription)"
-                isGeneratingShare = false
-            }
-        }
-    }
-
-    private func buildAssignMessage() -> String {
-        let dateStr = note.createdAt.formatted(date: .abbreviated, time: .shortened)
-        let loc = note.locationAddress.map { " · \($0)" } ?? ""
-        let deadline = "截止: \(note.deadline.displayName)"
-        let body = note.transcription.isEmpty ? "(见照片)" : note.transcription
-        var lines: [String] = ["[SiteNote \(dateStr)\(loc)]", body]
-        if let tag = note.siteTag { lines.append("工地: \(tag)") }
-        if !note.otherTags.isEmpty { lines.append("类型: " + note.otherTags.joined(separator: " / ")) }
-        if let planName = note.floorPlanRef { lines.append("位置: 平面图 \(planName)") }
-        lines.append(deadline)
-        lines.append("—— 请处理并回复。")
-        return lines.joined(separator: "\n")
-    }
-
-    /// 收集要随指派短信发的图片:note 的照片 + 平面图(若有)。
-    /// 数量限制 MMS 总大小,最多 5 张。
-    private func loadNotePhotosForAssignment() -> [UIImage] {
-        var images: [UIImage] = []
-
-        // 原照片(最多 3 张,给 MMS 大小留余量)
-        for path in note.photoPaths.prefix(3) {
-            if let url = PhotoStorage.absoluteURL(forRelative: path),
-               let img = UIImage(contentsOfFile: url.path) {
-                images.append(img)
-            }
-        }
-
-        // 平面图带图钉(如果有)
-        if let planName = note.floorPlanRef,
-           let x = note.floorPlanX,
-           let y = note.floorPlanY,
-           let plan = FloorPlansStorage.find(name: planName),
-           let url = FloorPlansStorage.absoluteURL(forRelative: plan.imageRelativePath),
-           let planImage = UIImage(contentsOfFile: url.path),
-           let composited = renderFloorPlanWithPin(planImage, normalizedX: x, normalizedY: y, color: pinColorForThisNote) {
-            images.append(composited)
-        }
-
-        return images
-    }
-
-    /// 把平面图和图钉合成一张 UIImage,用于短信附件。
-    private func renderFloorPlanWithPin(
-        _ image: UIImage,
-        normalizedX: Double,
-        normalizedY: Double,
-        color: Color
-    ) -> UIImage? {
-        // 渲染到 1000×1000 bbox,图片 aspect fit 居中
-        let canvasSize = CGSize(width: 1000, height: 1000)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        let renderer = UIGraphicsImageRenderer(size: canvasSize, format: format)
-        return renderer.image { _ in
-            // 浅灰背景
-            UIColor(white: 0.95, alpha: 1).setFill()
-            UIBezierPath(rect: CGRect(origin: .zero, size: canvasSize)).fill()
-
-            // Aspect fit
-            let imgAspect = image.size.width / image.size.height
-            let canvasAspect: CGFloat = 1.0
-            let imgRect: CGRect
-            if imgAspect > canvasAspect {
-                let h = canvasSize.width / imgAspect
-                imgRect = CGRect(x: 0, y: (canvasSize.height - h) / 2, width: canvasSize.width, height: h)
-            } else {
-                let w = canvasSize.height * imgAspect
-                imgRect = CGRect(x: (canvasSize.width - w) / 2, y: 0, width: w, height: canvasSize.height)
-            }
-            image.draw(in: imgRect)
-
-            // 图钉
-            let pinX = imgRect.minX + imgRect.width * CGFloat(normalizedX)
-            let pinY = imgRect.minY + imgRect.height * CGFloat(normalizedY)
-            let dotRadius: CGFloat = 18
-            let outerRadius: CGFloat = dotRadius + 4
-
-            UIColor.white.setFill()
-            UIBezierPath(ovalIn: CGRect(
-                x: pinX - outerRadius,
-                y: pinY - outerRadius,
-                width: outerRadius * 2,
-                height: outerRadius * 2
-            )).fill()
-
-            UIColor(color).setFill()
-            UIBezierPath(ovalIn: CGRect(
-                x: pinX - dotRadius,
-                y: pinY - dotRadius,
-                width: dotRadius * 2,
-                height: dotRadius * 2
-            )).fill()
-
-            // 白色十字
-            UIColor.white.setStroke()
-            let cross = UIBezierPath()
-            cross.move(to: CGPoint(x: pinX - 7, y: pinY))
-            cross.addLine(to: CGPoint(x: pinX + 7, y: pinY))
-            cross.move(to: CGPoint(x: pinX, y: pinY - 7))
-            cross.addLine(to: CGPoint(x: pinX, y: pinY + 7))
-            cross.lineWidth = 3
-            cross.stroke()
-        }
-    }
-}
-
-// MARK: - Supporting types
-
-private enum ContextChipKind {
-    case tag     // 主标签:可点开 picker 改
-    case hazard  // 隐患:展示用
-    case other   // 模板 / 条款 / 指派 / 平面图 等:展示用
-}
-
-private struct ContextChip: Identifiable {
-    let id: UUID = UUID()
-    let icon: String
-    let text: String
-    let color: Color
-    let kind: ContextChipKind
-}
-
-private struct SharePDFItem: Identifiable {
-    let id: UUID = UUID()
-    let url: URL
-}
-
-private struct FullscreenPhoto: Identifiable {
-    let id: UUID = UUID()
-    let image: UIImage
-}
-
-private struct DetailPhotoEdit: Identifiable {
-    let id: UUID = UUID()
-    let path: String
-    let image: UIImage
-}
-
-private struct PendingAssignee: Identifiable {
-    let id: UUID = UUID()
-    let name: String
-    let phone: String
-}
-
-private struct PolishPreview: Identifiable {
-    let id: UUID = UUID()
-    let before: String
-    let after: String
-}
-
-private struct PhotoAnalysisRow: Identifiable {
-    let id: UUID = UUID()
-    let path: String
-    let image: UIImage
-    let description: String
-    let hazard: Bool
-    let action: String?
-}
-
-private struct PhotoAnalysesSheet: Identifiable {
-    let id: UUID = UUID()
-    let rows: [PhotoAnalysisRow]
-}
-
-/// 标签选择 sheet。
-/// - 工地:单选 radio,列表来自 SiteTagsStorage
-/// - 子标签:**单选** radio,全局共享,来自 SubTagsStorage
-/// - 就地新建工地或子标签(新建子标签需要选颜色)
-/// 工地 / 子标签 picker sheet。
-struct TagPickerSheet: View {
-    let currentSiteTag: String?
-    let currentOtherTags: [String]
-    let onSiteChange: (String?) -> Void
-    let onOtherTagsChange: ([String]) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var siteTags: [String] = SiteTagsStorage.load()
-    @State private var subTags: [SubTag] = SubTagsStorage.load()
-
-    @State private var selectedSite: String?
-    /// 单选:最多一个子标签名。为 nil 表示未选。
-    @State private var selectedSubName: String?
-
-    @State private var showsAddSite: Bool = false
-    @State private var showsAddSub: Bool = false
-    @State private var newSiteName: String = ""
-
-    var body: some View {
-        NavigationStack {
-            List {
-                siteSection
-                subTagSection
-            }
-            .navigationTitle("选标签")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                        .bold()
-                }
-            }
-            .onAppear {
-                selectedSite = currentSiteTag
-                selectedSubName = currentOtherTags.first
-                subTags = SubTagsStorage.load()
-            }
-            .sheet(isPresented: $showsAddSub) {
-                NewSubTagSheet { tag in
-                    subTags = SubTagsStorage.add(tag)
-                    setSubTag(tag.name)
-                }
-            }
-            .alert("新建工地标签", isPresented: $showsAddSite) {
-                TextField("工地名(如 悉尼 Olympic Park)", text: $newSiteName)
-                Button("添加") {
-                    let trimmed = newSiteName.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty else { return }
-                    siteTags = SiteTagsStorage.add(trimmed)
-                    setSite(trimmed)
-                    newSiteName = ""
-                }
-                Button("取消", role: .cancel) { newSiteName = "" }
-            }
-        }
-    }
-
-    // MARK: - Sections
-
-    private var siteSection: some View {
-        Section {
-            radioRow(
-                text: "不设工地(未命名)",
-                icon: "building.2",
-                tint: .gray,
-                selected: selectedSite == nil,
-                action: { setSite(nil) }
-            )
-            ForEach(siteTags, id: \.self) { tag in
-                radioRow(
-                    text: tag,
-                    icon: "building.2.fill",
-                    tint: Ink.fg,
-                    selected: selectedSite == tag,
-                    action: { setSite(tag) }
-                )
-            }
-            Button {
-                newSiteName = ""
-                showsAddSite = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle")
-                    Text("新建工地标签")
-                        .fontWeight(.semibold)
-                }
-                .foregroundStyle(Ink.fg)
-            }
-            .buttonStyle(.plain)
-        } header: {
-            Text("工地(单选)")
-        }
-    }
-
-    @ViewBuilder
-    private var subTagSection: some View {
-        Section {
-            radioRow(
-                text: "不设子标签",
-                icon: "tag",
-                tint: .gray,
-                selected: selectedSubName == nil,
-                action: { setSubTag(nil) }
-            )
-            ForEach(subTags) { sub in
-                subTagRadioRow(sub: sub)
-            }
-            Button {
-                showsAddSub = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle")
-                    Text("新建子标签")
-                        .fontWeight(.semibold)
-                }
-                .foregroundStyle(Color.accentColor)
-            }
-            .buttonStyle(.plain)
-        } header: {
-            Text("子标签(单选)")
-        } footer: {
-            Text("子标签是全局的类型分类,如 RFI、缺陷、施工、开会、紧急。平面图图钉按子标签颜色显示。")
-                .font(.system(size: 12))
-        }
-    }
-
-    // MARK: - Rows
-
-    private func radioRow(
-        text: String,
-        icon: String,
-        tint: Color,
-        selected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundStyle(tint)
-                    .frame(width: 24)
-                Text(text)
-                    .foregroundStyle(.primary)
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Color.accentColor)
-                        .fontWeight(.bold)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func subTagRadioRow(sub: SubTag) -> some View {
-        let selected = selectedSubName == sub.name
-        return Button {
-            setSubTag(sub.name)
-        } label: {
-            HStack {
-                Circle()
-                    .fill(sub.color)
-                    .frame(width: 16, height: 16)
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.4), lineWidth: 0.5))
-                    .frame(width: 24)
-                Text(sub.name)
-                    .foregroundStyle(.primary)
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Color.accentColor)
-                        .fontWeight(.bold)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Actions
-
-    private func setSite(_ name: String?) {
-        selectedSite = name
-        onSiteChange(name)
-    }
-
-    private func setSubTag(_ name: String?) {
-        selectedSubName = name
-        if let name {
-            onOtherTagsChange([name])
-        } else {
-            onOtherTagsChange([])
-        }
-    }
-}
-
-/// 新建子标签 sheet。名字 + 颜色,单独一个 sheet 避免和 Form 里的 Button 打架。
-struct NewSubTagSheet: View {
-    let onAdded: (SubTag) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String = ""
-    @State private var colorName: String = "blue"
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: DesignTokens.Spacing.large) {
-                    // 名字
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
-                        Text("名字")
-                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                        TextField("如 RFI、缺陷、施工、开会、紧急", text: $name)
-                            .font(.system(size: DesignTokens.FontSize.body))
-                            .padding(DesignTokens.Spacing.medium)
-                            .background(Ink.card2)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                    }
-
-                    // 颜色选择 (独立 ZStack / VStack,不在 Form Section 里,避免整行被吞 tap)
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
-                        Text("颜色")
-                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                        LazyVGrid(
-                            columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5),
-                            spacing: 14
-                        ) {
-                            ForEach(SubTag.availableColorNames, id: \.self) { c in
-                                colorSwatch(colorName: c)
-                            }
-                        }
-                    }
-
-                    // 预览
-                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
-                        Text("预览")
-                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(SubTag.color(from: colorName))
-                                .frame(width: 10, height: 10)
-                            Text(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "(名字)" : name)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundStyle(SubTag.color(from: colorName))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(SubTag.color(from: colorName).opacity(0.15))
-                        .clipShape(Capsule())
-                    }
-
-                    Text("这个颜色也会用在平面图图钉上,方便一眼分辨。")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-                .padding()
-            }
-            .navigationTitle("新建子标签")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("添加") {
-                        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { return }
-                        onAdded(SubTag(name: trimmed, colorName: colorName))
-                        dismiss()
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .bold()
-                }
-            }
-        }
-    }
-
-    /// 单个颜色圆按钮。用 buttonStyle(.plain) 保证 tap 命中自己而不是周围容器。
-    private func colorSwatch(colorName c: String) -> some View {
-        Button {
-            colorName = c
-        } label: {
-            Circle()
-                .fill(SubTag.color(from: c))
-                .frame(width: 42, height: 42)
-                .overlay(
-                    Circle()
-                        .strokeBorder(
-                            colorName == c ? Color.primary : Color.black.opacity(0.15),
-                            lineWidth: colorName == c ? 3 : 1
-                        )
-                )
-                .overlay {
-                    if colorName == c {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct FullscreenPhotoView: View {
-    let image: UIImage
-    @Environment(\.dismiss) private var dismiss
-    @State private var scale: CGFloat = 1.0
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .scaleEffect(scale)
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged { value in
-                            scale = max(1, min(value, 4))
-                        }
-                        .onEnded { _ in
-                            withAnimation { scale = max(1, scale) }
-                        }
-                )
-            VStack {
-                HStack {
-                    Spacer()
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.white, Color.black.opacity(0.5))
-                    }
-                    .padding()
-                }
-                Spacer()
-            }
         }
     }
 }

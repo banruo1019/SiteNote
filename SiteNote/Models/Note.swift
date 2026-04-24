@@ -8,7 +8,7 @@
 import Foundation
 import SwiftData
 
-/// 截止日期的五档选择。录音默认进 `inbox` 待用户分类。
+/// 到期日期的五档选择。录音默认进 `inbox` 待用户分类。
 enum Deadline: String, Codable, CaseIterable {
     /// 默认值:用户还未分类,不推送,顶部红点提醒"有 X 条待分类"。
     case inbox
@@ -56,7 +56,7 @@ enum Deadline: String, Codable, CaseIterable {
     }
 }
 
-/// 一条工地速记。承载"语音转文字 + 原始录音 + 位置 + 天气 + 截止提醒"。
+/// 一条工地速记。承载"语音转文字 + 原始录音 + 位置 + 天气 + 到期提醒"。
 ///
 /// 使用方式：
 /// - 由 `HomeView` 触发录音后写入。
@@ -163,13 +163,13 @@ final class Note {
 
     /// 这条 Note 是否被视作"施工日记"条目。
     /// - AI 成功抽出 ≥1 条 LogEntry 时,由 `LogEntryIngestor` 自动置 true。
-    /// - true 的 note **不进提醒事项列表**(RecordView 统计、BrowseView 的 urgency 分组、inbox 组都滤掉),
+    /// - true 的 note **不进提醒事项列表**(RecordView 统计、LogTabView 纵览的"要盯/今天"分组、inbox 都滤掉),
     ///   因为"水工来了 4 个"本身不是 todo,是工地日志记录。
-    /// - 仍然在详情页可查、BrowseView 的"施工日记"独立分组里显示、DiaryView 的"原始速记"里显示。
+    /// - 仍然在详情页可查、LogTabView 纵览的"待分类"段(含施工日记)、台账模式的"速记"子段里显示。
     /// - 用户手动把这标签去掉(详情页)就恢复到普通 note。
     var isDiaryRecord: Bool = false
 
-    /// 截止选择。映射到 `deadlineRaw` 存储。非法值降级到 `.threeDays`。
+    /// 到期选择。映射到 `deadlineRaw` 存储。非法值降级到 `.threeDays`。
     var deadline: Deadline {
         get { Deadline(rawValue: deadlineRaw) ?? .threeDays }
         set { deadlineRaw = newValue.rawValue }

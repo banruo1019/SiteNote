@@ -9,7 +9,7 @@ import Foundation
 
 /// 列表行的紧迫程度。按距今天时长分档,颜色染行背景。
 enum Urgency: Equatable {
-    /// 已过截止日。红。
+    /// 已过到期日。红。
     case overdue
     /// 24 小时以内到期。红。
     case day
@@ -28,7 +28,7 @@ struct NoteListViewModel {
     struct Sections: Equatable {
         /// `.inbox` 档的未完成 note——用户还没决定 deadline,顶部红色提示。
         var inbox: [Note]
-        /// 未完成、有截止的 note,按紧迫程度(逾期→今天→未来)然后 dueDate 升序。
+        /// 未完成、有到期的 note,按紧迫程度(逾期→今天→未来)然后 dueDate 升序。
         var pending: [Note]
         /// `.archive` 档的未完成 note——按 createdAt 降序(用户明确"只是记录")。
         var archived: [Note]

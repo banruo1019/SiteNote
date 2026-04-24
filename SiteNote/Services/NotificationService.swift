@@ -197,8 +197,17 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         let maxDays = input.isHazard ? config.hazardMaxDays : config.normalMaxDays
         let maxSlots = input.isHazard ? config.hazardMaxSlots : config.normalMaxSlots
 
-        let baseText = input.transcription.isEmpty ? "你有一条待处理的速记" : input.transcription
-        let hazardPrefix = input.isHazard ? "🚨 隐患 " : ""
+        // 隐私脱敏:推送 body **不带任何原始 transcription**。锁屏/通知中心是公开面,
+        // 工地业务文本对路人/同事/家人都不该可见。原文交给用户点开 App 看。
+        let title: String
+        let body: String
+        if input.isHazard {
+            title = "🚨 SiteNote 隐患待处理"
+            body = "请打开 App 查看详情"
+        } else {
+            title = "SiteNote 提醒"
+            body = "你有 1 条速记到期 · 请打开 App 查看"
+        }
 
         var out: [ScheduledItem] = []
 
@@ -217,9 +226,6 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                     of: targetDay
                 ) else { continue }
                 guard fireDate > now else { continue }
-
-                let title = "\(hazardPrefix)SiteNote 提醒"
-                let body = baseText
 
                 let identifier = "\(input.noteID.uuidString)-d\(dayOffset)-h\(slot.hour)m\(slot.minute)"
                 out.append(ScheduledItem(

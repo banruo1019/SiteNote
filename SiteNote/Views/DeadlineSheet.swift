@@ -2,7 +2,7 @@
 //  DeadlineSheet.swift
 //  SiteNote
 //
-//  录音完成后的弹窗:工地标签 + 照片 + 隐患开关 + 巡检模板 + 合同条款 + 截止。
+//  录音完成后的弹窗:工地标签 + 照片 + 隐患开关 + 巡检模板 + 合同条款 + 到期。
 //  选 deadline 即保存。
 //
 
@@ -184,7 +184,7 @@ struct DeadlineSheet: View {
 
     /// AI 自动标签推断,只在用户还没手选时生效。
     private func runAutoTagSuggestion() {
-        let enabled = UserDefaults.standard.object(forKey: "settings.aiAutoTagEnabled") as? Bool ?? true
+        let enabled = AIToggle.featureEnabled(SettingsKeys.aiAutoTagEnabled)
         guard enabled,
               !transcription.isEmpty,
               selectedSiteTag == nil,

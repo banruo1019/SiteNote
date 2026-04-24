@@ -302,7 +302,7 @@ enum SiteDiaryPDFBuilder {
 
     // MARK: - Utilities
 
-    /// 到场总人数。quantity=nil 按 1 人算(和 DiaryView 口径一致)。
+    /// 到场总人数。quantity=nil 按 1 人算(和 LogTabView 台账模式口径一致)。
     private static func personHeadcount(_ persons: [LogEntry]) -> Int {
         persons
             .filter { !$0.isAbsent }

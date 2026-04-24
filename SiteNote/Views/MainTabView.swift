@@ -28,17 +28,14 @@ struct MainTabView: View {
         VStack(spacing: 0) {
             // 3 个 tab view 常驻,切换只改 opacity/hit-testing。
             // 不能用 `@ViewBuilder switch`:那会销毁未选中的 view,导致折叠状态、
-            // 筛选、搜索、滚动位置一切归零(用户反馈:笔记折叠后换页自己又弹开)。
+            // 筛选、搜索、滚动位置一切归零(用户反馈:速记折叠后换页自己又弹开)。
             ZStack {
                 RecordView()
                     .opacity(selection == .record ? 1 : 0)
                     .allowsHitTesting(selection == .record)
-                BrowseView(isActive: selection == .browse)
-                    .opacity(selection == .browse ? 1 : 0)
-                    .allowsHitTesting(selection == .browse)
-                DiaryView(isActive: selection == .diary)
-                    .opacity(selection == .diary ? 1 : 0)
-                    .allowsHitTesting(selection == .diary)
+                LogTabView(isActive: selection == .log)
+                    .opacity(selection == .log ? 1 : 0)
+                    .allowsHitTesting(selection == .log)
                 ReportsView()
                     .opacity(selection == .reports ? 1 : 0)
                     .allowsHitTesting(selection == .reports)

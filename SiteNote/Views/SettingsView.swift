@@ -2,7 +2,8 @@
 //  SettingsView.swift
 //  SiteNote
 //
-//  设置首页:只做 5 组导航入口。每组的具体设置项在各自子页。
+//  设置首页(P1-3 简化后):3 组导航 — 常用 / 工地资源 / AI。
+//  原 5 个子页全部保留,只是入口归类。每组具体项在各自子页。
 //
 
 import SwiftUI
@@ -10,24 +11,12 @@ import SwiftData
 import UIKit
 import UserNotifications
 
-/// 设置首页。5 组导航。
+/// 设置首页。3 组导航(P1-3)。
 struct SettingsView: View {
     var body: some View {
         Form {
-            Section {
-                NavigationLink {
-                    InputAISettingsView()
-                } label: {
-                    settingsRow(
-                        icon: "mic.and.signal.meter",
-                        color: .blue,
-                        title: "录入与 AI",
-                        subtitle: "识别语言、AI 引擎/Key/开关"
-                    )
-                }
-            }
-
-            Section {
+            // 常用 — 日常会反复打开:提醒时间、导出报告、清数据
+            Section("常用") {
                 NavigationLink {
                     RemindersSettingsView()
                 } label: {
@@ -38,9 +27,30 @@ struct SettingsView: View {
                         subtitle: "推送时间、每日汇总"
                     )
                 }
+                NavigationLink {
+                    ReportsExportSettingsView()
+                } label: {
+                    settingsRow(
+                        icon: "doc.text",
+                        color: .purple,
+                        title: "报告与导出",
+                        subtitle: "周报、EOT、PDF、ZIP"
+                    )
+                }
+                NavigationLink {
+                    DataAboutSettingsView()
+                } label: {
+                    settingsRow(
+                        icon: "gearshape.2",
+                        color: .gray,
+                        title: "数据与关于",
+                        subtitle: "清除已完成、版本、反馈"
+                    )
+                }
             }
 
-            Section {
+            // 工地资源 — 配置类:工地、平面图、模板、条款
+            Section("工地资源") {
                 NavigationLink {
                     SiteResourcesSettingsView()
                 } label: {
@@ -53,28 +63,16 @@ struct SettingsView: View {
                 }
             }
 
-            Section {
+            // AI — 总开关 + 高级配置
+            Section("AI") {
                 NavigationLink {
-                    ReportsExportSettingsView()
+                    InputAISettingsView()
                 } label: {
                     settingsRow(
-                        icon: "doc.text",
-                        color: .purple,
-                        title: "报告与导出",
-                        subtitle: "周报、EOT、PDF、ZIP"
-                    )
-                }
-            }
-
-            Section {
-                NavigationLink {
-                    DataAboutSettingsView()
-                } label: {
-                    settingsRow(
-                        icon: "gearshape.2",
-                        color: .gray,
-                        title: "数据与关于",
-                        subtitle: "清除已完成、版本、反馈"
+                        icon: "mic.and.signal.meter",
+                        color: .blue,
+                        title: "录入与 AI",
+                        subtitle: "识别语言、AI 总开关与配置"
                     )
                 }
             }
@@ -234,7 +232,7 @@ struct RemindersSettingsView: View {
 struct SiteResourcesSettingsView: View {
     @State private var siteTags: [String] = SiteTagsStorage.load()
     @State private var newTagName: String = ""
-    /// 刷新计数器:从 SubTagsEditorView 返回后 bump 一下,让子标签数量重算。
+    /// 刷新计数器:从 SubTagsEditorView 返回后 bump 一下,让分类数量重算。
     @State private var refreshTick: Int = 0
 
     @State private var templates: [InspectionTemplate] = InspectionTemplatesStorage.load()
@@ -305,7 +303,7 @@ struct SiteResourcesSettingsView: View {
                 HStack {
                     Image(systemName: "tag.fill")
                         .foregroundStyle(Ink.fg)
-                    Text("子标签管理")
+                    Text("分类管理")
                         .font(.system(size: DesignTokens.FontSize.body))
                     Spacer()
                     let count = SubTagsStorage.load().count
@@ -315,7 +313,7 @@ struct SiteResourcesSettingsView: View {
                 }
             }
         } header: {
-            Text("子标签")
+            Text("分类")
         } footer: {
             Text("全局类型分类(RFI / 缺陷 / 施工 / 开会 / 紧急 等),不按工地分。每个带颜色,平面图图钉会用这颜色。")
                 .font(.system(size: DesignTokens.FontSize.body))
@@ -659,7 +657,7 @@ struct DataAboutSettingsView: View {
         } header: {
             Text("一键清空")
         } footer: {
-            Text("清空所有速记(含垃圾桶)、录音、照片、平面图、工地 / 子标签 / 模板 / 条款。不可恢复。按下后 3 秒内可取消。")
+            Text("清空所有速记(含垃圾桶)、录音、照片、平面图、工地 / 分类 / 模板 / 条款。不可恢复。按下后 3 秒内可取消。")
                 .font(.system(size: DesignTokens.FontSize.body))
         }
     }
@@ -781,9 +779,24 @@ enum SettingsKeys {
     static let speechLanguage = "settings.speechLanguage"
     static let morningReminderHour = "settings.morningReminderHour"
     static let morningReminderMinute = "settings.morningReminderMinute"
+    /// P1-5:AI 总开关。默认开(符合"AI 显眼"约束)。关掉 = polish/autoTag 都不跑。
+    static let aiMasterEnabled = "settings.aiMasterEnabled"
     static let aiPolishEnabled = "settings.aiPolishEnabled"
     static let aiAutoTagEnabled = "settings.aiAutoTagEnabled"
     static let dailyDigestEnabled = "settings.dailyDigestEnabled"
+}
+
+/// P1-5:统一读 AI 总开关 + 单功能开关。两个都开才返回 true。
+/// `master` 默认 true(显眼);`feature` 默认 true(同上)。
+enum AIToggle {
+    static var masterEnabled: Bool {
+        UserDefaults.standard.object(forKey: SettingsKeys.aiMasterEnabled) as? Bool ?? true
+    }
+
+    static func featureEnabled(_ key: String) -> Bool {
+        let feature = UserDefaults.standard.object(forKey: key) as? Bool ?? true
+        return masterEnabled && feature
+    }
 }
 
 /// 包装备份 URL 以满足 `.sheet(item:)` 的 Identifiable 要求。

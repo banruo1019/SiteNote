@@ -42,17 +42,6 @@ struct RecordView: View {
     /// 天气 + 位置数据源(@Observable,属性变化会驱动 body 刷新)
     @State private var headerProvider = AppHeaderProvider.shared
 
-    /// MIC 按住后的上滑状态。translation.height <= -60pt 时变为 true,
-    /// 松手时读这个值决定 stopAndSave 是否走 diary 分支。
-    @State private var isDiarySliding: Bool = false
-
-    /// 下滑取消状态。translation.height >= +60pt 时变为 true,
-    /// 松手时调 `cancelRecording()` 丢弃音频。
-    @State private var isCancelSliding: Bool = false
-
-    /// 首次进入时的手势教学层。读 UserDefaults 决定是否展示。
-    @State private var showsGestureHint: Bool = GestureHintOverlay.needsToShow
-
     private let listVM = NoteListViewModel()
 
     enum TodoFilter: Hashable {
@@ -92,7 +81,7 @@ struct RecordView: View {
     }
 
     /// 待分类:inbox + **非隐患** + **非施工日记**。
-    /// 施工日记默认 deadline=.inbox 但它不是"待分类",所以这里滤掉——它进 BrowseView 的独立日记组。
+    /// 施工日记默认 deadline=.inbox 但它不是"待分类",所以这里滤掉——它在 LogTabView 纵览的"待分类"段里显示。
     private var inboxNotes: [Note] {
         sections.inbox.filter { !$0.isHazard && !$0.isDiaryRecord }
     }
@@ -123,6 +112,9 @@ struct RecordView: View {
                     // heroButtons 常驻(MIC DragGesture 节点稳定)。
                     // 只在有 lastSave(undo toast 显示中)时隐藏,给 toast 让位盖住这块空间。
                     if viewModel.lastSave == nil {
+                        if !viewModel.isRecording {
+                            valuePropBar
+                        }
                         heroButtons
                             .padding(.bottom, 20)
                     }
@@ -135,10 +127,6 @@ struct RecordView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
-                // 首次启动:盖一层手势教学
-                if showsGestureHint {
-                    GestureHintOverlay(isShown: $showsGestureHint)
-                }
             }
             .navigationBarHidden(true)
             .task {
@@ -208,7 +196,7 @@ struct RecordView: View {
     }
 
     /// "今天"大标题 + 齿轮 + 下方 subtitle(日期 · 天气 · 位置)。
-    /// 顶部 padding 20 / bottom 16,和 BrowseView、ReportsView 的标题行对齐。
+    /// 顶部 padding 20 / bottom 16,和 LogTabView、ReportsView 的标题行对齐。
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
@@ -711,6 +699,30 @@ struct RecordView: View {
         return "●:●●"
     }
 
+    // MARK: - 首屏价值主张
+
+    /// mic 上方一行小字。本周动态 N + 可导 3 份 PDF(对应当前 PDFHubView 的 3 入口:巡检日志/本周报告/EOT)。
+    private var valuePropBar: some View {
+        HStack(spacing: 4) {
+            Text("本周已记")
+                .foregroundStyle(Ink.fgDim)
+            Text("\(weekNotesCount)")
+                .foregroundStyle(Ink.fg)
+                .monospacedDigit()
+            Text("条 · 可导 3 份 PDF 报告")
+                .foregroundStyle(Ink.fgDim)
+        }
+        .font(.system(size: 12))
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 6)
+    }
+
+    private var weekNotesCount: Int {
+        let cal = Calendar.current
+        let startOfWeek = cal.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
+        return allNotes.filter { $0.createdAt >= startOfWeek }.count
+    }
+
     // MARK: - Hero (常驻,MIC 按钮节点稳定)
 
     private var heroButtons: some View {
@@ -727,28 +739,7 @@ struct RecordView: View {
     }
 
     private var micButton: some View {
-        // 只保留圆盘。文字标签在按下时会因状态变长变短,扰乱 cam 的对齐,
-        // 手势状态靠上滑/下滑时的浮动 badge + 颜色 + 图标三重视觉足够表达。
-        ZStack(alignment: .bottom) {
-            if isDiarySliding {
-                gestureBadge(text: "日志模式", icon: "person.fill", color: Ink.accentBlue)
-                    .offset(y: -160)
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
-            }
-            if isCancelSliding {
-                gestureBadge(text: "取消录音", icon: "xmark", color: Ink.dim)
-                    .offset(y: -160)
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
-            }
-            micButtonCircle
-        }
-        .animation(.easeOut(duration: 0.15), value: isDiarySliding)
-        .animation(.easeOut(duration: 0.15), value: isCancelSliding)
-        .frame(maxWidth: .infinity)
-    }
-
-    /// MIC 按钮圆盘本体。拆出来是为了和 diaryModeBadge 并排 ZStack。
-    private var micButtonCircle: some View {
+        // 单手势:按住录音,松手保存。日志 / 隐患 / 撤销 由 UndoToast 按钮承担。
         ZStack {
             Circle()
                 .fill(circleColor)
@@ -758,7 +749,7 @@ struct RecordView: View {
                     .stroke(circleColor.opacity(0.12), lineWidth: 10)
                     .frame(width: 142, height: 142)
             }
-            Image(systemName: micIcon)
+            Image(systemName: "mic.fill")
                 .font(.system(size: 38, weight: .medium))
                 .foregroundStyle(Color.white)
         }
@@ -766,73 +757,21 @@ struct RecordView: View {
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0)
-                .onChanged { value in
+                .onChanged { _ in
                     if !viewModel.isRecording { viewModel.startRecording() }
-                    let dy = value.translation.height
-                    // 上滑 > 60pt 进日志模式;下滑 > 60pt 取消。互斥——同时只能在一个状态。
-                    let shouldDiary = dy <= -Self.slideThreshold
-                    let shouldCancel = dy >= Self.slideThreshold
-                    if shouldDiary != isDiarySliding {
-                        isDiarySliding = shouldDiary
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    }
-                    if shouldCancel != isCancelSliding {
-                        isCancelSliding = shouldCancel
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    }
                 }
                 .onEnded { _ in
                     guard viewModel.isRecording else { return }
-                    let wasDiary = isDiarySliding
-                    let wasCancel = isCancelSliding
-                    isDiarySliding = false
-                    isCancelSliding = false
-                    if wasCancel {
-                        viewModel.cancelRecording()
-                        return
-                    }
-                    Task {
-                        await viewModel.stopAndSave(asDiary: wasDiary)
-                        // 日志:存完直接进详情页,跳过 undo toast 里的 deadline 选项。
-                        if wasDiary, let note = viewModel.fetchLastSavedNote() {
-                            viewModel.dismissToastManually()
-                            navPath.append(note)
-                        }
-                    }
+                    Task { await viewModel.stopAndSave() }
                 }
         )
         .sensoryFeedback(.impact(weight: .heavy), trigger: viewModel.isRecording)
+        .frame(maxWidth: .infinity)
     }
 
-    private static let slideThreshold: CGFloat = 60
-
-    /// 录音 + 模式组合 → 圆圈底色。
+    /// 录音时红色提醒,静息时黑色。
     private var circleColor: Color {
-        if !viewModel.isRecording { return Ink.fg }
-        if isCancelSliding { return Ink.dim }
-        if isDiarySliding { return Ink.accentBlue }
-        return Ink.red
-    }
-
-    private var micIcon: String {
-        if isCancelSliding { return "xmark" }
-        if isDiarySliding { return "person.fill" }
-        return "mic.fill"
-    }
-
-    private func gestureBadge(text: String, icon: String, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .bold))
-            Text(text)
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(0.3)
-        }
-        .foregroundStyle(Color.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(color, in: Capsule())
-        .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+        viewModel.isRecording ? Ink.red : Ink.fg
     }
 
     private var cameraButton: some View {
@@ -858,14 +797,8 @@ struct RecordView: View {
         UndoToast(
             message: viewModel.lastSave?.summary ?? "",
             secondsRemaining: viewModel.undoSecondsRemaining,
-            onClassify: { deadline in
-                let note = viewModel.fetchLastSavedNote()
-                viewModel.classifyLastSave(to: deadline)
-                if let note { navPath.append(note) }
-            },
-            onKeepInbox: {
-                viewModel.classifyLastSave(to: .inbox)
-            },
+            onMarkHazard: { viewModel.markLastSaveAsHazard() },
+            onSaveAsDiary: { viewModel.convertLastSaveToDiary() },
             onDetail: {
                 if let note = viewModel.fetchLastSavedNote() {
                     navPath.append(note)

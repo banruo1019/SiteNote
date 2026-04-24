@@ -2,13 +2,101 @@
 //  AIEngineSettingsView.swift
 //  SiteNote
 //
-//  AI 引擎设置页:选引擎(auto/openai/local)+ 填 OpenAI API Key + 选模型。
+//  AI 设置入口(P1-5 简化后):
+//  - 顶层只露一个总开关「AI 辅助」+ 隐私说明
+//  - 高级配置(引擎选择/Key/模型/功能微调)收到子页 AIAdvancedSettingsView
+//  - 默认 auto 策略:有 OpenAI Key 走 OpenAI,否则 Apple Intelligence,都没就跳过
+//
 //  所有敏感数据(API key)走 Keychain,不进 UserDefaults。
 //
 
 import SwiftUI
 
+// MARK: - 入口:总开关 + 进高级的 NavigationLink
+
 struct AIEngineSettingsView: View {
+    @AppStorage(SettingsKeys.aiMasterEnabled) private var aiMasterEnabled: Bool = true
+    @AppStorage("settings.openAITextModel") private var textModel: String = "gpt-4o-mini"
+
+    var body: some View {
+        Form {
+            masterSection
+            if aiMasterEnabled {
+                advancedLinkSection
+            }
+            privacySection
+        }
+        .navigationTitle("AI 辅助")
+        .navigationBarTitleDisplayMode(.inline)
+        .industrialForm()
+    }
+
+    // MARK: - 主开关(用户唯一需要的控件)
+
+    private var masterSection: some View {
+        Section {
+            Toggle(isOn: $aiMasterEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("AI 辅助")
+                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                    Text(masterStatusText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Ink.fgDim)
+                }
+            }
+        } footer: {
+            Text("开启后会用 OpenAI(若已配 Key,质量更好)或 Apple Intelligence(若机型支持) 自动改写转写、推断标签、生成日记和洞察。关闭后所有 AI 功能跳过。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    private var masterStatusText: String {
+        guard aiMasterEnabled else { return "已关闭" }
+        if AIService.isOpenAIAvailable { return "当前: OpenAI · \(textModel)" }
+        if AIService.isLocalAvailable { return "当前: Apple Intelligence(本地)" }
+        return "当前: 无可用引擎(可在高级配置加 OpenAI Key)"
+    }
+
+    // MARK: - 高级配置入口
+
+    private var advancedLinkSection: some View {
+        Section {
+            NavigationLink {
+                AIAdvancedSettingsView()
+            } label: {
+                HStack {
+                    Image(systemName: "slider.horizontal.3")
+                        .foregroundStyle(Ink.fg)
+                    Text("高级配置")
+                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                }
+            }
+        } footer: {
+            Text("引擎选择、OpenAI API Key、模型、功能微调。99% 情况下不需要动。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    // MARK: - 隐私
+
+    private var privacySection: some View {
+        Section("隐私") {
+            Text("• 「自动」或「OpenAI」:转写文本和照片会发送到 OpenAI 服务器处理。")
+                .font(.system(size: DesignTokens.FontSize.body))
+                .foregroundStyle(.secondary)
+            Text("• 「仅本地」:所有 AI 在设备内完成,不联网。")
+                .font(.system(size: DesignTokens.FontSize.body))
+                .foregroundStyle(.secondary)
+            Text("• 工地内容高度敏感时,建议用本地引擎或关闭 AI。")
+                .font(.system(size: DesignTokens.FontSize.body))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - 高级配置子页
+
+struct AIAdvancedSettingsView: View {
     @AppStorage("settings.aiEngine") private var aiEngineRaw: String = AIEngine.auto.rawValue
     @AppStorage("settings.openAITextModel") private var textModel: String = "gpt-4o-mini"
     @AppStorage("settings.openAIVisionModel") private var visionModel: String = "gpt-4o-mini"
@@ -34,9 +122,8 @@ struct AIEngineSettingsView: View {
             featureSection
             openAISection
             statusSection
-            privacySection
         }
-        .navigationTitle("AI 辅助")
+        .navigationTitle("高级配置")
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
         .onAppear { refreshKeyStatus() }
@@ -80,13 +167,18 @@ struct AIEngineSettingsView: View {
         }
     }
 
-    // MARK: - 功能开关
+    // MARK: - 功能微调
 
     private var featureSection: some View {
-        Section("功能") {
+        Section {
             Toggle("自动修复转写", isOn: $aiPolishEnabled)
                 .font(.system(size: DesignTokens.FontSize.body))
             Toggle("自动推断标签", isOn: $aiAutoTagEnabled)
+                .font(.system(size: DesignTokens.FontSize.body))
+        } header: {
+            Text("功能微调")
+        } footer: {
+            Text("两项默认全开。关闭后对应那步 AI 不跑(总开关也要在,这是细分控制)。")
                 .font(.system(size: DesignTokens.FontSize.body))
         }
     }
@@ -172,7 +264,7 @@ struct AIEngineSettingsView: View {
         } header: {
             Text("OpenAI API 配置")
         } footer: {
-            Text("API Key 保存在 iOS Keychain(加密存储),仅本机可用。可在 https://platform.openai.com/api-keys 获取。")
+            Text("API Key 保存在 iOS Keychain(加密存储),仅本机可用。可在 platform.openai.com/api-keys 获取。")
                 .font(.system(size: DesignTokens.FontSize.body))
         }
     }
@@ -217,22 +309,6 @@ struct AIEngineSettingsView: View {
                 .font(.system(size: DesignTokens.FontSize.body))
             Spacer()
             Text(hint)
-                .font(.system(size: DesignTokens.FontSize.body))
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    // MARK: - 隐私声明
-
-    private var privacySection: some View {
-        Section("隐私") {
-            Text("• 选择「OpenAI」或「自动(OpenAI 优先)」时,转写文本和照片会发送到 OpenAI 服务器处理。")
-                .font(.system(size: DesignTokens.FontSize.body))
-                .foregroundStyle(.secondary)
-            Text("• 选择「仅本地」时,所有 AI 在设备内完成,不联网。")
-                .font(.system(size: DesignTokens.FontSize.body))
-                .foregroundStyle(.secondary)
-            Text("• 如工地内容高度敏感,建议用本地引擎。")
                 .font(.system(size: DesignTokens.FontSize.body))
                 .foregroundStyle(.secondary)
         }

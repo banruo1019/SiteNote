@@ -4,8 +4,9 @@
 //
 //  M1 "Linear 极简白"报告页:
 //  - 大标题 "报告" (28pt 600)
-//  - 本周 sparkline 区(大数字 + 折线 + 终点蓝色小圆点)
-//  - 6 项输出列表(每行 icon + 标题 + 副标题 + chev-r)
+//  - 本周 sparkline + 本月汇总 + 本月细分
+//  - P0-4 合并后的 3 入口:出 PDF / AI 发现 / 平面图查看
+//    · 数据备份已移到设置页
 //
 
 import SwiftUI
@@ -22,9 +23,6 @@ struct ReportsView: View {
         filter: #Predicate<LogEntry> { $0.deletedAt == nil },
         sort: [SortDescriptor(\LogEntry.startAt)]
     ) private var allEntries: [LogEntry]
-
-    /// "更多导出"折叠状态。默认收起,把噪音按钮藏起来。
-    @State private var advancedExpanded: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -423,44 +421,14 @@ struct ReportsView: View {
         .background(Ink.card, in: RoundedRectangle(cornerRadius: 8))
     }
 
-    // MARK: - Output list(主推 + 折叠"更多")
+    // MARK: - Output list(3 入口:出 PDF / AI 发现 / 平面图查看)
 
     private var outputList: some View {
         VStack(spacing: 0) {
-            // 主推:周总结 + AI 叙事(用户最高频用)
-            outputRow(icon: "chart.bar", title: "本周总结", sub: "一键生成可复制周报", dest: .weekly)
-            outputRow(icon: "sparkles", title: "AI 日记叙事", sub: "拼成可读的施工日志", dest: .narrative)
-
-            // 更多导出(默认收起,降噪)
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    advancedExpanded.toggle()
-                }
-            } label: {
-                HStack {
-                    Image(systemName: advancedExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("更多导出")
-                        .font(.system(size: 13, weight: .medium))
-                    Spacer()
-                }
-                .foregroundStyle(Ink.fgDim)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(Ink.line).frame(height: 1)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if advancedExpanded {
-                outputRow(icon: "doc.text", title: "PDF 巡检日志", sub: "按日期或工地导出", dest: .pdf)
-                outputRow(icon: "cloud.rain", title: "EOT 工期延误", sub: "基于天气的主张 · AI", dest: .eot)
-                outputRow(icon: "map", title: "平面图", sub: "图钉总览", dest: .floorPlan)
-                outputRow(icon: "sparkles", title: "AI 洞察", sub: "逾期 · 静默 · 隐患积压", dest: .insights)
-                outputRow(icon: "externaldrive", title: "数据备份", sub: "导出 ZIP / 分享", dest: .backup)
-            }
+            outputRow(icon: "doc.text", title: "出 PDF", sub: "巡检日志 · 本周报告 · EOT 索赔", dest: .pdfHub)
+            outputRow(icon: "sparkles", title: "AI 发现", sub: "日记叙事 · 积压/静默/隐患洞察", dest: .aiHub)
+            outputRow(icon: "map", title: "平面图查看", sub: "按工地和楼层看图钉分布", dest: .floorPlan)
+            outputRow(icon: "minus.circle", title: "我们刻意不做", sub: "管理预期 · 想要的功能可能在这里", dest: .principles)
         }
     }
 
@@ -497,19 +465,97 @@ struct ReportsView: View {
     @ViewBuilder
     private func destinationView(for dest: ReportDestination) -> some View {
         switch dest {
-        case .pdf: PDFExportView()
-        case .eot: EOTReportView()
-        case .weekly: WeeklySummaryView()
+        case .pdfHub: PDFHubView()
+        case .aiHub: AIInsightsHubView()
         case .floorPlan: FloorPlanLookupView()
-        case .narrative: DailyNarrativeView()
-        case .insights: InsightsView()
-        case .backup: BackupExportView()
+        case .principles: ProductPrinciplesView()
         }
     }
 }
 
 enum ReportDestination: Hashable {
-    case pdf, eot, weekly, floorPlan, narrative, insights, backup
+    case pdfHub, aiHub, floorPlan, principles
+}
+
+// MARK: - 子菜单:出 PDF
+
+/// P0-4 合并后:把 PDF 巡检日志 / 本周报告 / EOT 索赔 三个 PDF 导出集中在一个视图。
+struct PDFHubView: View {
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    PDFExportView()
+                } label: {
+                    pdfRow(icon: "doc.text", title: "PDF 巡检日志", sub: "按日期或工地导出")
+                }
+                NavigationLink {
+                    WeeklySummaryView()
+                } label: {
+                    pdfRow(icon: "chart.bar", title: "本周报告", sub: "可复制的周总结文本")
+                }
+                NavigationLink {
+                    EOTReportView()
+                } label: {
+                    pdfRow(icon: "cloud.rain", title: "EOT 工期延误", sub: "基于天气的索赔 · AI")
+                }
+            }
+        }
+        .navigationTitle("出 PDF")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func pdfRow(icon: String, title: String, sub: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(Ink.fg2)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 15, weight: .medium))
+                Text(sub).font(.system(size: 12)).foregroundStyle(Ink.fgDim)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - 子菜单:AI 发现
+
+/// P0-4 合并后:AI 日记叙事 + AI 洞察。
+struct AIInsightsHubView: View {
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    DailyNarrativeView()
+                } label: {
+                    aiRow(icon: "text.alignleft", title: "AI 日记叙事", sub: "把一天的记录拼成可读日志")
+                }
+                NavigationLink {
+                    InsightsView()
+                } label: {
+                    aiRow(icon: "sparkles", title: "AI 洞察", sub: "逾期 · 静默 · 隐患积压")
+                }
+            }
+        }
+        .navigationTitle("AI 发现")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func aiRow(icon: String, title: String, sub: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(Ink.fg2)
+                .frame(width: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 15, weight: .medium))
+                Text(sub).font(.system(size: 12)).foregroundStyle(Ink.fgDim)
+            }
+        }
+        .padding(.vertical, 4)
+    }
 }
 
 // MARK: - Backup export (保留原样)
@@ -582,6 +628,111 @@ struct BackupExportView: View {
 private struct BackupShareURL: Identifiable {
     let id = UUID()
     let url: URL
+}
+
+// MARK: - 我们刻意不做(管理预期)
+
+/// 把"用户可能想要但产品决策不做"的功能集中列出,避免反馈渠道反复收同一类请求。
+/// 每条都有简短理由,这样老板/同事/家人也能理解为什么不做。
+struct ProductPrinciplesView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                ForEach(items) { item in
+                    row(item)
+                }
+                footer
+            }
+        }
+        .background(Ink.bg.ignoresSafeArea())
+        .navigationTitle("我们刻意不做")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var header: some View {
+        Text("SiteNote 信「减法比加法重要」。下面是常被问到、但我们决定**不做**的功能,以及不做的原因。")
+            .font(.system(size: 13))
+            .foregroundStyle(Ink.fgDim)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+    }
+
+    private func row(_ item: PrincipleItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "minus.circle")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Ink.red)
+                Text(item.title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+            }
+            Text(item.reason)
+                .font(.system(size: 12))
+                .foregroundStyle(Ink.fgDim)
+                .padding(.leading, 21)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Ink.line).frame(height: 1)
+        }
+    }
+
+    private var footer: some View {
+        Text("如果你想要的功能不在这里,欢迎反馈。我们也可能改主意 — 但默认前提是:**对工地一线最有价值的事先做完**。")
+            .font(.system(size: 12))
+            .foregroundStyle(Ink.fgDim)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 24)
+    }
+
+    private struct PrincipleItem: Identifiable {
+        let id = UUID()
+        let title: String
+        let reason: String
+    }
+
+    private let items: [PrincipleItem] = [
+        PrincipleItem(
+            title: "iCloud / 多设备同步",
+            reason: "纯本地 = 0 网络依赖 = 工地信号死角也能用。同步的崩盘成本远高于收益。要换机,用「数据 → 备份 ZIP」导出。"
+        ),
+        PrincipleItem(
+            title: "通知里的「快速完成」按钮",
+            reason: "锁屏一键完成会让人误触,工地手套/雨水/汗水都是误触源。必须打开 App 看清楚再点完成。"
+        ),
+        PrincipleItem(
+            title: "iPad 分栏 / Mac Catalyst",
+            reason: "现场就是 iPhone。iPad/Mac 上的「管理视图」会拖慢真正用户的迭代节奏。"
+        ),
+        PrincipleItem(
+            title: "自定义 App 图标 / 主题色",
+            reason: "工地不需要个性化。统一红黑高对比 = 强光下也认得出。"
+        ),
+        PrincipleItem(
+            title: "推送内容显示原文",
+            reason: "锁屏对路人/同事/家人都是公开面。工地业务文本(造价/事故/纠纷)不该泄露。原文交给点开 App 看。"
+        ),
+        PrincipleItem(
+            title: "复杂的标签层级 / 颜色 / 优先级",
+            reason: "戴手套点不准小目标。一个工地 tag + 一个隐患 toggle 已覆盖 90% 场景,其余靠 AI 自动归类。"
+        ),
+        PrincipleItem(
+            title: "实时多人协作 / 评论",
+            reason: "需要后端 + 账号体系 + 权限模型 = 巨大复杂度。工地协作走微信/电话已经够用,SiteNote 只做「我」的速记。"
+        ),
+        PrincipleItem(
+            title: "Apple Watch / CarPlay",
+            reason: "戴 Watch 的工地 PM 太少;CarPlay 录音不如 iPhone 直接按。投入产出比低。"
+        )
+    ]
+}
+
+#Preview("ProductPrinciples") {
+    NavigationStack { ProductPrinciplesView() }
 }
 
 #Preview {

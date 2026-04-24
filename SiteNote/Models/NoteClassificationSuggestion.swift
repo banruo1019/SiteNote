@@ -35,7 +35,7 @@ struct FieldSuggestion<T: Codable>: Codable {
 struct NoteClassificationSuggestion: Codable {
     /// 工地。GPS 或 AI 选。
     var site: FieldSuggestion<String>?
-    /// 子标签。AI 从已存在 subTag 列表里选 0–3 个。
+    /// 分类。AI 从已存在 subTag 列表里选 0–3 个。
     var subTags: FieldSuggestion<[String]>?
     /// Deadline 的 raw value(inbox/today/threeDays/thisWeek/archive)。
     /// 只在有**明确时间信号**时填,避免"赶紧/有空"这种模糊词误判。

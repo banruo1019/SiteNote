@@ -85,23 +85,6 @@ final class HomeViewModel {
         }
     }
 
-    /// 下滑取消录音:停止但**不保存**,音频文件删掉。不影响已暂存照片。
-    /// 用于 RecordView 的下滑取消手势。
-    func cancelRecording() {
-        guard isRecording else { return }
-        let result = voice.stopCapturing()
-        isRecording = false
-        currentAudioLevel = 0
-        recordingStartTime = nil
-        partialTranscription = ""
-        // 把已写盘的音频文件删掉——这条录音整个作废
-        if let path = result.audioRelativePath,
-           let url = VoiceCaptureService.absoluteURL(forRelative: path) {
-            try? FileManager.default.removeItem(at: url)
-        }
-        print("[SiteNote] 用户下滑取消了录音")
-    }
-
     /// 松开录音:立即保存(含已暂存照片)。不再弹 DeadlineSheet。
     ///
     /// - Parameter asDiary: 日志模式。true 时:
@@ -224,7 +207,7 @@ final class HomeViewModel {
 
         // 如果双语回退改写了转写,重新跑一次 AI polish(commitDirectly 里那次是基于旧转写)。
         if let improvedTranscription {
-            let aiEnabled = UserDefaults.standard.object(forKey: "settings.aiPolishEnabled") as? Bool ?? true
+            let aiEnabled = AIToggle.featureEnabled(SettingsKeys.aiPolishEnabled)
             if aiEnabled, !improvedTranscription.isEmpty {
                 do {
                     let polished = try await AIService.shared.polishTranscription(improvedTranscription)
@@ -350,16 +333,28 @@ final class HomeViewModel {
         dismissUndoToast()
     }
 
-    /// UndoToast 上用户点 [今天][3天][本周][归档] 之一后调用。
-    /// 更新最近保存的 note 的 deadline + 重排推送。完成后关 toast。
-    func classifyLastSave(to newDeadline: Deadline) {
+    /// UndoToast 上用户点 🚨 标隐患后调用:把 note.isHazard 置 true,重排推送(hazard schedule),关 toast。
+    func markLastSaveAsHazard() {
         guard let snapshot = lastSave, let ctx = modelContext else { return }
         let id = snapshot.noteID
         let descriptor = FetchDescriptor<Note>(predicate: #Predicate<Note> { $0.id == id })
         if let note = try? ctx.fetch(descriptor).first {
-            note.deadline = newDeadline
-            note.dueDate = newDeadline.dueDate(from: note.createdAt)
+            note.isHazard = true
             NotificationService.shared.schedule(for: note)
+        }
+        dismissUndoToast()
+    }
+
+    /// UndoToast 上用户点 📓 存为日记后调用:标 isDiaryRecord + 归档 + 取消推送,关 toast。
+    func convertLastSaveToDiary() {
+        guard let snapshot = lastSave, let ctx = modelContext else { return }
+        let id = snapshot.noteID
+        let descriptor = FetchDescriptor<Note>(predicate: #Predicate<Note> { $0.id == id })
+        if let note = try? ctx.fetch(descriptor).first {
+            note.isDiaryRecord = true
+            note.deadline = .archive
+            note.dueDate = Deadline.archive.dueDate(from: note.createdAt)
+            NotificationService.shared.cancel(for: note)
         }
         dismissUndoToast()
     }
@@ -425,7 +420,7 @@ final class HomeViewModel {
             floorPlanY: floorPlanY
         )
         // 日志模式:提前在 commit 时就标 isDiaryRecord,不等 AI 抽取回填。
-        // 这样 Note 一落库就被 RecordView / BrowseView 的提醒过滤识别为"非提醒"。
+        // 这样 Note 一落库就被 RecordView / LogTabView 的提醒过滤识别为"非提醒"。
         if asDiary {
             note.isDiaryRecord = true
         }
@@ -458,9 +453,10 @@ final class HomeViewModel {
 
         // AI 链:polish → classify → 抽 LogEntry。三步串行共用一个 Task。
         // 三个独立开关,任一关闭那步跳过。默认全 on。
-        let polishEnabled = UserDefaults.standard.object(forKey: "settings.aiPolishEnabled") as? Bool ?? true
-        let classifyEnabled = UserDefaults.standard.object(forKey: "settings.aiOmniClassifyEnabled") as? Bool ?? true
-        let extractEnabled = UserDefaults.standard.object(forKey: "settings.aiLogExtractEnabled") as? Bool ?? true
+        // 任一开关都先过 AI 总开关(P1-5);总开关关闭则三步全部跳过。
+        let polishEnabled = AIToggle.featureEnabled(SettingsKeys.aiPolishEnabled)
+        let classifyEnabled = AIToggle.featureEnabled("settings.aiOmniClassifyEnabled")
+        let extractEnabled = AIToggle.featureEnabled("settings.aiLogExtractEnabled")
 
         if (polishEnabled || classifyEnabled || extractEnabled), !transcription.isEmpty {
             let noteID = note.id

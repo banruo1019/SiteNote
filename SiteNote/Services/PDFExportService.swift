@@ -148,7 +148,7 @@ enum PDFExportService {
 
         // Deadline + 状态
         let dueStr = note.dueDate.formatted(date: .abbreviated, time: .omitted)
-        let deadlineStr = "截止: \(note.deadline.displayName) (\(dueStr))"
+        let deadlineStr = "到期: \(note.deadline.displayName) (\(dueStr))"
         let statusStr = note.isDone ? "状态: ✓ 已完成" : "状态: 待处理"
         drawText("\(deadlineStr)    \(statusStr)", at: CGPoint(x: leftMargin, y: y), fontSize: 12)
         y += 24
@@ -286,7 +286,7 @@ enum PDFExportService {
             height: outerRadius * 2
         )).fill()
 
-        // 彩点(按子标签颜色)
+        // 彩点(按分类颜色)
         pinColor.setFill()
         UIBezierPath(ovalIn: CGRect(
             x: pinX - dotRadius,
@@ -306,7 +306,7 @@ enum PDFExportService {
         cross.stroke()
     }
 
-    /// PDF 图钉颜色规则,和 app 里一致:done 灰 → hazard 红 → 子标签色 → 默认蓝。
+    /// PDF 图钉颜色规则,和 app 里一致:done 灰 → hazard 红 → 分类色 → 默认蓝。
     private static func pinUIColor(for note: Note) -> UIColor {
         if note.isDone { return .systemGray }
         if note.isHazard { return .systemRed }

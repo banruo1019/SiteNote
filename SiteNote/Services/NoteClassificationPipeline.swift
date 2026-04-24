@@ -100,7 +100,7 @@ enum NoteClassificationPipeline {
             if let lat = note.latitude, let lng = note.longitude {
                 SiteCentroidsStorage.observe(siteName: s.value, latitude: lat, longitude: lng)
             }
-            // 同步所有关联 LogEntry 的 siteTag——否则 DiaryView / PDF 的工地过滤会把
+            // 同步所有关联 LogEntry 的 siteTag——否则 LogTabView 台账模式 / PDF 的工地过滤会把
             // 旧 siteTag=nil 的条目当"未分类"而漏掉,导致到场人数等统计不准。
             propagateSiteTag(s.value, toLogEntriesOf: note)
         }

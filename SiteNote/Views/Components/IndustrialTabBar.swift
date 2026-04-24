@@ -11,13 +11,12 @@
 import SwiftUI
 
 enum AppTab: Int, CaseIterable, Hashable {
-    case record, browse, diary, reports
+    case record, log, reports
 
     var zh: String {
         switch self {
         case .record: return "记"
-        case .browse: return "查"
-        case .diary: return "工地"
+        case .log: return "日志"
         case .reports: return "报告"
         }
     }
@@ -25,8 +24,7 @@ enum AppTab: Int, CaseIterable, Hashable {
     var en: String {
         switch self {
         case .record: return "Record"
-        case .browse: return "Notes"
-        case .diary: return "Diary"
+        case .log: return "Log"
         case .reports: return "Reports"
         }
     }

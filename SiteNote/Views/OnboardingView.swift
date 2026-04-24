@@ -2,10 +2,11 @@
 //  OnboardingView.swift
 //  SiteNote
 //
-//  首次启动 3 步引导。
+//  首次启动 4 步引导。
 //  - Step 1:欢迎 + 隐私
 //  - Step 2:建第一个工地(可跳过)
-//  - Step 3:介绍录音手势(教学层会在用户进 RecordView 时再次展示)
+//  - Step 3:介绍录音 + 保存后的 UndoToast 4 按钮
+//  - Step 4:试录第一条(引导式,不内嵌录音 — 关闭引导后用户在 RecordView 真录)
 //
 //  完成后 UserDefaults 标记 dismissed,不再出现。
 //
@@ -33,7 +34,7 @@ struct OnboardingView: View {
 
                 // 步骤指示
                 HStack(spacing: 6) {
-                    ForEach(0..<3) { i in
+                    ForEach(0..<4) { i in
                         Capsule()
                             .fill(i == step ? Color.white : Color.white.opacity(0.25))
                             .frame(width: i == step ? 28 : 8, height: 4)
@@ -45,7 +46,8 @@ struct OnboardingView: View {
                     switch step {
                     case 0: welcomeStep
                     case 1: firstSiteStep
-                    default: gestureStep
+                    case 2: gestureStep
+                    default: tryItStep
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -57,7 +59,7 @@ struct OnboardingView: View {
                     Button {
                         advanceStep()
                     } label: {
-                        Text(step < 2 ? "下一步" : "开始用")
+                        Text(step < 3 ? "下一步" : "开始试录")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.black)
                             .frame(maxWidth: .infinity)
@@ -155,18 +157,63 @@ struct OnboardingView: View {
                 .padding(24)
                 .background(Circle().fill(Color.white.opacity(0.1)))
 
-            Text("录音三种手势")
+            Text("按一下说 · 5 秒内可改")
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(.white)
 
             VStack(alignment: .leading, spacing: 14) {
-                gestureLine(icon: "mic.fill", color: Ink.red, title: "按住说话", sub: "松开 = 普通速记")
-                gestureLine(icon: "arrow.up", color: Ink.accentBlue, title: "按住 + 上滑", sub: "松开 = 存为施工日记")
-                gestureLine(icon: "xmark", color: Ink.dim, title: "按住 + 下滑", sub: "松开 = 取消录音")
+                gestureLine(icon: "mic.fill", color: Ink.red, title: "按住说话", sub: "松开 = 立即保存")
+                gestureLine(icon: "exclamationmark.triangle.fill", color: Ink.red, title: "标隐患", sub: "安全问题,推送更密")
+                gestureLine(icon: "book.fill", color: Ink.accentBlue, title: "存为日记", sub: "每日工种/机械,不提醒")
+                gestureLine(icon: "pencil", color: Ink.fg, title: "细记 / 撤销", sub: "进详情页改字段 / 删掉重录")
             }
             .padding(.horizontal, 24)
         }
         .padding(.horizontal, 28)
+    }
+
+    private var tryItStep: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 56, weight: .light))
+                .foregroundStyle(.white)
+                .padding(24)
+                .background(Circle().fill(Color.white.opacity(0.1)))
+
+            Text("现在试一条")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(.white)
+
+            VStack(alignment: .leading, spacing: 10) {
+                tryLine(num: "1", text: "下一屏底部 红色大麦克风")
+                tryLine(num: "2", text: "按住 不放 · 说一句话")
+                tryLine(num: "3", text: "松开 自动保存")
+                tryLine(num: "4", text: "5 秒内可点 撤销 / 改归类")
+            }
+            .padding(.horizontal, 24)
+
+            Text("第一条会先进「未分类」收件箱,之后随时归类。")
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.55))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .padding(.top, 8)
+        }
+        .padding(.horizontal, 28)
+    }
+
+    private func tryLine(num: String, text: String) -> some View {
+        HStack(spacing: 12) {
+            Text(num)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Color.white.opacity(0.15)))
+            Text(text)
+                .font(.system(size: 14))
+                .foregroundStyle(.white)
+            Spacer()
+        }
     }
 
     private func gestureLine(icon: String, color: Color, title: String, sub: String) -> some View {
@@ -199,11 +246,8 @@ struct OnboardingView: View {
                 SiteTagsStorage.add(trimmed)
             }
         }
-        if step >= 2 {
+        if step >= 3 {
             UserDefaults.standard.set(true, forKey: Self.dismissedKey)
-            // 顺手把 GestureHintOverlay 也标记已看过——Onboarding Step 3 已经展示过手势,
-            // 不要再让用户在 RecordView 被同样的内容打扰第二次。
-            GestureHintOverlay.markShown()
             withAnimation(.easeOut(duration: 0.25)) {
                 isShown = false
             }

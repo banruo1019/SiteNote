@@ -471,7 +471,7 @@ final class AIService {
         let confidences: [String: Double]?
     }
 
-    /// 一次 AI 调用同时判断工地 / 子标签 / deadline / 隐患 / 模板 / 条款。
+    /// 一次 AI 调用同时判断工地 / 分类 / deadline / 隐患 / 模板 / 条款。
     /// - 所有"选项"从参数传入(AI 只能从已有列表选,不生成新值)
     /// - 用于 `NoteClassificationPipeline` 的 Phase B,保存流程后异步跑
     /// - 失败返回 nil,调用方把 Phase A(GPS)结果留住即可,不阻断

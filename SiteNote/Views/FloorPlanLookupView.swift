@@ -241,7 +241,7 @@ struct FloorPlanLookupView: View {
     /// 图钉色优先级:
     /// 1. 已完成 → 灰
     /// 2. 隐患 → 红
-    /// 3. 有子标签 → 用第一个子标签的颜色(按工地查)
+    /// 3. 有分类 → 用第一个分类的颜色(按工地查)
     /// 4. 默认 → 蓝
     private func pinColor(for note: Note) -> (Color, Color) {
         if note.isDone { return (.white, .gray) }

@@ -43,7 +43,7 @@ enum FloorPlanGeometry {
 
 struct FloorPlanMarkView: View {
     let preferredSiteTag: String?
-    /// 图钉颜色。调用方通常传 note 的第一个子标签颜色,让用户看到的图钉=真实渲染颜色。
+    /// 图钉颜色。调用方通常传 note 的第一个分类颜色,让用户看到的图钉=真实渲染颜色。
     var pinColor: Color = .red
     let onSave: (FloorPlanMarkResult) -> Void
 
@@ -449,7 +449,7 @@ struct FloorPlanDisplayView: View {
     let plan: FloorPlan
     let x: Double
     let y: Double
-    /// 图钉颜色。默认红。调用方通常用 note 的第一个子标签颜色。
+    /// 图钉颜色。默认红。调用方通常用 note 的第一个分类颜色。
     var pinColor: Color = .red
 
     var body: some View {

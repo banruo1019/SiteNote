@@ -52,7 +52,7 @@ struct NoteClassificationCard: View {
                         suggestion: x)
                 }
                 if let x = s.subTags {
-                    row(icon: "tag.fill", label: "子标签",
+                    row(icon: "tag.fill", label: "分类",
                         field: x.value.joined(separator: " · "),
                         suggestion: x)
                 }
