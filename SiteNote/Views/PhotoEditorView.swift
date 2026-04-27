@@ -118,12 +118,14 @@ struct PhotoEditorView: View {
         let isEditing = focusedTextID == item.wrappedValue.id
         return Group {
             if isEditing {
-                TextField("", text: item.text)
+                // **不要用 .fixedSize()**:空字符串时宽度会塌陷成一个小方块,看不到输入光标。
+                // 用 .frame(minWidth:) 保证空也有可见宽度;打字时 TextField 会自然变宽。
+                TextField("输入文字…", text: item.text)
                     .focused($focusedTextID, equals: item.wrappedValue.id)
                     .font(.system(size: textFontSize, weight: .semibold))
                     .foregroundStyle(Color(item.wrappedValue.color))
                     .multilineTextAlignment(.center)
-                    .fixedSize()
+                    .frame(minWidth: 120)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(Color.black.opacity(0.35))
@@ -362,7 +364,9 @@ struct PencilCanvas: UIViewRepresentable {
         case .pen:
             view.tool = PKInkingTool(.pen, color: color, width: width)
         case .eraser:
-            view.tool = PKEraserTool(.vector)
+            // **bitmap 模式 = 按像素擦,能擦局部**。原来用 .vector 是"碰到笔画就整条删",
+            // 用户想擦半笔擦不掉。bitmap 默认有合适粗细,跟着手指走。
+            view.tool = PKEraserTool(.bitmap)
         case .text:
             break
         }

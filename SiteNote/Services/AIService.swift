@@ -104,16 +104,53 @@ final class AIService {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return raw }
 
+        // P0:先把用户配置的"快捷词"展开,例如 "打 con" → "打 concrete"。
+        // 在送给 AI 之前做,这样 AI 看到的就是展开后的版本,不会再把 concrete 翻译成混凝土
+        // (然后又被快捷词反复对齐)。
+        let expanded = JargonStorage.applyShortcuts(to: trimmed)
+
+        // P0:把行业词典塞给 AI 当 context,让它知道哪些是专业词不要瞎改。
+        // 词典限制在 1500 字以内塞进 prompt(避免 token 爆炸),够覆盖 baseline 107 词 + 用户加的几十个。
+        let hintList = JargonDictionary.contextHintForAI()
+        let hint = hintList.count <= 1500 ? hintList : String(hintList.prefix(1500))
+
         let prompt = """
-        你是建筑工地语音转写的修复助手。以下是一段语音识别的原始文本,可能有错字、缺标点、\
-        数字格式混乱。请修复为通顺的书面中文,保留所有原意和数字,不要解释、不要添加内容、\
-        不要加引号。只返回修复后的一段文本。
+        你是悉尼建筑工地语音转写的修复+提炼助手。下面是工地一线人员说的话(中英混合,带行业术语),\
+        语音识别可能有错字、缺标点、数字格式乱、把英文术语听成相近的中文,且**句首/句中常带说话人对 app 下的命令性短语**——这些命令词不属于内容本身,要去掉。
+
+        修复规则(严格执行):
+
+        1. **去命令头**——把以下"对 app 说话"的短语**完全去掉**(可能在句首,也可能在句中插入):
+           - "提醒我 / 提醒一下 / 提醒一下我 / 麻烦提醒我"
+           - "记一下 / 记下 / 记下来 / 记录 / 记录一下 / 帮我记 / 帮我记一下 / 给我记"
+           - "保存 / 保存一下 / 存一下 / 存起来"
+           - "标记 / 做个标记 / 标一下"
+           - "录个音 / 录一下"
+           - 例 1: "提醒我明天去验钢筋" → "明天去验钢筋"
+           - 例 2: "记一下 3 楼漏水了" → "3 楼漏水了"
+           - 例 3: "搞完这个提醒我去开会" → "搞完这个去开会"
+           - 例 4: "保存一下今天打混凝土 10 方" → "今天打混凝土 10 方"
+           - **去掉后剩的部分必须仍是通顺的一段话**;如果去命令词后内容空了,保留命令词。
+
+        2. **保留中英混合**,不要把英文专有名词翻译成中文(例:concrete 不变"混凝土",RFI 不变"信息请求单")。
+
+        3. **数字单位规范化**:"十方"→"10m³"、"两吨"→"2t"、"三米五"→"3.5m"、"五百方"→"500m³"。
+
+        4. **行业术语保持原拼写**:看到下方"已知专业词汇"里的词,**完全保留**(包括大小写)。
+
+        5. 加合适标点(中文用 ",。"; 英文用 ", . "),让句子分清楚。
+
+        6. 不要添加新内容、不要解释、不要加引号、不要改原意。**只返回修复+提炼后的一段文本**。
+
+        已知专业词汇(出现按这个写法): \(hint)
 
         原文:
-        \(trimmed)
+        \(expanded)
+
+        修复后:
         """
 
-        return try await runText(prompt: prompt, fallbackToRaw: trimmed)
+        return try await runText(prompt: prompt, fallbackToRaw: expanded)
     }
 
     // MARK: - 2. 自动标签推断(纯规则)
@@ -449,6 +486,7 @@ final class AIService {
             raw = try await runTextStrict(prompt: prompt)
         } catch {
             print("[SiteNote] extractLogEntries AI 调用失败: \(error.localizedDescription)")
+            await AIFailureTracker.shared.record(reason: HomeViewModel.aiFailureReason(error))
             return []
         }
 

@@ -24,9 +24,62 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     private let center = UNUserNotificationCenter.current()
 
+    // MARK: - 在飞 task 跟踪(防 schedule 异步化引入的竞态)
+    //
+    // schedule(for:) 改成异步后内部启 Task 跑 ensureAuthorized + add。
+    // 如果不跟踪,后续的 cancel(for:) 抓不到还在 await 的 Task,会导致:
+    //   - 删除/撤销/标完成的 note 仍然到点响
+    //   - 同一 note 连排两次时序不定,后排的可能被先排的覆盖
+    // updateDailyDigest 也有相同问题(开后秒关时,关那次拦不住前一次 add)。
+    private let stateLock = NSLock()
+    private var inFlightSchedules: [UUID: (gen: Int, task: Task<Void, Never>)] = [:]
+    private var scheduleGenerations: [UUID: Int] = [:]
+    private var digestTask: Task<Void, Never>?
+
     private override init() {
         super.init()
         center.delegate = self
+    }
+
+    /// 注册一个新的 in-flight schedule task,返回它的 generation。
+    /// **同时取消同 note 上一次的 task**(原子)。
+    /// 完成后用 `clearScheduleIfCurrent(_:for:)` 自清,避免字典只增不减。
+    private func registerSchedule(_ task: Task<Void, Never>, for id: UUID) -> Int {
+        stateLock.lock()
+        let nextGen = (scheduleGenerations[id] ?? 0) + 1
+        scheduleGenerations[id] = nextGen
+        let old = inFlightSchedules[id]?.task
+        inFlightSchedules[id] = (gen: nextGen, task: task)
+        stateLock.unlock()
+        old?.cancel()
+        return nextGen
+    }
+
+    /// cancel(for:) 用:取消当前 in-flight,并清条目。
+    private func cancelSchedule(for id: UUID) {
+        stateLock.lock()
+        let old = inFlightSchedules.removeValue(forKey: id)?.task
+        stateLock.unlock()
+        old?.cancel()
+    }
+
+    /// Task 自然结束时调用:仅当字典里仍是自己时才移除条目。
+    /// 如果中途被新一轮 schedule 替换了,什么都不做(替换时 registerSchedule 已 cancel 老 task)。
+    private func clearScheduleIfCurrent(_ gen: Int, for id: UUID) {
+        stateLock.lock()
+        if inFlightSchedules[id]?.gen == gen {
+            inFlightSchedules.removeValue(forKey: id)
+        }
+        stateLock.unlock()
+    }
+
+    /// 替换 digest task,同时取消老的(原子)。
+    private func setDigestTask(_ task: Task<Void, Never>?) {
+        stateLock.lock()
+        let old = digestTask
+        digestTask = task
+        stateLock.unlock()
+        old?.cancel()
     }
 
     // MARK: - 权限
@@ -42,12 +95,32 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         return settings.authorizationStatus == .authorized
     }
 
+    /// 排推送前的统一授权门。
+    /// - `.notDetermined`: 弹系统对话框,等用户选择。
+    /// - `.authorized` / `.provisional`: 直接放行。
+    /// - `.denied`: 返回 false,后续 add 全部跳过(避免无效系统调用 + 误判"已排上")。
+    private func ensureAuthorized() async -> Bool {
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .denied:
+            return false
+        case .notDetermined:
+            return await requestAuthorization()
+        @unknown default:
+            return false
+        }
+    }
+
     // MARK: - 排推送
 
     /// 给一条 Note 排推送(先 cancel 再重排)。
+    /// 不排推送的情况:已完成 / deadline 不要求(.inbox / .archive)/ **施工日记**(它不是 todo)。
+    /// 异步:内部走 `ensureAuthorized` 等系统授权完成后才 add,避免首装时 .notDetermined → add 落空。
     func schedule(for note: Note) {
         cancel(for: note)
-        guard !note.isDone, note.deadline.shouldSchedule else { return }
+        guard !note.isDone, !note.isDiaryRecord, note.deadline.shouldSchedule else { return }
 
         let config = ScheduleConfig.current()
         let items = Self.computeSchedule(
@@ -60,26 +133,51 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             now: Date(),
             config: config
         )
+        guard !items.isEmpty else { return }
 
-        for item in items {
-            let content = UNMutableNotificationContent()
-            content.title = item.title
-            content.body = item.body
-            content.sound = .default
+        let noteID = note.id
+        let task = Task { @MainActor [center] in
+            guard await Self.shared.ensureAuthorized() else {
+                print("[SiteNote] NotificationService.schedule: 通知未授权,跳过 \(items.count) 条")
+                return
+            }
+            // 授权 await 期间可能被 cancel(for:) 取消;退出避免给已被取消的 note 重新排上。
+            if Task.isCancelled { return }
+            for item in items {
+                if Task.isCancelled { return }
+                let content = UNMutableNotificationContent()
+                content.title = item.title
+                content.body = item.body
+                content.sound = .default
 
-            let cal = Calendar.current
-            let components = cal.dateComponents(
-                [.year, .month, .day, .hour, .minute],
-                from: item.fireDate
-            )
-            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-            let request = UNNotificationRequest(identifier: item.identifier, content: content, trigger: trigger)
-            center.add(request)
+                let cal = Calendar.current
+                let components = cal.dateComponents(
+                    [.year, .month, .day, .hour, .minute],
+                    from: item.fireDate
+                )
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+                let request = UNNotificationRequest(identifier: item.identifier, content: content, trigger: trigger)
+                do {
+                    try await center.add(request)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    print("[SiteNote] NotificationService.schedule add 失败: \(item.identifier) · \(error.localizedDescription)")
+                }
+            }
+        }
+        let gen = registerSchedule(task, for: noteID)
+        // Task 完成后自清字典条目(只在仍是当前 gen 时)。
+        Task { @MainActor in
+            await task.value
+            Self.shared.clearScheduleIfCurrent(gen, for: noteID)
         }
     }
 
     /// 取消一条 Note 的所有可能推送(枚举所有可能 identifier)。
+    /// 同时 cancel 还在 await 中的 in-flight schedule Task,避免它醒来再 add。
     func cancel(for note: Note) {
+        cancelSchedule(for: note.id)
         let ids = Self.possibleIdentifiers(noteID: note.id)
         center.removePendingNotificationRequests(withIdentifiers: ids)
     }
@@ -95,31 +193,57 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - 每日汇总
 
     /// 按用户设置开关 + 早上时间安排每日汇总(repeats=true 一次排永续)。
+    /// 异步:同样走 `ensureAuthorized` 授权门,避免首装"看着开了但实际没排"。
+    /// 竞态防护:跟踪 digestTask 并在新一轮调用时 cancel 老 task;在 await 后再读一次
+    /// UserDefaults,防止"开了又秒关"的情况下被旧 task 抢着 add。
     func updateDailyDigest() {
+        setDigestTask(nil)
         center.removePendingNotificationRequests(withIdentifiers: [Self.dailyDigestIdentifier])
 
         let enabled = UserDefaults.standard.bool(forKey: "settings.dailyDigestEnabled")
         guard enabled else { return }
 
-        let morningHour = UserDefaults.standard.object(forKey: "settings.morningReminderHour") as? Int ?? 7
-        let morningMinute = UserDefaults.standard.object(forKey: "settings.morningReminderMinute") as? Int ?? 30
+        let task = Task { @MainActor [center] in
+            guard await Self.shared.ensureAuthorized() else {
+                print("[SiteNote] NotificationService.updateDailyDigest: 通知未授权,跳过")
+                return
+            }
+            if Task.isCancelled { return }
 
-        let content = UNMutableNotificationContent()
-        content.title = "SiteNote · 今日检查"
-        content.body = "打开查看今日待处理任务"
-        content.sound = .default
+            // 授权 await 期间用户可能已经把开关关回去,或者改了时间。重读一次 settings。
+            let stillEnabled = UserDefaults.standard.bool(forKey: "settings.dailyDigestEnabled")
+            guard stillEnabled else {
+                print("[SiteNote] NotificationService.updateDailyDigest: 授权后再读发现已关,放弃")
+                return
+            }
+            let morningHour = UserDefaults.standard.object(forKey: "settings.morningReminderHour") as? Int ?? 7
+            let morningMinute = UserDefaults.standard.object(forKey: "settings.morningReminderMinute") as? Int ?? 30
 
-        var components = DateComponents()
-        components.hour = morningHour
-        components.minute = morningMinute
+            let content = UNMutableNotificationContent()
+            content.title = "SiteNote · 今日检查"
+            content.body = "打开查看今日待处理任务"
+            content.sound = .default
 
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-        let request = UNNotificationRequest(
-            identifier: Self.dailyDigestIdentifier,
-            content: content,
-            trigger: trigger
-        )
-        center.add(request)
+            var components = DateComponents()
+            components.hour = morningHour
+            components.minute = morningMinute
+
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            let request = UNNotificationRequest(
+                identifier: Self.dailyDigestIdentifier,
+                content: content,
+                trigger: trigger
+            )
+            if Task.isCancelled { return }
+            do {
+                try await center.add(request)
+            } catch is CancellationError {
+                return
+            } catch {
+                print("[SiteNote] NotificationService.updateDailyDigest add 失败: \(error.localizedDescription)")
+            }
+        }
+        setDigestTask(task)
     }
 
     // MARK: - 前台展示

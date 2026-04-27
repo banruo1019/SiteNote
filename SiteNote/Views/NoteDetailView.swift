@@ -128,6 +128,22 @@ struct NoteDetailView: View {
     @State private var showsConvertConfirm: Bool = false
 
     var body: some View {
+        // 防御性 guard:note 已被硬删 / 已脱离 context 时立即 dismiss,
+        // 不能再读它的任何属性(包括 photoPaths/transcription),否则 SwiftData 抛
+        // "backing data was detached from a context without resolving attribute faults" → 崩溃。
+        // 触发场景:用户在详情页停留时,从别处(垃圾桶清空、清空所有数据、AI 转换链等)
+        // 把这条 note 删掉了或它的 ModelContext 失效了。
+        if note.isDeleted || note.modelContext == nil {
+            Color.clear
+                .task { dismiss() }
+        } else {
+            mainBody
+        }
+    }
+
+    /// 主体 ScrollView。只在 note 仍然有效时才会被 evaluate;所有读 note 属性的 sheet/overlay 都挂这里。
+    @ViewBuilder
+    private var mainBody: some View {
         ScrollView {
             VStack(spacing: DesignTokens.Spacing.medium) {
                 titleBlock            // 1. 标题(diary 模式带"施工日记" badge)
@@ -158,6 +174,13 @@ struct NoteDetailView: View {
         .background(Ink.bg.ignoresSafeArea())
         .navigationTitle(isDiary ? "日志" : "详情")
         .navigationBarTitleDisplayMode(.inline)
+        .onDisappear {
+            // 用户离开详情页 = 可能刚改过 transcription / siteTag / otherTags / 模板等。
+            // 让语义搜索 cache 失效,下次搜索时按新内容重算 embedding。
+            // **note 已脱离 context 时 skip**——读 note.id 也可能崩。
+            guard !note.isDeleted, note.modelContext != nil else { return }
+            SemanticSearchService.shared.invalidate(noteID: note.id)
+        }
         .overlay {
             if aiWorking {
                 aiLoadingOverlay
@@ -344,7 +367,7 @@ struct NoteDetailView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "person.fill")
                             .font(.system(size: 9, weight: .bold))
-                        Text("施工日记")
+                        Text("施工日志")
                             .font(.system(size: 10, weight: .semibold))
                             .tracking(0.5)
                             .textCase(.uppercase)
@@ -624,6 +647,7 @@ struct NoteDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("添加照片")
     }
 
     // MARK: - 5. 创建 + 到期 日期并排
@@ -1103,11 +1127,14 @@ struct NoteDetailView: View {
             }
             note.isDiaryRecord = false
             note.deadline = .inbox  // 回到待分类,让用户重选到期
+            note.dueDate = Deadline.inbox.dueDate(from: note.createdAt)
         } else {
             // 记录 → 日志:归档不推送。
             note.isDiaryRecord = true
             note.deadline = .archive
+            note.dueDate = Deadline.archive.dueDate(from: note.createdAt)
         }
+        // 触发重排:isDiaryRecord 变了之后,schedule 会自动决定排或不排(guard 把日志短路)。
         NotificationService.shared.schedule(for: note)
     }
 

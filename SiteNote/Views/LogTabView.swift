@@ -109,6 +109,21 @@ struct LogTabView: View {
                 runSemanticSearchIfNeeded()
             }
             .onChange(of: aiSearchEnabled) { _, _ in runSemanticSearchIfNeeded() }
+            .onChange(of: AppRouter.shared.pendingTab) { _, request in
+                // 消费 AppRouter 信号的 logMode 部分。MainTabView 已切到 .log,这里切 mode。
+                guard let r = request, r.tab == .log, let m = r.logMode else { return }
+                mode = m
+                if m == .ledger {
+                    // 跳进台账时,默认看今天的"速记"段——这正是用户刚存的日志会出现的地方。
+                    // 同时清掉残留的工地 / 分类 filter,否则用户原先筛着别的工地,
+                    // 刚存的这条日志会被过滤掉看不见。
+                    selectedSiteFilter = nil
+                    selectedSubTagFilter = nil
+                    selectedDate = Date()
+                    selectedDaySegment = .notes
+                }
+                AppRouter.shared.clear()
+            }
             .navigationDestination(for: Note.self) { note in
                 NoteRouter(note: note)
             }
@@ -153,7 +168,6 @@ struct LogTabView: View {
                     .foregroundStyle(Ink.fg)
                 Spacer()
                 SearchBarButton()
-                TodayBriefButton()
                 NavigationLink(value: SettingsDestination()) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 17, weight: .regular))

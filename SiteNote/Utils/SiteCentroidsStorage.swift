@@ -71,6 +71,22 @@ enum SiteCentroidsStorage {
         save(all)
     }
 
+    /// **手动设定**某工地的锚定坐标(用户在新建工地时输入地址用,而非 observe 学习)。
+    /// 用 `sampleCount` 控制初始权重——传 10 ≈ "已经积累 10 个样本",这样
+    /// 后续 observe 不会快速漂移走;真实位置不准时用户去工地几次自然会修正。
+    static func set(siteName: String, latitude: Double, longitude: Double, sampleCount: Int = 10) {
+        let name = siteName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        var all = load()
+        all[name] = SiteCentroid(
+            latitude: latitude,
+            longitude: longitude,
+            sampleCount: max(1, sampleCount),
+            lastUpdated: Date()
+        )
+        save(all)
+    }
+
     /// 清掉某工地的中心点(工地删除时调用)。
     static func forget(siteName: String) {
         var all = load()

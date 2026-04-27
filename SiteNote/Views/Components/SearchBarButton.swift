@@ -2,7 +2,7 @@
 //  SearchBarButton.swift
 //  SiteNote
 //
-//  全局搜索的入口按钮——放在每个 tab 标题行 TodayBriefButton 旁边。
+//  全局搜索的入口按钮——放在每个 tab 标题行齿轮按钮旁边。
 //  Tap → 弹 GlobalSearchView sheet。
 //
 
@@ -22,6 +22,7 @@ struct SearchBarButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("搜索")
         .sheet(isPresented: $showsSearch) {
             GlobalSearchView()
         }

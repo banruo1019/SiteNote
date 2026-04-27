@@ -32,6 +32,7 @@ struct AIStatusBar: View {
     private var pendingClassifyNotes: [Note]
 
     @Environment(\.modelContext) private var modelContext
+    @State private var failureTracker = AIFailureTracker.shared
 
     private var todayEntryCount: Int {
         let dayStart = Calendar.current.startOfDay(for: Date())
@@ -53,45 +54,79 @@ struct AIStatusBar: View {
 
     var body: some View {
         NavigationLink(value: AIStatusDestination()) {
-            HStack(spacing: 8) {
-                Image(systemName: "wand.and.stars")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(engineColor)
-                Text(engineLabel)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(engineColor)
-                if AIService.isLanguageModelAvailable {
-                    Text("·")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.dim)
-                    Text("今日 \(todayEntryCount) 条")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.fgDim)
-                        .monospacedDigit()
-                    if pendingCount > 0 {
-                        HStack(spacing: 3) {
-                            Circle().fill(Ink.red).frame(width: 5, height: 5)
-                            Text("\(pendingCount) 待确认")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(Ink.red)
-                                .monospacedDigit()
-                        }
-                        .padding(.leading, 2)
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Ink.dim)
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 7)
-            .background(Ink.card.opacity(0.5))
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Ink.line).frame(height: 0.5)
+            // 失败可见性优先于常规状态:用户最需要知道"AI 现在不工作"。
+            if failureTracker.hasRecentFailure, let f = failureTracker.lastFailure {
+                failureRow(reason: f.reason)
+            } else {
+                normalRow
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private var normalRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(engineColor)
+            Text(engineLabel)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(engineColor)
+            if AIService.isLanguageModelAvailable {
+                Text("·")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.dim)
+                Text("今日 \(todayEntryCount) 条")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.fgDim)
+                    .monospacedDigit()
+                if pendingCount > 0 {
+                    HStack(spacing: 3) {
+                        Circle().fill(Ink.red).frame(width: 5, height: 5)
+                        Text("\(pendingCount) 待确认")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Ink.red)
+                            .monospacedDigit()
+                    }
+                    .padding(.leading, 2)
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Ink.dim)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 7)
+        .background(Ink.card.opacity(0.5))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Ink.line).frame(height: 0.5)
+        }
+    }
+
+    private func failureRow(reason: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Ink.red)
+            Text("AI 失败 · \(reason)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Ink.red)
+                .lineLimit(1)
+            Spacer()
+            Text("检查设置")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Ink.red)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Ink.red.opacity(0.6))
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 7)
+        .background(Ink.red.opacity(0.08))
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Ink.red.opacity(0.3)).frame(height: 0.5)
+        }
     }
 }
 

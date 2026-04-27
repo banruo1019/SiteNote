@@ -67,7 +67,6 @@ struct ReportsView: View {
                 .foregroundStyle(Ink.fg)
             Spacer()
             SearchBarButton()
-            TodayBriefButton()
             NavigationLink(value: SettingsDestination()) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 17, weight: .regular))

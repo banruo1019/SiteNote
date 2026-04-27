@@ -58,8 +58,17 @@ final class HomeViewModel {
     // MARK: - 录音
 
     func startRecording() {
+        // P2 改:延后权限请求。首次按下时如未授权,弹系统对话框;授权决定前先 bail,
+        // 用户授予后再次按下才真正录。已永久拒绝则给提示引导去 设置。
         guard VoiceCaptureService.hasAllPermissions else {
-            errorMessage = VoiceCaptureService.VoiceError.notAuthorized.errorDescription
+            Task { [weak self] in
+                let granted = await VoiceCaptureService.requestPermissions()
+                if !granted {
+                    await MainActor.run {
+                        self?.errorMessage = "需要麦克风和语音识别权限。请到 设置 → SiteNote 打开。"
+                    }
+                }
+            }
             return
         }
         partialTranscription = ""
@@ -346,6 +355,7 @@ final class HomeViewModel {
     }
 
     /// UndoToast 上用户点 📓 存为日记后调用:标 isDiaryRecord + 归档 + 取消推送,关 toast。
+    /// 完事自动跳到「日志 → 台账 → 速记」让用户看到刚存的条目。
     func convertLastSaveToDiary() {
         guard let snapshot = lastSave, let ctx = modelContext else { return }
         let id = snapshot.noteID
@@ -357,6 +367,7 @@ final class HomeViewModel {
             NotificationService.shared.cancel(for: note)
         }
         dismissUndoToast()
+        AppRouter.shared.requestTab(.log, logMode: .ledger)
     }
 
     /// 用户点 toast 顶行时调用:返回当前已保存的 note,让 RecordView 跳详情页。
@@ -468,8 +479,10 @@ final class HomeViewModel {
                         if polished != transcription {
                             self?.applyPolishedTranscription(noteID: noteID, polished: polished)
                         }
+                        await AIFailureTracker.shared.clear()
                     } catch {
                         print("[SiteNote] AI polish unavailable/failed: \(error.localizedDescription)")
+                        await AIFailureTracker.shared.record(reason: Self.aiFailureReason(error))
                     }
                 }
                 // 2) omni-classify(GPS 规则 + AI 综合分类)→ 写建议 JSON 到 note,用户到详情页确认。
@@ -525,6 +538,26 @@ final class HomeViewModel {
         }
         LogEntryIngestor.ingest(drafts: drafts, from: note, into: ctx)
         print("[SiteNote] LogEntry extract: \(drafts.count) 条 for \(noteID.uuidString.prefix(8))")
+    }
+
+    /// 把任意 AI 错误压缩成 < 30 字的中文短原因,给 AIStatusBar 红字行用。
+    /// 网络/认证/限额是最常见三类,其他归到"暂时不可用"。
+    static func aiFailureReason(_ error: Error) -> String {
+        let msg = error.localizedDescription.lowercased()
+        if msg.contains("api key") || msg.contains("unauthorized") || msg.contains("401") {
+            return "Key 失效或缺失"
+        }
+        if msg.contains("rate") || msg.contains("quota") || msg.contains("429") {
+            return "配额/频率限制"
+        }
+        if msg.contains("network") || msg.contains("offline") || msg.contains("timeout")
+            || msg.contains("timed out") || msg.contains("hostname") {
+            return "网络不可用"
+        }
+        if msg.contains("model") && msg.contains("unavailable") {
+            return "模型不可用"
+        }
+        return "暂时不可用"
     }
 
     private func summaryText(for transcription: String, photoCount: Int) -> String {

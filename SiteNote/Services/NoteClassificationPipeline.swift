@@ -118,6 +118,10 @@ enum NoteClassificationPipeline {
         }
         if let h = suggestion.hazard, h.value {
             note.isHazard = true
+            // 隐患的推送节奏比普通的密(早+晚 vs 仅早,Day 3+ 加中午,共 10 天 / 15 槽),
+            // 必须 cancel 旧的再 schedule,否则用户少收一半推送。
+            NotificationService.shared.cancel(for: note)
+            NotificationService.shared.schedule(for: note)
         }
         if let t = suggestion.template {
             note.templateName = t.value

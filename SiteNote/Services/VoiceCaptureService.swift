@@ -119,6 +119,8 @@ final class VoiceCaptureService {
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         }
+        // 双语回退也走同一份行业词典(英文 locale 也吃中英混词,提升识别)。
+        request.contextualStrings = JargonDictionary.contextualStrings()
 
         return await withCheckedContinuation { cont in
             var resumed = false
@@ -195,6 +197,10 @@ final class VoiceCaptureService {
         if recognizer.supportsOnDeviceRecognition {
             request.requiresOnDeviceRecognition = true
         }
+        // 关键:把行业词典塞给 STT 做 prior。会强烈偏向这些词,显著提升识别准确率。
+        // 词典 = 静态 baseline(107 词)+ 用户工地名/分类/模板/条款 + 用户自定义专业词汇。
+        // Apple 限制:每条 ≤30 字符,数组总 ≤50KB。JargonDictionary 内部已过滤。
+        request.contextualStrings = JargonDictionary.contextualStrings()
         recognitionRequest = request
 
         // 捕获时 self 被 nonisolated tap 闭包使用，需用弱引用/nonisolated 隔离

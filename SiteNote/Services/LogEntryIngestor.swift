@@ -18,8 +18,9 @@ enum LogEntryIngestor {
     /// 把若干 draft 落库。所有 draft 都关联到同一个源 Note。
     ///
     /// 副作用:向 `ctx` 插入新 LogEntry,或修改已存在的 open plant session(填 endAt)。
-    /// **如果最终成功处理了 ≥1 条 draft,会把源 note 标为 `isDiaryRecord = true`**——
-    /// 它就从"提醒事项"里退出去,归到施工日记类。
+    /// **不会** 自动改 `note.isDiaryRecord` 也 **不会** 取消推送——LLM 误判 → 静默丢提醒
+    /// 是产品红线(参见 project_ai_strategy.md "绝不静默自动应用")。
+    /// 仅向 `DiaryConversionTracker` 登记一条 *pending* 建议,由 banner 让用户确认。
     /// 不 save context——由调用方决定 save 时机(通常 SwiftData 自动保存)。
     static func ingest(drafts: [AIService.LogEntryDraft], from note: Note, into ctx: ModelContext) {
         guard !drafts.isEmpty else { return }
@@ -70,10 +71,16 @@ enum LogEntryIngestor {
             }
         }
 
-        // 只要有条目成功处理,这条 Note 就归为"施工日记"——从提醒事项退出。
+        // 仅登记一条 *pending* 建议——不动 isDiaryRecord、不 cancel 推送。
+        // 用户在 banner 点"标为施工日志"才把 note 翻成日记 + 取消推送。
+        // 设计依据:LLM 误判时静默丢提醒会让用户信任崩塌(project_ai_strategy.md 红线)。
         if processed > 0 {
-            note.isDiaryRecord = true
-            print("[SiteNote] LogEntryIngestor: note \(note.id.uuidString.prefix(8)) 标记为施工日记(\(processed) 条)")
+            let id = note.id
+            let count = processed
+            Task { @MainActor in
+                DiaryConversionTracker.shared.recordPendingConversion(noteID: id, entriesCount: count)
+            }
+            print("[SiteNote] LogEntryIngestor: note \(note.id.uuidString.prefix(8)) 抽出 \(count) 条建议(待用户确认)")
         }
     }
 

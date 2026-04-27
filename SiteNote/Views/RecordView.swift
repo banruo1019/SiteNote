@@ -102,6 +102,11 @@ struct RecordView: View {
             ZStack(alignment: .bottom) {
                 Ink.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
+                    // AI 自动转日志后的 5s 提示 banner(只在录音/拍照空闲时露,
+                    // 避免遮挡录音中的反馈区)。
+                    if !viewModel.isRecording && viewModel.stagedPhotos.isEmpty {
+                        DiaryConversionBanner()
+                    }
                     if viewModel.isRecording {
                         recordingTopArea
                     } else if !viewModel.stagedPhotos.isEmpty {
@@ -130,9 +135,10 @@ struct RecordView: View {
             }
             .navigationBarHidden(true)
             .task {
+                // P2 改:不再启动就请求权限。
+                // - 麦克风/语音:用户首次按住 MIC 时由 HomeViewModel.startRecording 触发请求
+                // - 通知:首次有 note 需要排推送时由 NotificationService.schedule 触发请求
                 viewModel.setup(modelContext: modelContext)
-                _ = await VoiceCaptureService.requestPermissions()
-                _ = await NotificationService.shared.requestAuthorization()
                 NotificationService.shared.rescheduleAll(notes: allNotes)
                 headerProvider.ensureFresh()
             }
@@ -206,7 +212,6 @@ struct RecordView: View {
                     .foregroundStyle(Ink.fg)
                 Spacer()
                 SearchBarButton()
-                TodayBriefButton()
                 NavigationLink(value: SettingsDestination()) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 17, weight: .regular))
@@ -214,6 +219,7 @@ struct RecordView: View {
                         .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
                 }
+                .accessibilityLabel("设置")
             }
             subtitleRow
         }
@@ -767,6 +773,8 @@ struct RecordView: View {
         )
         .sensoryFeedback(.impact(weight: .heavy), trigger: viewModel.isRecording)
         .frame(maxWidth: .infinity)
+        .accessibilityLabel("录音")
+        .accessibilityHint("长按开始录音,松手保存")
     }
 
     /// 录音时红色提醒,静息时黑色。
@@ -789,6 +797,7 @@ struct RecordView: View {
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: isShowingCamera)
             .frame(maxWidth: .infinity)
+            .accessibilityLabel("拍照")
     }
 
     // MARK: - Undo toast
@@ -797,7 +806,6 @@ struct RecordView: View {
         UndoToast(
             message: viewModel.lastSave?.summary ?? "",
             secondsRemaining: viewModel.undoSecondsRemaining,
-            onMarkHazard: { viewModel.markLastSaveAsHazard() },
             onSaveAsDiary: { viewModel.convertLastSaveToDiary() },
             onDetail: {
                 if let note = viewModel.fetchLastSavedNote() {

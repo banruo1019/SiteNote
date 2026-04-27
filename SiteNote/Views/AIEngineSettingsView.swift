@@ -81,13 +81,22 @@ struct AIEngineSettingsView: View {
 
     private var privacySection: some View {
         Section("隐私") {
-            Text("• 「自动」或「OpenAI」:转写文本和照片会发送到 OpenAI 服务器处理。")
+            Text("• AI 「自动」或「OpenAI」:转写文本和照片会发送到 OpenAI 服务器。「仅本地」:全程在设备内完成,不联网。")
                 .font(.system(size: DesignTokens.FontSize.body))
                 .foregroundStyle(.secondary)
-            Text("• 「仅本地」:所有 AI 在设备内完成,不联网。")
+            Text("• OpenAI API Key 存 iOS Keychain(加密),仅本机可用。不会传给我们。")
                 .font(.system(size: DesignTokens.FontSize.body))
                 .foregroundStyle(.secondary)
-            Text("• 工地内容高度敏感时,建议用本地引擎或关闭 AI。")
+            Text("• 录音(.m4a)和照片只存本机的 Files App,不上云。")
+                .font(.system(size: DesignTokens.FontSize.body))
+                .foregroundStyle(.secondary)
+            Text("• 定位只在按下录音那一瞬间取一次(精度 100m + 反向地理编码),全程不做后台追踪。")
+                .font(.system(size: DesignTokens.FontSize.body))
+                .foregroundStyle(.secondary)
+            Text("• 锁屏推送只显示通用提示,不带原始转写文本(避免被路人/同事看到)。")
+                .font(.system(size: DesignTokens.FontSize.body))
+                .foregroundStyle(.secondary)
+            Text("• 工地内容高度敏感时,建议用「仅本地」引擎或关闭 AI 总开关。")
                 .font(.system(size: DesignTokens.FontSize.body))
                 .foregroundStyle(.secondary)
         }

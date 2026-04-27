@@ -2,10 +2,15 @@
 //  UndoToast.swift
 //  SiteNote
 //
-//  P0-2 版:4 按钮 2x2 布局。
-//  - Row 1:✓ 摘要 + 倒计时(纯文字)
-//  - Row 2:[🚨 标隐患] [📓 存为日记]  —— 分类
-//  - Row 3:[✎ 细记]   [⟲ 撤销]      —— 导航 / 撤回
+//  录音保存后的浮窗。重设计原则:**只放命令,不放属性**——
+//  - 命令(改 note 的类型/状态/存在):存为日记 / 进详情 / 撤销 → 留在 toast
+//  - 属性(note 的字段:isHazard / deadline / siteTag / subTags 等)→ 进详情页改
+//
+//  布局:
+//  - Row 1: ✓ 摘要(左) + 倒计时小字(右上) + 撤销按钮(右上)
+//  - Row 2: [📓 存为日记] [✎ 进详情]  —— 两个明确的命令
+//
+//  默认沉默最舒服:5s 不动 = 自动消失,note 留在 Inbox(默认),之后在「日志 → 待分类」段慢慢分。
 //
 
 import SwiftUI
@@ -14,7 +19,6 @@ struct UndoToast: View {
     let message: String
     let secondsRemaining: Int
 
-    let onMarkHazard: () -> Void
     let onSaveAsDiary: () -> Void
     let onDetail: () -> Void
     let onUndo: () -> Void
@@ -22,41 +26,10 @@ struct UndoToast: View {
     var body: some View {
         VStack(spacing: 12) {
             summaryRow
-            HStack(spacing: 8) {
-                actionButton(
-                    icon: "exclamationmark.triangle.fill",
-                    label: "标隐患",
-                    foreground: .white,
-                    background: Ink.red,
-                    action: onMarkHazard
-                )
-                actionButton(
-                    icon: "book.fill",
-                    label: "存为日记",
-                    foreground: .white,
-                    background: Ink.accentBlue,
-                    action: onSaveAsDiary
-                )
-            }
-            HStack(spacing: 8) {
-                actionButton(
-                    icon: "pencil",
-                    label: "细记",
-                    foreground: Ink.fg,
-                    background: Ink.card,
-                    action: onDetail
-                )
-                actionButton(
-                    icon: "arrow.uturn.backward",
-                    label: "撤销",
-                    foreground: Ink.fg,
-                    background: nil,
-                    action: onUndo
-                )
-            }
+            commandsRow
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 18)
+        .padding(.vertical, 16)
         .background(Ink.bg)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
@@ -77,22 +50,59 @@ struct UndoToast: View {
                 .foregroundStyle(Ink.fg)
                 .lineLimit(1)
             Spacer(minLength: 4)
-            Text("\(secondsRemaining)")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Ink.fgDim)
-                .monospacedDigit()
-                .frame(width: 28, height: 28)
-                .background(Ink.card)
-                .clipShape(Circle())
-                .contentTransition(.numericText())
+            undoButton
         }
     }
 
-    private func actionButton(
+    /// 撤销按钮放在右上,最显眼最易点(用户最高频"反悔"动作)。
+    /// 倒计时数字直接放在按钮里,省掉一个独立 badge。
+    private var undoButton: some View {
+        Button(action: onUndo) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("撤销")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("\(secondsRemaining)s")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Ink.fgDim)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            .foregroundStyle(Ink.fg)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Ink.card)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("撤销刚才的录音,\(secondsRemaining) 秒后自动消失")
+    }
+
+    private var commandsRow: some View {
+        HStack(spacing: 8) {
+            commandButton(
+                icon: "book.fill",
+                label: "存为日记",
+                foreground: .white,
+                background: Ink.accentBlue,
+                action: onSaveAsDiary
+            )
+            commandButton(
+                icon: "pencil",
+                label: "进详情",
+                foreground: Ink.fg,
+                background: Ink.card,
+                action: onDetail
+            )
+        }
+    }
+
+    private func commandButton(
         icon: String,
         label: String,
         foreground: Color,
-        background: Color?,
+        background: Color,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -105,12 +115,8 @@ struct UndoToast: View {
             .foregroundStyle(foreground)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(background ?? Color.clear)
+            .background(background)
             .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(background == nil ? Ink.fg : Color.clear, lineWidth: 1.5)
-            )
         }
         .buttonStyle(.plain)
     }

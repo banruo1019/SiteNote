@@ -13,6 +13,7 @@ import SwiftData
 struct MainTabView: View {
     @State private var selection: AppTab = .record
     @State private var showsOnboarding: Bool = OnboardingView.needsToShow
+    @State private var router = AppRouter.shared
 
     var body: some View {
         ZStack {
@@ -20,6 +21,17 @@ struct MainTabView: View {
             if showsOnboarding {
                 OnboardingView(isShown: $showsOnboarding)
                     .zIndex(100)
+            }
+        }
+        .onChange(of: router.pendingTab) { _, request in
+            // 消费 AppRouter 信号:别处(HomeViewModel.convertLastSaveToDiary 等)请求切 tab 时切。
+            // logMode 由 LogTabView 自己再监听一次消费,这里只负责切顶层 tab。
+            guard let request else { return }
+            selection = request.tab
+            // 如果请求里没带 logMode 或不是切到 .log,直接清掉信号。
+            // 切到 .log 且带 logMode 的,留给 LogTabView 消费完再清。
+            if request.tab != .log || request.logMode == nil {
+                router.clear()
             }
         }
     }

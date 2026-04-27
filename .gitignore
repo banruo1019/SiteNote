@@ -1,3 +1,58 @@
+# Xcode
 
-# Build artifacts + secrets
 build/
+DerivedData/
+*.xcuserdatad/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# macOS
+
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Swift Package Manager
+
+.swiftpm/
+.build/
+Packages/
+Package.resolved
+
+# CocoaPods (not used, but defensive)
+
+Pods/
+*.xcworkspace
+
+# Secrets — never commit
+
+*.env
+.env.local
+*.p12
+*.cer
+*.mobileprovision
+secrets/
+
+# Backup / temp
+
+*.bak
+*.tmp
+*.swp
+*~
+
+# Project-local Claude state
+
+.claude/scheduled_tasks.lock
+.claude/*.local.*
+
+# Local logs
+
+*.log
+
+# IDE
+
+.idea/
+.vscode/

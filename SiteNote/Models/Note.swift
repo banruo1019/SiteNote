@@ -24,7 +24,7 @@ enum Deadline: String, Codable, CaseIterable {
         case .inbox: return "待分类"
         case .today: return "今天"
         case .threeDays: return "3 天内"
-        case .thisWeek: return "本周内"
+        case .thisWeek: return "7 天内"
         case .archive: return "只是记录"
         }
     }

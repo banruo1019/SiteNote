@@ -119,6 +119,44 @@ struct InputAISettingsView: View {
 
             Section {
                 NavigationLink {
+                    JargonTermsEditorView()
+                } label: {
+                    HStack {
+                        Image(systemName: "text.bubble")
+                            .foregroundStyle(Ink.fg)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("专业词汇")
+                                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                            Text("自家专属词,加进去识别更准 + AI 不瞎改")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Ink.fgDim)
+                        }
+                    }
+                }
+                NavigationLink {
+                    JargonShortcutsEditorView()
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.triangle.swap")
+                            .foregroundStyle(Ink.fg)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("快捷词")
+                                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                            Text("说短话自动展开,如「打 con」→「打 concrete」")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Ink.fgDim)
+                        }
+                    }
+                }
+            } header: {
+                Text("识别词典")
+            } footer: {
+                Text("基础词典(澳洲工地通用 100+ 词)已内置,这里只配你公司/工地的专属词。")
+                    .font(.system(size: 12))
+            }
+
+            Section {
+                NavigationLink {
                     AIEngineSettingsView()
                 } label: {
                     HStack {
@@ -232,6 +270,7 @@ struct RemindersSettingsView: View {
 struct SiteResourcesSettingsView: View {
     @State private var siteTags: [String] = SiteTagsStorage.load()
     @State private var newTagName: String = ""
+    @State private var showsNewSiteSheet: Bool = false
     /// 刷新计数器:从 SubTagsEditorView 返回后 bump 一下,让分类数量重算。
     @State private var refreshTick: Int = 0
 
@@ -278,14 +317,27 @@ struct SiteResourcesSettingsView: View {
                 }
             }
 
-            HStack {
-                TextField("新工地名(如 悉尼 Olympic Park)", text: $newTagName)
-                    .font(.system(size: DesignTokens.FontSize.body))
-                Button("添加") {
-                    addTag()
+            Button {
+                showsNewSiteSheet = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(.green)
+                    Text("新建工地")
+                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                        .foregroundStyle(Ink.fg)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Ink.dim)
                 }
-                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                .disabled(newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showsNewSiteSheet) {
+                NewSiteSheet { _ in
+                    siteTags = SiteTagsStorage.load()
+                }
             }
         } header: {
             Text("工地标签")
@@ -497,7 +549,7 @@ struct ReportsExportSettingsView: View {
             } header: {
                 Text("数据导出与备份")
             } footer: {
-                Text("PDF 用于交业主或法律存档;ZIP 用于整体备份到 iCloud Drive/邮件。")
+                Text("PDF 用于交业主或法律存档;ZIP **包含速记数据 + 录音 + 照片 + 设置**,用于整体备份到 iCloud Drive/邮件。清空全部数据前建议先导一份。")
                     .font(.system(size: DesignTokens.FontSize.body))
             }
         }
@@ -585,6 +637,24 @@ struct DataAboutSettingsView: View {
 
             ShareLogStatsSection()
 
+            Section("反馈") {
+                Button {
+                    openFeedbackMail()
+                } label: {
+                    HStack {
+                        Image(systemName: "envelope")
+                            .foregroundStyle(Ink.fg)
+                        Text("反馈与建议")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                            .foregroundStyle(Ink.fg)
+                        Spacer()
+                        Text("banruostudio@gmail.com")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                }
+            }
+
             Section("关于") {
                 HStack {
                     Text("版本")
@@ -593,16 +663,6 @@ struct DataAboutSettingsView: View {
                     Text(appVersion)
                         .font(.system(size: DesignTokens.FontSize.body))
                         .foregroundStyle(.secondary)
-                }
-                Link(destination: URL(string: "mailto:banruostudio@gmail.com")!) {
-                    HStack {
-                        Text("反馈邮箱")
-                            .font(.system(size: DesignTokens.FontSize.body))
-                        Spacer()
-                        Text("banruostudio@gmail.com")
-                            .font(.system(size: DesignTokens.FontSize.body))
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
         }
@@ -621,6 +681,25 @@ struct DataAboutSettingsView: View {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
         return "\(version) (\(build))"
+    }
+
+    /// 打开邮件 App,预填收件人/主题/带版本+设备信息的正文。用 URLComponents 安全转义。
+    private func openFeedbackMail() {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+        let iosVersion = UIDevice.current.systemVersion
+        let device = UIDevice.current.model
+        let body = "\n\n---\nSiteNote \(version) (\(build))\niOS \(iosVersion) · \(device)"
+
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = "banruostudio@gmail.com"
+        components.queryItems = [
+            URLQueryItem(name: "subject", value: "SiteNote 反馈"),
+            URLQueryItem(name: "body", value: body)
+        ]
+        guard let url = components.url else { return }
+        UIApplication.shared.open(url)
     }
 
     /// 一键清空 Section。倒计时中显示"X 秒后清空 / 取消"条,否则显示按钮。
@@ -657,7 +736,7 @@ struct DataAboutSettingsView: View {
         } header: {
             Text("一键清空")
         } footer: {
-            Text("清空所有速记(含垃圾桶)、录音、照片、平面图、工地 / 分类 / 模板 / 条款。不可恢复。按下后 3 秒内可取消。")
+            Text("清空所有速记(含垃圾桶)、录音、照片、平面图、工地 / 分类 / 模板 / 条款 / 术语 / 快捷词。**不可恢复**。建议先到「报告与导出」→「导出全部数据为 ZIP」做备份再清。按下后 3 秒内可取消。")
                 .font(.system(size: DesignTokens.FontSize.body))
         }
     }
@@ -698,6 +777,15 @@ struct DataAboutSettingsView: View {
             }
         }
 
+        // 1b. 硬删所有 LogEntry(包括软删的孤儿)+ ShareLog 分享记录。
+        // Note 删了但这些表会留下"孤儿"数据,违反"不可恢复"承诺。
+        if let entries = try? modelContext.fetch(FetchDescriptor<LogEntry>()) {
+            for e in entries { modelContext.delete(e) }
+        }
+        if let shares = try? modelContext.fetch(FetchDescriptor<ShareLog>()) {
+            for s in shares { modelContext.delete(s) }
+        }
+
         // 2. 一并清掉 Documents 下的三大文件目录(音频/照片/平面图)
         if let docs = FileManager.default.urls(
             for: .documentDirectory, in: .userDomainMask
@@ -720,6 +808,8 @@ struct DataAboutSettingsView: View {
         ] {
             defaults.removeObject(forKey: key)
         }
+        // 术语 / 快捷词也属于用户内容,清空时连带清掉(否则下次录音 AI 还会用旧术语)。
+        JargonStorage.clearAll()
 
         // 4. 干掉所有推送
         let center = UNUserNotificationCenter.current()
@@ -832,7 +922,7 @@ struct ShareLogStatsSection: View {
     var body: some View {
         Section {
             if logs.isEmpty {
-                Text("还没有分享过。试试每个 tab 右上角的「简报」按钮 →")
+                Text("还没有分享过。在日志 tab 的某一天底部用「生成今日简报」导出 PDF。")
                     .font(.system(size: DesignTokens.FontSize.body))
                     .foregroundStyle(.secondary)
             } else {
