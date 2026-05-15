@@ -103,10 +103,10 @@ struct NoteDetailView: View {
     @State var isGeneratingShare: Bool = false
     @State var obsidianMessage: String?
     @State private var showsRescheduleDialog: Bool = false
-    @State private var fullscreenPhoto: FullscreenPhoto?
+    @State var fullscreenPhoto: FullscreenPhoto?
     @State private var showsOriginalTranscription: Bool = false
     @State private var isShowingFloorPlanMark: Bool = false
-    @State private var editingDetailPhoto: DetailPhotoEdit?
+    @State var editingDetailPhoto: DetailPhotoEdit?
     /// 标注保存/加载失败时的提示文案。非 nil = 显示 alert。
     @State private var photoAnnotationError: String?
     @State var galleryRefreshID: UUID = UUID()
@@ -115,7 +115,7 @@ struct NoteDetailView: View {
     @State private var assignError: String?
 
     // 加照片相关
-    @State private var showsPhotoSourceDialog: Bool = false
+    @State var showsPhotoSourceDialog: Bool = false
     @State private var showsCamera: Bool = false
     @State private var capturedImage: UIImage?
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -571,108 +571,7 @@ struct NoteDetailView: View {
 
     // MARK: - 3. 照片大图
 
-    @ViewBuilder
-    private var photosBlock: some View {
-        if !note.photoPaths.isEmpty {
-            VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
-                HStack {
-                    Text("照片")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(note.photoPaths.count)")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
-                photoLayout
-                    .id(galleryRefreshID)
-            }
-        }
-    }
-
-    /// 第一张大图占满宽度,其余小图水平滚动。单张就只有大图。
-    @ViewBuilder
-    private var photoLayout: some View {
-        if let firstPath = note.photoPaths.first,
-           let url = PhotoStorage.absoluteURL(forRelative: firstPath),
-           let firstImage = UIImage(contentsOfFile: url.path) {
-            VStack(spacing: DesignTokens.Spacing.small) {
-                bigPhoto(path: firstPath, image: firstImage)
-
-                if note.photoPaths.count > 1 {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: DesignTokens.Spacing.small) {
-                            ForEach(note.photoPaths.dropFirst(), id: \.self) { path in
-                                photoThumbnail(for: path)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func bigPhoto(path: String, image: UIImage) -> some View {
-        ZStack(alignment: .topTrailing) {
-            // 外层 RoundedRectangle 托底,图片作为 overlay。
-            // contentShape 明确把可点区域锁在矩形内,避免 .scaledToFill 的原图溢出带来的幽灵点击
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.08))
-                .frame(height: 240)
-                .overlay(
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, maxHeight: 240)
-                        .clipped()
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    fullscreenPhoto = FullscreenPhoto(image: image, path: path)
-                }
-
-            Button {
-                editingDetailPhoto = DetailPhotoEdit(path: path, image: image)
-            } label: {
-                Image(systemName: "pencil.circle.fill")
-                    .font(.system(size: 26))
-                    .foregroundStyle(.white, Color.black.opacity(0.6))
-                    .padding(8)
-            }
-            .accessibilityLabel("标注此照片")
-        }
-    }
-
-    // MARK: - 4. 加照片按钮(独立一行)
-
-    private var addPhotoRow: some View {
-        Button {
-            showsPhotoSourceDialog = true
-        } label: {
-            HStack {
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                Text("加照片")
-                    .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                Spacer()
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-            }
-            .foregroundStyle(Color.accentColor)
-            .padding(DesignTokens.Spacing.medium)
-            .frame(maxWidth: .infinity)
-            .background(Color.accentColor.opacity(0.10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.accentColor.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("添加照片")
-    }
+    // photosBlock / photoLayout / bigPhoto / addPhotoRow → NoteDetailView+Photos.swift
 
     // MARK: - 5. 创建 + 到期 日期并排
 
@@ -816,44 +715,7 @@ struct NoteDetailView: View {
 
     // (photoGallery 和 addPhotoTile 已合并入 photosBlock + addPhotoRow)
 
-    @ViewBuilder
-    private func photoThumbnail(for path: String) -> some View {
-        if let url = PhotoStorage.absoluteURL(forRelative: path),
-           let image = UIImage(contentsOfFile: url.path) {
-            ZStack(alignment: .topTrailing) {
-                // 用固定 frame 的容器 + overlay 图片,命中区限在 120×120 矩形内
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.08))
-                    .frame(width: 120, height: 120)
-                    .overlay(
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 120, height: 120)
-                            .clipped()
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        fullscreenPhoto = FullscreenPhoto(image: image, path: path)
-                    }
-                Button {
-                    editingDetailPhoto = DetailPhotoEdit(path: path, image: image)
-                } label: {
-                    Image(systemName: "pencil.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundStyle(.white, Color.black.opacity(0.6))
-                        .padding(4)
-                }
-                .accessibilityLabel("标注此照片")
-            }
-        } else {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.2))
-                .frame(width: 120, height: 120)
-                .overlay(Image(systemName: "photo").font(.title))
-        }
-    }
+    // photoThumbnail → NoteDetailView+Photos.swift
 
     // MARK: - 7. 平面图(折叠)
 
