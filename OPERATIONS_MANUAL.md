@@ -200,3 +200,18 @@ git reset --hard 55f48e7
 - 📄 巡检报告新布局:A3 图纸大图 + 自适应照片网格 + 邮件发送自动归档
 - 🧹 移除 Tradie 模式(简化角色,聚焦工程场景)
 - 🐛 PM 主屏多项 UX 修复(stats filter / 命名统一 / 月度图表)
+
+---
+
+## 9. CloudKit 团队功能上线
+
+v1.2 计划点亮 iCloud 同步 + 团队协作。**走这条线之前**必须按 [`ICLOUD_SETUP.md`](./ICLOUD_SETUP.md) 跑一遍完整清单,不能跳步。
+
+关键节点速览:
+- **发包前**:Apple Developer 后台必须先建 `iCloud.com.banruo.SiteNote` container,Xcode capability 链接成功
+- **TestFlight 前**:两台真机双向同步 + conflict + 离线场景全部通过
+- **上 App Store 前**:CloudKit Dashboard 把 Development schema **Deploy 到 Production**(漏这步 = TestFlight 能同步、正式版用户拿不到数据)
+- **审核材料**:App 描述加 "iCloud 同步",Privacy nutrition label 补 iCloud 数据收集
+- **回滚预案**:App 内 toggle 关闭 sync,本地 + 云端数据都保留,降级到 local-only 不丢数据
+
+具体每一步、错误处理、团队邀请流程、常见问题排查 → 看 `ICLOUD_SETUP.md`。

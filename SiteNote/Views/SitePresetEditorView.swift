@@ -236,6 +236,17 @@ private struct SitePresetEditSheet: View {
     // 备注
     @State private var notes: String
 
+    // 分配(Phase 0 mock;Phase 2 改为 @Query TeamMember)
+    @State private var assignedToUserID: String?
+    @State private var assignedAt: Date?
+
+    // Phase 0 mock;Phase 2 改为 @Query TeamMember
+    private let mockMembers: [TeamMember] = [
+        TeamMember(userID: "self", displayName: "我(Owner)", email: "me@example.com", role: .owner),
+        TeamMember(userID: "member-1", displayName: "工程师 A", email: "a@example.com", role: .engineer),
+        TeamMember(userID: "member-2", displayName: "工程师 B", email: "b@example.com", role: .engineer),
+    ]
+
     @State private var errorMessage: String?
 
     /// 用户手动改过 address 字段后,后续 siteTag 变化不再自动覆盖。
@@ -261,6 +272,8 @@ private struct SitePresetEditSheet: View {
         _defaultBuilderID = State(initialValue: initial.defaultBuilderID)
         _defaultInspectionType = State(initialValue: initial.defaultInspectionType)
         _notes = State(initialValue: initial.notes)
+        _assignedToUserID = State(initialValue: initial.assignedToUserID)
+        _assignedAt = State(initialValue: initial.assignedAt)
         // 编辑模式:address 已是用户/之前保存的值,不要被 siteTag picker 覆盖。
         // 新建模式:允许自动填(直到用户真的编辑过 address)。
         switch target {
@@ -277,6 +290,7 @@ private struct SitePresetEditSheet: View {
                 siteSection
                 projectInfoSection
                 defaultsSection
+                assignmentSection
                 notesSection
 
                 if let errorMessage {
@@ -478,6 +492,49 @@ private struct SitePresetEditSheet: View {
         }
     }
 
+    // Phase 0 mock;Phase 2 改为 @Query TeamMember
+    private var assignmentSection: some View {
+        Section {
+            Picker(
+                String(localized: "分配给", locale: locale),
+                selection: Binding(
+                    get: { assignedToUserID },
+                    set: { newID in
+                        assignedToUserID = newID
+                        assignedAt = (newID == nil) ? nil : Date()
+                    }
+                )
+            ) {
+                Text(String(localized: "未分配 / 团队公用", locale: locale))
+                    .tag(String?.none)
+                ForEach(mockMembers, id: \.userID) { m in
+                    Text(m.displayName).tag(Optional(m.userID))
+                }
+            }
+            .font(.system(size: DesignTokens.FontSize.body))
+
+            if let uid = assignedToUserID,
+               let assignee = mockMembers.first(where: { $0.userID == uid }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .foregroundStyle(.secondary)
+                    Text(String(localized: "当前分配:\(assignee.displayName)", locale: locale))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Ink.fgDim)
+                    Spacer()
+                }
+            }
+        } header: {
+            Text(String(localized: "分配", locale: locale))
+        } footer: {
+            Text(String(
+                localized: "团队 Owner 可把工地分配给具体成员;未分配则团队公用。Phase 0 用 mock 数据,Phase 2 接通真实团队成员。",
+                locale: locale
+            ))
+            .font(.system(size: 12))
+        }
+    }
+
     private var notesSection: some View {
         Section {
             TextField(
@@ -524,6 +581,8 @@ private struct SitePresetEditSheet: View {
         draft.defaultBuilderID = defaultBuilderID
         draft.defaultInspectionType = defaultInspectionType.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft.assignedToUserID = assignedToUserID
+        draft.assignedAt = assignedAt
 
         onSave(draft)
         dismiss()

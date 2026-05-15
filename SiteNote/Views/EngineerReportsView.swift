@@ -15,6 +15,16 @@
 import SwiftUI
 import SwiftData
 
+/// 报告范围切换:我的 / 团队全部。
+/// Phase 0 mock:InspectionReport 还没 `createdByUserID` 字段(Phase 2 加),
+/// 现在 "我的" 视为全部 owner 为空串/`mockCurrentUserID` 的 report,
+/// "团队全部" 不过滤 —— 视觉上 segmented 通了,逻辑等 Phase 2 接通 CloudKit 后用
+/// `ICloudSyncConfig.shared.currentUserRecordName` 替换 `mockCurrentUserID`。
+enum ReportScope: String, CaseIterable {
+    case mine
+    case team
+}
+
 struct EngineerReportsView: View {
     @Environment(\.modelContext) private var modelContext
 
@@ -27,12 +37,37 @@ struct EngineerReportsView: View {
     /// `navigationDestination(item:)` 单一路由入口 —— 点 "+导出" 或点历史行都写这里。
     @State private var selectedReport: InspectionReport?
 
+    /// 当前 segmented 选中段。
+    @State private var scope: ReportScope = .mine
+
+    /// Phase 0 mock;InspectionReport.createdByUserID 在 Phase 2 时加。
+    /// Phase 2 接通 CloudKit 后用 `ICloudSyncConfig.shared.currentUserRecordName`。
+    private let mockCurrentUserID = "self"
+
+    /// 按 scope 过滤后的全集。
+    /// Phase 0 mock;InspectionReport.createdByUserID 在 Phase 2 时加 —— 现在
+    /// "我的" 用占位逻辑(全部视为本人,因为 model 上还没字段),
+    /// "团队全部" 直接放行,segmented 在视觉上已经能切换。
+    private var scopedReports: [InspectionReport] {
+        switch scope {
+        case .mine:
+            // Phase 2 真实实现:
+            // allReports.filter {
+            //     $0.createdByUserID == ICloudSyncConfig.shared.currentUserRecordName
+            //         || $0.createdByUserID.isEmpty
+            // }
+            return allReports
+        case .team:
+            return allReports
+        }
+    }
+
     private var drafts: [InspectionReport] {
-        allReports.filter { $0.statusRaw == InspectionStatus.draft.rawValue }
+        scopedReports.filter { $0.statusRaw == InspectionStatus.draft.rawValue }
     }
 
     private var submitted: [InspectionReport] {
-        allReports.filter { $0.statusRaw == InspectionStatus.submitted.rawValue }
+        scopedReports.filter { $0.statusRaw == InspectionStatus.submitted.rawValue }
     }
 
     var body: some View {
@@ -49,6 +84,22 @@ struct EngineerReportsView: View {
                         }
                         .buttonStyle(.plain)
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Ink.bg)
+                    }
+
+                    // Scope segmented: 我的 / 团队全部
+                    // Phase 0 mock;Phase 2 加 InspectionReport.createdByUserID 后接通真实过滤。
+                    Section {
+                        Picker("", selection: $scope) {
+                            Text(String(localized: "我的", locale: AppLanguageManager.currentLocale))
+                                .tag(ReportScope.mine)
+                            Text(String(localized: "团队全部", locale: AppLanguageManager.currentLocale))
+                                .tag(ReportScope.team)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal, 16)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Ink.bg)
                     }

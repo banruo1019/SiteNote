@@ -18,15 +18,15 @@ import SwiftData
 
 @Model
 final class ShareLog {
-    var id: UUID
+    var id: UUID = UUID()
     /// 分享发生时间。
-    var sharedAt: Date
+    var sharedAt: Date = Date()
     /// "site-diary" / "single-note-pdf" / "weekly-summary" / 其他。
-    var format: String
+    var format: String = ""
     /// UIActivityType.rawValue,可能为 nil(系统不返回 / 用户取消)。
     var activityType: String?
     /// 是否成功完成(UIActivityViewController completion 的 completed 参数)。
-    var completed: Bool
+    var completed: Bool = true
     /// 涉及的 Note ID 列表(JSON 字符串)。空表示纯日终汇总。
     var noteIDsJSON: String?
 

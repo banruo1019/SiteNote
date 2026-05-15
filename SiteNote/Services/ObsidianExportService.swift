@@ -66,6 +66,36 @@ enum ObsidianExportService {
         UserDefaults.standard.set(url.path, forKey: displayPathKey)
     }
 
+    // MARK: - Vault 迁移到开发目录的占位 helper
+    //
+    // 用户希望把 ~/Library/Mobile Documents/iCloud~md~obsidian/Documents/construction-pm
+    // 在 Mac 端"挂"到 ~/Developer/SiteNote/obsidian-vault 下,方便统一管理。
+    //
+    // **iOS App 沙盒里跑不动 ln -s,且 vault 在 Mac 文件系统上,App 端无需(也无法)操作**。
+    // 这个方法只是一个 **文档锚点 + 常量来源**,实际操作请用户跑 OBSIDIAN_MIGRATION.md
+    // 第 3.3 节里的 shell 命令:
+    //
+    //   ln -s "$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/construction-pm" \
+    //         "$HOME/Developer/SiteNote/obsidian-vault"
+    //
+    // 跑完软链接后,iOS App 这边 **完全不用动** —— UserDefaults 里的 bookmark 还是指向
+    // iCloud Drive 真路径,symlink 只是 Mac 端的快捷方式,对 iOS sandbox 透明。
+    //
+    /// 占位 helper(不执行任何文件操作)。在 OBSIDIAN_MIGRATION.md 决策落地后,
+    /// 这里可以加一段"检查 symlink 是否存在并回报状态"的纯只读逻辑;但要做实际
+    /// `mkdir` / `link` 操作必须用户在 macOS 终端里手动执行 —— 见上面文档锚点。
+    /// - Returns: 永远返回 `false`,表示 iOS 端不处理 symlink 创建。
+    @discardableResult
+    static func symlinkVaultToDevDir() -> Bool {
+        // 故意不做任何事:iOS 沙盒不能动 ~/Developer,Mac 端的事 Mac 端做。
+        // 如果未来要做"Mac 配套 CLI",可以在这里把推荐命令以字符串形式返回出来。
+        #if DEBUG
+        print("[ObsidianExportService] symlinkVaultToDevDir() is a no-op stub. " +
+              "See OBSIDIAN_MIGRATION.md §3.3 for the user-side shell command.")
+        #endif
+        return false
+    }
+
     /// 解析回 security-scoped URL；外部使用必须包在 startAccessing... / stopAccessing... 里。
     static func resolveFolder() throws -> URL {
         guard let bookmark = UserDefaults.standard.data(forKey: bookmarkKey) else {

@@ -47,6 +47,7 @@ struct EngineerSettingsRoot: View {
     var body: some View {
         Form {
             meAndCompanySection
+            teamSection
             workResourcesSection
             reportSection
             scheduleSection
@@ -209,6 +210,33 @@ struct EngineerSettingsRoot: View {
             SectionHeader(String(localized: "我和公司", locale: locale))
         } footer: {
             SectionFooter(String(localized: "这些会出现在 PDF 报告封面。", locale: locale))
+        }
+    }
+
+    // MARK: - Section: 团队
+
+    private var teamSection: some View {
+        Section {
+            NavigationLink {
+                TeamManagementView()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "person.3.fill")
+                        .foregroundStyle(Ink.accent)
+                        .frame(width: 28, height: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "我的团队", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(String(localized: "和工程师 / 老板协作 · 最多 10 人", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                }
+            }
+        } header: {
+            SectionHeader(String(localized: "团队", locale: AppLanguageManager.currentLocale))
+        } footer: {
+            SectionFooter(String(localized: "第一版免费;创建团队后可邀请最多 9 个成员协作。", locale: AppLanguageManager.currentLocale))
         }
     }
 

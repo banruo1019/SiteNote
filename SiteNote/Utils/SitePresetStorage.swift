@@ -26,6 +26,12 @@ struct SitePreset: Codable, Identifiable, Hashable {
     var defaultInspectionType: String  // "level 1 reo"(用户每次只改这个)
     var notes: String              // 备注(可选)
 
+    /// 分配给团队哪个成员的 userID(CKRecord.recordName / Apple ID)。
+    /// 团队 Owner 可设置;nil = 未分配 / 团队公用。
+    var assignedToUserID: String?
+    /// 分配时间(Owner 决定时记)。
+    var assignedAt: Date?
+
     init(
         id: UUID = UUID(),
         siteTag: String = "",
@@ -36,7 +42,9 @@ struct SitePreset: Codable, Identifiable, Hashable {
         defaultAttn: String = "",
         defaultBuilderID: UUID? = nil,
         defaultInspectionType: String = "",
-        notes: String = ""
+        notes: String = "",
+        assignedToUserID: String? = nil,
+        assignedAt: Date? = nil
     ) {
         self.id = id
         self.siteTag = siteTag
@@ -48,6 +56,8 @@ struct SitePreset: Codable, Identifiable, Hashable {
         self.defaultBuilderID = defaultBuilderID
         self.defaultInspectionType = defaultInspectionType
         self.notes = notes
+        self.assignedToUserID = assignedToUserID
+        self.assignedAt = assignedAt
     }
 }
 

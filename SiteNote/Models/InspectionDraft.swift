@@ -17,32 +17,32 @@ import SwiftData
 @Model
 final class InspectionReport {
     /// 稳定唯一标识。
-    var id: UUID
+    var id: UUID = UUID()
 
     /// 创建时间。
-    var createdAt: Date
+    var createdAt: Date = Date()
 
     /// 最后修改时间。
-    var updatedAt: Date
+    var updatedAt: Date = Date()
 
     // MARK: - Header 字段
 
-    var project: String
-    var projectNo: String
-    var client: String
-    var location: String
-    var attn: String
+    var project: String = ""
+    var projectNo: String = ""
+    var client: String = ""
+    var location: String = ""
+    var attn: String = ""
     /// 关联 Builder ID(BuildersStorage),用于一键发邮件。`nil` 表示 attn 是手输。
     var builderID: String?
-    var reportDate: Date
-    var inspectionType: String
+    var reportDate: Date = Date()
+    var inspectionType: String = ""
     /// 报告编号,如 "SVR25159.05A"。由 ReportNumbering 生成。
-    var reportNo: String
+    var reportNo: String = ""
 
     /// 巡检员签字名(默认从 UserProfile / Settings 读)。
-    var engineerName: String
+    var engineerName: String = ""
     /// Site Rep 状态(例如 "Emailed"、"Signed",自由文本)。
-    var siteRepStatus: String
+    var siteRepStatus: String = ""
 
     /// 自定义 disclaimer 文本块,`nil` 用 DisclaimerStorage.defaults。按行存。
     var disclaimerText: String?
@@ -58,7 +58,7 @@ final class InspectionReport {
     var mainNoteID: UUID?
 
     /// 主照片 caption(显示在主照下方)。默认用 mainNoteID 的 Note.transcription,用户可改短。
-    var mainCaption: String
+    var mainCaption: String = ""
 
     /// 每条 Note 的 caption override。JSON: `{noteIDString: caption}`。
     /// 用户不 override 时 PDF 直接用 `note.transcription`。
@@ -67,7 +67,7 @@ final class InspectionReport {
     // MARK: - 状态机
 
     /// `InspectionStatus` 原始值。
-    var statusRaw: String
+    var statusRaw: String = InspectionStatus.draft.rawValue
 
     /// 提交时间(submitted 后才有)。
     var submittedAt: Date?

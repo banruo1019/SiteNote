@@ -65,7 +65,7 @@ enum Deadline: String, Codable, CaseIterable {
 @Model
 final class Note {
     /// 稳定唯一标识。本地通知 identifier 用它。
-    var id: UUID
+    var id: UUID = UUID()
 
     /// **原始** 语音识别文本。创建后**永不修改**。法律/EOT 证据层。
     /// AI polish 和用户编辑都不会改这个字段。
@@ -74,27 +74,27 @@ final class Note {
     /// 当前显示/编辑的文本。初始化时 = transcriptionOriginal;
     /// AI polish 完成后覆盖此字段(但 original 保留);用户在详情页编辑也改此字段。
     /// 用于所有 UI 展示、PDF 导出、分享等。
-    var transcription: String
+    var transcription: String = ""
 
     /// 创建时间。由 `init` 自动填充。
-    var createdAt: Date
+    var createdAt: Date = Date()
 
     /// `Deadline` 的原始字符串值。SwiftData 存 String 比存自定义枚举更稳。
     /// 通过 `deadline` 计算属性读写。
-    var deadlineRaw: String
+    var deadlineRaw: String = Deadline.threeDays.rawValue
 
     /// 根据 `deadline` 和创建时间算出的具体到期日。
-    var dueDate: Date
+    var dueDate: Date = Date()
 
     /// 是否已完成。完成后推送被取消。
-    var isDone: Bool
+    var isDone: Bool = false
 
     /// 原始录音文件的相对路径（相对于 App 的 Documents 目录），例如 "audio/ABC123.m4a"。
     /// 录音失败或用户关闭录音时为 `nil`。
     var audioFilePath: String?
 
     /// 附带照片的相对路径数组。第一版（任务 1）恒为空。
-    var photoPaths: [String]
+    var photoPaths: [String] = []
 
     /// 位置纬度。
     var latitude: Double?

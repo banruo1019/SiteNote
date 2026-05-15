@@ -32,6 +32,14 @@ struct ScheduleEditorSheet: View {
     @State private var reminderEnabled: Bool = true
     @State private var reminder1Minutes: Int = 1440
     @State private var reminder2Minutes: Int = 60
+    @State private var assignedToUserID: String? = nil
+
+    // Phase 0 mock;Phase 2 改 @Query TeamMember。
+    private let mockMembers: [(userID: String, displayName: String)] = [
+        ("self", "我(Owner)"),
+        ("member-1", "工程师 A"),
+        ("member-2", "工程师 B"),
+    ]
 
     /// 提前时长选项(分钟)。0 = 关闭(只第二条用)。
     /// 设计:覆盖工地常见预约心智 — 1 天前 / 当天早上(隐式)/ 1 小时前临门一脚。
@@ -64,6 +72,7 @@ struct ScheduleEditorSheet: View {
                 titleSection
                 timeSection
                 siteSection
+                assignmentSection
                 notesSection
                 reminderSection
             }
@@ -159,6 +168,25 @@ struct ScheduleEditorSheet: View {
         }
     }
 
+    // Phase 0 mock;Phase 2 改 @Query TeamMember。
+    private var assignmentSection: some View {
+        Section {
+            Picker(
+                String(localized: "分配给", locale: AppLanguageManager.currentLocale),
+                selection: $assignedToUserID
+            ) {
+                Text(String(localized: "未分配", locale: AppLanguageManager.currentLocale))
+                    .tag(String?.none)
+                ForEach(mockMembers, id: \.userID) { m in
+                    Text(m.displayName).tag(String?.some(m.userID))
+                }
+            }
+            .font(.system(size: 15))
+        } header: {
+            SectionHeader(String(localized: "分配", locale: AppLanguageManager.currentLocale))
+        }
+    }
+
     private var notesSection: some View {
         Section {
             TextEditor(text: $notes)
@@ -225,6 +253,7 @@ struct ScheduleEditorSheet: View {
             reminderEnabled = existing.reminderEnabled
             reminder1Minutes = existing.reminder1Minutes
             reminder2Minutes = existing.reminder2Minutes
+            assignedToUserID = existing.assignedToUserID
         } else {
             // 新建模式:用预填日期,时间默认 09:00。
             let base = prefilledDate ?? Date()
@@ -252,6 +281,7 @@ struct ScheduleEditorSheet: View {
             existing.reminderEnabled = reminderEnabled
             existing.reminder1Minutes = reminder1Minutes
             existing.reminder2Minutes = reminder2Minutes
+            existing.assignedToUserID = assignedToUserID
             try? modelContext.save()
             NotificationService.shared.scheduleVisit(existing)
         } else {
@@ -263,7 +293,8 @@ struct ScheduleEditorSheet: View {
                 notes: notes,
                 reminderEnabled: reminderEnabled,
                 reminder1Minutes: reminder1Minutes,
-                reminder2Minutes: reminder2Minutes
+                reminder2Minutes: reminder2Minutes,
+                assignedToUserID: assignedToUserID
             )
             modelContext.insert(new)
             try? modelContext.save()

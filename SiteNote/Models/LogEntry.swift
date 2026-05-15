@@ -45,14 +45,14 @@ enum LogKind: String, Codable, CaseIterable {
 @Model
 final class LogEntry {
     /// 稳定唯一标识。
-    var id: UUID
+    var id: UUID = UUID()
 
     /// `LogKind` 的原始字符串值。和 Note.deadlineRaw 一样,SwiftData 存 String 比存自定义枚举稳。
     /// 通过 `kind` 计算属性读写。
-    var kindRaw: String
+    var kindRaw: String = LogKind.event.rawValue
 
     /// 主语:工种名 / 设备名 / 送达物 / 访客身份 / 事件名。AI 抽取的短词。
-    var subject: String
+    var subject: String = ""
 
     /// 数量,只 `.person` 用(水工×4)。其他 kind 恒 nil。
     var quantity: Int?
@@ -60,7 +60,7 @@ final class LogEntry {
     /// 事件开始时间。单点事件(.delivery / .visitor / .event / 缺席的 .person)即为事件时间。
     /// **即使用户没说时间,这里也填 `note.createdAt` 作兜底**——保证排序和日期过滤不崩。
     /// UI 是否显示由 `startAtExplicit` 决定:false 时 UI 画"—"而不是这个兜底时间。
-    var startAt: Date
+    var startAt: Date = Date()
 
     /// 用户/AI 是否**明确给出**了开始时间。
     /// - true: 语音明说("7 点半到"、"现在"),UI 和 PDF 都显示 `startAt` 的具体时间。
@@ -82,7 +82,8 @@ final class LogEntry {
 
     /// 反向引用源 Note 的 id。必填——所有 LogEntry 都是某条 Note 的派生物,永远可追溯。
     /// 不用 @Relationship:保留 Note 软删后 LogEntry 仍留存的能力(证据链)。
-    var sourceNoteID: UUID
+    /// CloudKit 兼容:default UUID() 仅占位,init 必传真实 sourceNoteID 覆盖。
+    var sourceNoteID: UUID = UUID()
 
     /// AI 抽取时的置信度 0–1。< 0.7 在 UI 上要标灰/加 ⚠,强制用户看一眼再确认。
     var confidence: Double = 1.0
@@ -91,7 +92,7 @@ final class LogEntry {
     var userConfirmed: Bool = false
 
     /// 创建(落库)时间。
-    var createdAt: Date
+    var createdAt: Date = Date()
 
     /// 软删时间戳。和 Note 一致:nil 表示"活着",非空表示在垃圾桶里。
     /// 主查询过滤 deletedAt == nil。
