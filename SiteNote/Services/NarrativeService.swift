@@ -13,7 +13,7 @@ enum NarrativeService {
     /// 生成某一天的施工日志(中文,可读可发)。
     static func generateDailyNarrative(notes: [Note], date: Date) async throws -> String {
         guard !notes.isEmpty else {
-            return "当日无记录。"
+            return String(localized: "当日无记录。", locale: AppLanguageManager.currentLocale)
         }
 
         let sorted = notes.sorted { $0.createdAt < $1.createdAt }

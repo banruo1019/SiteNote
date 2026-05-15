@@ -112,7 +112,7 @@ struct OpenPlantSessionsBanner: View {
         let total = Int(interval)
         let h = total / 3600
         let m = (total % 3600) / 60
-        if h == 0 { return "\(m) 分钟" }
+        if h == 0 { return String(localized: "\(m) 分钟", locale: AppLanguageManager.currentLocale) }
         return "\(h)h \(m)m"
     }
 }

@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import SwiftData
 import UserNotifications
 
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
@@ -220,8 +221,8 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             let morningMinute = UserDefaults.standard.object(forKey: "settings.morningReminderMinute") as? Int ?? 30
 
             let content = UNMutableNotificationContent()
-            content.title = "SiteNote · 今日检查"
-            content.body = "打开查看今日待处理任务"
+            content.title = String(localized: "SiteNote · 今日检查", locale: AppLanguageManager.currentLocale)
+            content.body = String(localized: "打开查看今日待处理任务", locale: AppLanguageManager.currentLocale)
             content.sound = .default
 
             var components = DateComponents()
@@ -326,11 +327,11 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         let title: String
         let body: String
         if input.isHazard {
-            title = "🚨 SiteNote 隐患待处理"
-            body = "请打开 App 查看详情"
+            title = String(localized: "🚨 SiteNote 隐患待处理", locale: AppLanguageManager.currentLocale)
+            body = String(localized: "请打开 App 查看详情", locale: AppLanguageManager.currentLocale)
         } else {
-            title = "SiteNote 提醒"
-            body = "你有 1 条速记到期 · 请打开 App 查看"
+            title = String(localized: "SiteNote 提醒", locale: AppLanguageManager.currentLocale)
+            body = String(localized: "你有 1 条速记到期 · 请打开 App 查看", locale: AppLanguageManager.currentLocale)
         }
 
         var out: [ScheduledItem] = []
@@ -398,5 +399,148 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             }
         }
         return ids
+    }
+}
+
+// MARK: - SiteVisitSchedule(Engineer 日程)推送
+
+extension NotificationService {
+
+    /// 日程通知 identifier 前缀(集中一处,方便 cancel / 调试)。
+    /// 形如 `visit-<uuid>-r1` / `visit-<uuid>-r2`。
+    static let scheduleIdentifierPrefix = "visit"
+
+    /// 同一条 schedule 最多 2 条提醒,固定 r1 / r2 后缀。
+    static func scheduleIdentifiers(for scheduleID: UUID) -> [String] {
+        [
+            "\(scheduleIdentifierPrefix)-\(scheduleID.uuidString)-r1",
+            "\(scheduleIdentifierPrefix)-\(scheduleID.uuidString)-r2"
+        ]
+    }
+
+    /// 排日程提醒。先 cancel 老的再排新的。
+    /// 不排的情况:reminderEnabled = false / status != .pending / fireDate 已过 /
+    /// reminder 触发点也已过(reminder1Minutes / reminder2Minutes 减出来在 now 之前)。
+    /// 同一 schedule 可能有 2 条通知(reminder1Minutes 和 reminder2Minutes,后者 0 = 关闭)。
+    func scheduleVisit(_ schedule: SiteVisitSchedule) {
+        cancelVisit(schedule.id)
+        guard schedule.reminderEnabled, schedule.status == .pending, schedule.deletedAt == nil else { return }
+
+        let fireDate = schedule.fireDate
+        let now = Date()
+        // fireDate 本身已过 → 不再排。
+        guard fireDate > now else { return }
+
+        // 业务标题:优先 "标题 · 工地",其次 "标题",再次 "日程提醒"。
+        let body: String = {
+            if let tag = schedule.siteTag, !tag.isEmpty {
+                return tag
+            }
+            return ""
+        }()
+        let title: String = {
+            if !schedule.title.isEmpty { return schedule.title }
+            return String(localized: "日程提醒", locale: AppLanguageManager.currentLocale)
+        }()
+
+        // 候选两条提醒:r1 必有(reminder1Minutes 总有值),r2 仅在 reminder2Minutes > 0 时排。
+        struct Reminder {
+            let suffix: String
+            let triggerDate: Date
+            let leadMinutes: Int
+        }
+        var reminders: [Reminder] = []
+        if let t1 = Calendar.current.date(byAdding: .minute, value: -schedule.reminder1Minutes, to: fireDate),
+           t1 > now {
+            reminders.append(.init(suffix: "r1", triggerDate: t1, leadMinutes: schedule.reminder1Minutes))
+        }
+        if schedule.reminder2Minutes > 0,
+           let t2 = Calendar.current.date(byAdding: .minute, value: -schedule.reminder2Minutes, to: fireDate),
+           t2 > now {
+            reminders.append(.init(suffix: "r2", triggerDate: t2, leadMinutes: schedule.reminder2Minutes))
+        }
+        guard !reminders.isEmpty else { return }
+
+        let scheduleID = schedule.id
+        let task = Task { @MainActor [center] in
+            guard await Self.shared.ensureAuthorized() else {
+                print("[SiteNote] NotificationService.scheduleVisit: 通知未授权,跳过 \(reminders.count) 条")
+                return
+            }
+            if Task.isCancelled { return }
+            for r in reminders {
+                if Task.isCancelled { return }
+                let content = UNMutableNotificationContent()
+                content.title = title
+                let leadLabel = Self.leadTimeLabel(minutes: r.leadMinutes)
+                if body.isEmpty {
+                    content.body = leadLabel
+                } else {
+                    content.body = "\(body) · \(leadLabel)"
+                }
+                content.sound = .default
+
+                let cal = Calendar.current
+                let components = cal.dateComponents(
+                    [.year, .month, .day, .hour, .minute],
+                    from: r.triggerDate
+                )
+                let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+                let identifier = "\(Self.scheduleIdentifierPrefix)-\(scheduleID.uuidString)-\(r.suffix)"
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                do {
+                    try await center.add(request)
+                } catch is CancellationError {
+                    return
+                } catch {
+                    print("[SiteNote] NotificationService.scheduleVisit add 失败: \(identifier) · \(error.localizedDescription)")
+                }
+            }
+        }
+        // 复用 Note 的竞态防护(同一 UUID 空间不冲突 — Note 和 Schedule 的 UUID 不会撞)。
+        let gen = registerSchedule(task, for: scheduleID)
+        Task { @MainActor in
+            await task.value
+            Self.shared.clearScheduleIfCurrent(gen, for: scheduleID)
+        }
+    }
+
+    /// 取消某 schedule 的全部通知 + in-flight task。
+    func cancelVisit(_ scheduleID: UUID) {
+        cancelSchedule(for: scheduleID)
+        let ids = Self.scheduleIdentifiers(for: scheduleID)
+        center.removePendingNotificationRequests(withIdentifiers: ids)
+    }
+
+    /// 全量重排所有 pending 的日程(启动时 + 时区改变时调)。
+    /// 注意:不在这里清"老 schedule 的孤儿通知"——通过 cancelVisit 在删/改时已经清过。
+    @MainActor
+    func rescheduleAllVisits(in context: ModelContext) {
+        let descriptor = FetchDescriptor<SiteVisitSchedule>(
+            predicate: #Predicate<SiteVisitSchedule> { $0.deletedAt == nil && $0.statusRaw == "pending" }
+        )
+        guard let schedules = try? context.fetch(descriptor) else { return }
+        for s in schedules {
+            scheduleVisit(s)
+        }
+    }
+
+    /// 把提前分钟数翻译成人话:1d / 2h / 30m。
+    private static func leadTimeLabel(minutes: Int) -> String {
+        if minutes <= 0 {
+            return String(localized: "现在", locale: AppLanguageManager.currentLocale)
+        }
+        if minutes % 1440 == 0 {
+            let days = minutes / 1440
+            if days == 1 {
+                return String(localized: "明天", locale: AppLanguageManager.currentLocale)
+            }
+            return String(localized: "\(days) 天后", locale: AppLanguageManager.currentLocale)
+        }
+        if minutes % 60 == 0 {
+            let hours = minutes / 60
+            return String(localized: "\(hours) 小时后", locale: AppLanguageManager.currentLocale)
+        }
+        return String(localized: "\(minutes) 分钟后", locale: AppLanguageManager.currentLocale)
     }
 }

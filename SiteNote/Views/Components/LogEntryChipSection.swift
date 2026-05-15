@@ -179,15 +179,15 @@ struct LogEntryChipSection: View {
     private func primaryLabel(_ e: LogEntry) -> String {
         switch e.kind {
         case .person:
-            if e.isAbsent { return "\(e.subject) · 缺席" }
+            if e.isAbsent { return String(localized: "\(e.subject) · 缺席", locale: AppLanguageManager.currentLocale) }
             if let q = e.quantity, q > 0 { return "\(e.subject) ×\(q)" }
             return e.subject
         case .plant:
             if e.endAt == nil {
-                return "\(e.subject) · 开启中"
+                return String(localized: "\(e.subject) · 开启中", locale: AppLanguageManager.currentLocale)
             }
             if e.startAt == e.endAt {
-                return "\(e.subject) · 孤儿记录"
+                return String(localized: "\(e.subject) · 孤儿记录", locale: AppLanguageManager.currentLocale)
             }
             let startStr = e.startAtExplicit ? timeString(e.startAt) : "—"
             let endStr = e.endAt.map(timeString) ?? "—"
@@ -204,7 +204,7 @@ struct LogEntryChipSection: View {
     private func secondaryLabel(_ e: LogEntry) -> String? {
         if let n = e.note, !n.isEmpty { return n }
         if e.kind == .delivery || e.kind == .visitor || e.kind == .event {
-            return e.startAtExplicit ? timeString(e.startAt) : "未标时间"
+            return e.startAtExplicit ? timeString(e.startAt) : String(localized: "未标时间", locale: AppLanguageManager.currentLocale)
         }
         return nil
     }
@@ -467,7 +467,8 @@ struct LogEntryEditSheet: View {
         }
         // 开着的 session:实时算(用户每次进详情页看到的时间)
         let interval = Date().timeIntervalSince(entry.startAt)
-        return "已运行 " + LogEntryChipSection.durationString(interval)
+        let dur = LogEntryChipSection.durationString(interval)
+        return String(localized: "已运行 \(dur)", locale: AppLanguageManager.currentLocale)
     }
 
     private var noteBinding: Binding<String> {

@@ -110,7 +110,7 @@ struct ReportsView: View {
 
                 HStack {
                     ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { d in
-                        Text(d)
+                        Text(LocalizedStringKey(d))
                             .font(.system(size: 10))
                             .foregroundStyle(Ink.dim)
                             .frame(maxWidth: .infinity)
@@ -187,7 +187,7 @@ struct ReportsView: View {
             return ""
         }
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
+        f.locale = Locale.current
         f.dateFormat = "d MMM"
         let endOfWeek = cal.date(byAdding: .day, value: -1, to: interval.end) ?? interval.end
         let weekNum = cal.component(.weekOfYear, from: today)
@@ -243,15 +243,15 @@ struct ReportsView: View {
                 .foregroundStyle(Ink.fgDim)
 
             HStack(spacing: 10) {
-                summaryCell(value: "\(monthHeadcount)", label: "人日合计", color: Ink.fg)
+                summaryCell(value: "\(monthHeadcount)", label: String(localized: "人日合计", locale: AppLanguageManager.currentLocale), color: Ink.fg)
                 summaryCell(
                     value: monthPlantHours > 0 ? String(format: "%.0fh", monthPlantHours) : "—",
-                    label: "机械工时",
+                    label: String(localized: "机械工时", locale: AppLanguageManager.currentLocale),
                     color: Ink.fg
                 )
                 summaryCell(
                     value: "\(monthHazardCount)",
-                    label: "隐患",
+                    label: String(localized: "隐患", locale: AppLanguageManager.currentLocale),
                     color: monthHazardCount > 0 ? Ink.red : Ink.fgDim
                 )
             }
@@ -270,11 +270,11 @@ struct ReportsView: View {
         VStack(alignment: .leading, spacing: 16) {
             // 工种 Top 5(按人日)
             if !topPersonSubjects.isEmpty {
-                breakdownSection(title: "工种 Top \(topPersonSubjects.count)", items: topPersonSubjects, suffix: "人日")
+                breakdownSection(title: String(localized: "工种 Top \(topPersonSubjects.count)", locale: AppLanguageManager.currentLocale), items: topPersonSubjects, suffix: String(localized: "人日", locale: AppLanguageManager.currentLocale))
             }
             // 机械 Top 5(按工时)
             if !topPlantSubjects.isEmpty {
-                breakdownSection(title: "机械 Top \(topPlantSubjects.count)", items: topPlantSubjects, suffix: "h")
+                breakdownSection(title: String(localized: "机械 Top \(topPlantSubjects.count)", locale: AppLanguageManager.currentLocale), items: topPlantSubjects, suffix: "h")
             }
             // 隐患列表(最近 5 条)
             if !recentHazardNotes.isEmpty {
@@ -298,12 +298,14 @@ struct ReportsView: View {
                 .textCase(.uppercase)
                 .foregroundStyle(Ink.fgDim)
             ForEach(items, id: \.name) { item in
-                HStack(spacing: 8) {
+                HStack(alignment: .center, spacing: 10) {
                     Text(item.name)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Ink.fg)
-                        .frame(width: 70, alignment: .leading)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     GeometryReader { geo in
                         let w = geo.size.width * CGFloat(item.value / maxV)
                         ZStack(alignment: .leading) {
@@ -312,7 +314,7 @@ struct ReportsView: View {
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 2))
                     }
-                    .frame(height: 6)
+                    .frame(width: 80, height: 6)
                     Text(item.value == floor(item.value)
                          ? "\(Int(item.value))\(suffix)"
                          : String(format: "%.1f%@", item.value, suffix))
@@ -373,7 +375,7 @@ struct ReportsView: View {
                     HStack(alignment: .top, spacing: 8) {
                         Circle().fill(Ink.red).frame(width: 5, height: 5).padding(.top, 6)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(note.transcription.isEmpty ? "(仅录音/照片)" : note.transcription)
+                            Text(note.transcription.isEmpty ? String(localized: "(仅录音/照片)", locale: AppLanguageManager.currentLocale) : note.transcription)
                                 .font(.system(size: 13))
                                 .foregroundStyle(Ink.fg)
                                 .lineLimit(2)
@@ -398,8 +400,8 @@ struct ReportsView: View {
 
     private func monthDayLabel(_ d: Date) -> String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M 月 d 日"
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("MMMd")
         return f.string(from: d)
     }
 
@@ -424,10 +426,10 @@ struct ReportsView: View {
 
     private var outputList: some View {
         VStack(spacing: 0) {
-            outputRow(icon: "doc.text", title: "出 PDF", sub: "巡检日志 · 本周报告 · EOT 索赔", dest: .pdfHub)
-            outputRow(icon: "sparkles", title: "AI 发现", sub: "日记叙事 · 积压/静默/隐患洞察", dest: .aiHub)
-            outputRow(icon: "map", title: "平面图查看", sub: "按工地和楼层看图钉分布", dest: .floorPlan)
-            outputRow(icon: "minus.circle", title: "我们刻意不做", sub: "管理预期 · 想要的功能可能在这里", dest: .principles)
+            outputRow(icon: "doc.text", title: String(localized: "出 PDF", locale: AppLanguageManager.currentLocale), sub: String(localized: "巡检日志 · 本周报告 · EOT 索赔", locale: AppLanguageManager.currentLocale), dest: .pdfHub)
+            outputRow(icon: "sparkles", title: String(localized: "AI 发现", locale: AppLanguageManager.currentLocale), sub: String(localized: "日记叙事 · 积压/静默/隐患洞察", locale: AppLanguageManager.currentLocale), dest: .aiHub)
+            outputRow(icon: "map", title: String(localized: "平面图查看", locale: AppLanguageManager.currentLocale), sub: String(localized: "按工地和楼层看图钉分布", locale: AppLanguageManager.currentLocale), dest: .floorPlan)
+            outputRow(icon: "minus.circle", title: String(localized: "我们刻意不做", locale: AppLanguageManager.currentLocale), sub: String(localized: "管理预期 · 想要的功能可能在这里", locale: AppLanguageManager.currentLocale), dest: .principles)
         }
     }
 
@@ -480,23 +482,57 @@ enum ReportDestination: Hashable {
 
 /// P0-4 合并后:把 PDF 巡检日志 / 本周报告 / EOT 索赔 三个 PDF 导出集中在一个视图。
 struct PDFHubView: View {
+    @State private var profile = UserProfileManager.shared
+
     var body: some View {
         List {
+            // 按当前 profile 高亮专属 PDF
             Section {
+                if profile.current == .engineer {
+                    NavigationLink {
+                        InspectionReportListView()
+                    } label: {
+                        pdfRow(icon: "checkmark.seal.fill", title: String(localized: "Inspection Report", locale: AppLanguageManager.currentLocale), sub: String(localized: "工程师 · 巡检报告 + 图纸标注", locale: AppLanguageManager.currentLocale))
+                    }
+                }
+                if profile.current == .pm {
+                    // PM "主菜":Daily Site Diary。从 PDFHubView 直达台账模式生成。
+                    // 不新建一个 SiteDiaryReportView,直跳 LogTabView 的 ledger 模式,
+                    // 用户能看到当天台账 + 底部"生成 X 日志 PDF"按钮,符合 PM 既有工作流。
+                    Button {
+                        AppRouter.shared.requestTab(.log, logMode: .ledger)
+                    } label: {
+                        pdfRow(icon: "doc.richtext.fill", title: String(localized: "Daily Site Diary", locale: AppLanguageManager.currentLocale), sub: String(localized: "项目经理 · 每日施工日志 PDF", locale: AppLanguageManager.currentLocale))
+                    }
+                }
                 NavigationLink {
                     PDFExportView()
                 } label: {
-                    pdfRow(icon: "doc.text", title: "PDF 巡检日志", sub: "按日期或工地导出")
+                    pdfRow(icon: "doc.text", title: String(localized: "PDF 巡检日志", locale: AppLanguageManager.currentLocale), sub: String(localized: "按日期或工地导出(通用)", locale: AppLanguageManager.currentLocale))
                 }
                 NavigationLink {
                     WeeklySummaryView()
                 } label: {
-                    pdfRow(icon: "chart.bar", title: "本周报告", sub: "可复制的周总结文本")
+                    pdfRow(icon: "chart.bar", title: String(localized: "本周报告", locale: AppLanguageManager.currentLocale), sub: String(localized: "可复制的周总结文本", locale: AppLanguageManager.currentLocale))
                 }
                 NavigationLink {
                     EOTReportView()
                 } label: {
-                    pdfRow(icon: "cloud.rain", title: "EOT 工期延误", sub: "基于天气的索赔 · AI")
+                    pdfRow(icon: "cloud.rain", title: String(localized: "EOT 工期延误", locale: AppLanguageManager.currentLocale), sub: String(localized: "基于天气的索赔 · AI", locale: AppLanguageManager.currentLocale))
+                }
+            }
+
+            // 其他模板:只有 PM 看得到 Inspection 这个非主模板入口。
+            // Engineer 的主模板已经在第一段顶部出现,无需重复。
+            if profile.current == .pm {
+                Section {
+                    NavigationLink {
+                        InspectionReportListView()
+                    } label: {
+                        pdfRow(icon: "checkmark.seal", title: String(localized: "Inspection Report", locale: AppLanguageManager.currentLocale), sub: String(localized: "(工程师专用模板 · 也可导)", locale: AppLanguageManager.currentLocale))
+                    }
+                } header: {
+                    Text("其他模板")
                 }
             }
         }
@@ -529,12 +565,12 @@ struct AIInsightsHubView: View {
                 NavigationLink {
                     DailyNarrativeView()
                 } label: {
-                    aiRow(icon: "text.alignleft", title: "AI 日记叙事", sub: "把一天的记录拼成可读日志")
+                    aiRow(icon: "text.alignleft", title: String(localized: "AI 日记叙事", locale: AppLanguageManager.currentLocale), sub: String(localized: "把一天的记录拼成可读日志", locale: AppLanguageManager.currentLocale))
                 }
                 NavigationLink {
                     InsightsView()
                 } label: {
-                    aiRow(icon: "sparkles", title: "AI 洞察", sub: "逾期 · 静默 · 隐患积压")
+                    aiRow(icon: "sparkles", title: String(localized: "AI 洞察", locale: AppLanguageManager.currentLocale), sub: String(localized: "逾期 · 静默 · 隐患积压", locale: AppLanguageManager.currentLocale))
                 }
             }
         }
@@ -690,8 +726,8 @@ struct ProductPrinciplesView: View {
 
     private struct PrincipleItem: Identifiable {
         let id = UUID()
-        let title: String
-        let reason: String
+        let title: LocalizedStringKey
+        let reason: LocalizedStringKey
     }
 
     private let items: [PrincipleItem] = [

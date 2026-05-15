@@ -7,14 +7,24 @@
 //
 
 import SwiftUI
+import SwiftData
 import PhotosUI
 import PDFKit
 import UIKit
 import UniformTypeIdentifiers
 
 struct FloorPlanManageView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(filter: #Predicate<Note> { $0.deletedAt == nil }) private var allNotes: [Note]
     @State private var plans: [FloorPlan] = FloorPlansStorage.load()
     @State private var siteTags: [String] = SiteTagsStorage.load()
+    @State private var pendingDelete: PendingDelete?
+
+    private struct PendingDelete: Identifiable {
+        let id = UUID()
+        let plan: FloorPlan
+        let referencingCount: Int
+    }
 
     /// 当前正在上传的目标工地。用 `.sheet(item:)` 驱动 sheet,
     /// 保证 sheet 创建时一定拿到正确的工地名(避免原 isPresented + 单独 state 的时序竞态)。
@@ -96,6 +106,24 @@ struct FloorPlanManageView: View {
             plans = FloorPlansStorage.load()
             siteTags = SiteTagsStorage.load()
         }
+        .alert(
+            String(localized: "删除平面图?", locale: AppLanguageManager.currentLocale),
+            isPresented: Binding(
+                get: { pendingDelete != nil },
+                set: { if !$0 { pendingDelete = nil } }
+            ),
+            presenting: pendingDelete
+        ) { item in
+            Button("取消", role: .cancel) { pendingDelete = nil }
+            Button("继续删除", role: .destructive) {
+                clearReferences(to: item.plan)
+                FloorPlansStorage.remove(id: item.plan.id)
+                plans = FloorPlansStorage.load()
+                pendingDelete = nil
+            }
+        } message: { item in
+            Text("有 \(item.referencingCount) 条速记引用了「\(item.plan.name)」。继续删除会清除这些速记的图纸定位(其他内容保留)。")
+        }
         .sheet(item: $uploadTarget) { target in
             UploadFloorSheet(
                 siteTag: target.siteTag,
@@ -118,7 +146,7 @@ struct FloorPlanManageView: View {
 
     @ViewBuilder
     private func siteSection(site: String?, plans: [FloorPlan]) -> some View {
-        let header = site ?? "未分类"
+        let header = site ?? String(localized: "未分类", locale: AppLanguageManager.currentLocale)
         Section {
             ForEach(plans) { plan in
                 HStack {
@@ -136,10 +164,15 @@ struct FloorPlanManageView: View {
                 }
             }
             .onDelete { offsets in
-                for idx in offsets {
-                    FloorPlansStorage.remove(id: plans[idx].id)
+                guard let idx = offsets.first else { return }
+                let plan = plans[idx]
+                let refs = allNotes.filter { $0.floorPlanRef == plan.name }.count
+                if refs > 0 {
+                    pendingDelete = PendingDelete(plan: plan, referencingCount: refs)
+                } else {
+                    FloorPlansStorage.remove(id: plan.id)
+                    self.plans = FloorPlansStorage.load()
                 }
-                self.plans = FloorPlansStorage.load()
             }
         } header: {
             HStack {
@@ -148,6 +181,16 @@ struct FloorPlanManageView: View {
                     .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
             }
         }
+    }
+
+    /// 删图前清掉所有引用此图的 note 的 floorPlanRef + X/Y,避免 dangling 引用。
+    private func clearReferences(to plan: FloorPlan) {
+        for note in allNotes where note.floorPlanRef == plan.name {
+            note.floorPlanRef = nil
+            note.floorPlanX = nil
+            note.floorPlanY = nil
+        }
+        try? modelContext.save()
     }
 
 }
@@ -178,7 +221,7 @@ struct UploadFloorSheet: View {
                         Text("工地")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.secondary)
-                        Text(siteTag ?? "未分类")
+                        Text(siteTag ?? String(localized: "未分类", locale: AppLanguageManager.currentLocale))
                             .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
                             .padding(DesignTokens.Spacing.medium)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -265,7 +308,7 @@ struct UploadFloorSheet: View {
                     Button("保存") {
                         if let img = pickedImage {
                             let name = floorName.trimmingCharacters(in: .whitespacesAndNewlines)
-                            onPicked(img, name.isEmpty ? "未命名楼层" : name)
+                            onPicked(img, name.isEmpty ? String(localized: "未命名楼层", locale: AppLanguageManager.currentLocale) : name)
                         }
                     }
                     .disabled(pickedImage == nil || floorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -324,17 +367,17 @@ struct UploadFloorSheet: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             guard url.startAccessingSecurityScopedResource() else {
-                importError = "系统拒绝访问该文件。"
+                importError = String(localized: "系统拒绝访问该文件。", locale: AppLanguageManager.currentLocale)
                 return
             }
             defer { url.stopAccessingSecurityScopedResource() }
 
             guard let data = try? Data(contentsOf: url) else {
-                importError = "无法读取 PDF 文件。"
+                importError = String(localized: "无法读取 PDF 文件。", locale: AppLanguageManager.currentLocale)
                 return
             }
             guard let doc = PDFDocument(data: data), doc.pageCount > 0 else {
-                importError = "PDF 无效或没有页面。"
+                importError = String(localized: "PDF 无效或没有页面。", locale: AppLanguageManager.currentLocale)
                 return
             }
             loadedPDF = PDFDocumentRef(document: doc)
@@ -446,11 +489,13 @@ struct PDFPageSelectorSheet: View {
         }
     }
 
-    /// 高分辨率渲染:3× 缩放,但长边封顶 4000px 防止过大。
+    /// 高分辨率渲染:3× 缩放,长边封顶 2400px。
+    /// F7 (R4-P2-17):从 4000 降到 2400——A0 大图 4000² × 4 byte/px ≈ 64 MB UIImage,
+    /// 老 iPhone 后台容易 OOM。2400² ≈ 23 MB,清晰度对楼层图标记+导出 PDF 仍够用。
     private func highResRender(page: PDFPage) -> UIImage {
         let bounds = page.bounds(for: .mediaBox)
         let longer = max(bounds.width, bounds.height)
-        let maxDim: CGFloat = 4000
+        let maxDim: CGFloat = 2400
         let scale: CGFloat = min(3.0, maxDim / longer)
         let targetSize = CGSize(
             width: bounds.width * scale,

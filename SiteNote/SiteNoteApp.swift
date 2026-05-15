@@ -15,6 +15,14 @@ import SwiftData
 @main
 struct SiteNoteApp: App {
     init() {
+        // E3.11:删 App 再装回会把 sandbox 文件清掉,但 Keychain 默认幸存。
+        // 用 UserDefaults 上的"首次启动 flag"判定:不存在 = 新装/重装,主动清掉残留的 OpenAI Key。
+        // (Keychain 是 device-only,转手他人/卖机时残留更危险。)
+        let firstLaunchFlag = "app.firstLaunchDoneV1"
+        if !UserDefaults.standard.bool(forKey: firstLaunchFlag) {
+            KeychainStorage.delete(for: KeychainKeys.openAIAPIKey)
+            UserDefaults.standard.set(true, forKey: firstLaunchFlag)
+        }
         CrashReporter.shared.start()
     }
 
@@ -32,6 +40,8 @@ struct SiteNoteApp: App {
 /// 顶层 root view:负责 ModelContainer 创建,失败时显示恢复界面。
 private struct RootContainerView: View {
     @State private var state: InitState = .loading
+    @State private var languageManager = AppLanguageManager.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -42,28 +52,64 @@ private struct RootContainerView: View {
             case .ready(let container):
                 ContentView()
                     .modelContainer(container)
+                    // E3.5:时区变化(用户出差跨区)→ 老 dueDate/trigger 必须按新区重算。
+                    // 监听 .NSSystemTimeZoneDidChange + scenePhase active 双保险:
+                    // 系统通知有时不及时;前台回归时也补一刀。
+                    .onReceive(NotificationCenter.default.publisher(
+                        for: .NSSystemTimeZoneDidChange
+                    )) { _ in
+                        rescheduleAllNotes(in: container.mainContext)
+                    }
             case .failed(let error):
                 DatabaseRecoveryView(error: error) {
                     state = .loading
                 }
             }
         }
+        .environment(\.locale, languageManager.locale)
+        .onChange(of: scenePhase) { _, newPhase in
+            // 进入前台:补一次 reschedule。如果没切区就是无害的全量重算,
+            // SwiftUI 的 scenePhase 也覆盖了"App 长时间挂后台又回来"的场景。
+            guard newPhase == .active, case .ready(let container) = state else { return }
+            rescheduleAllNotes(in: container.mainContext)
+        }
     }
 
     private func initContainer() {
+        // E3.2:启动时把老路径下的内部目录搬到 Caches。只跑一次,失败静默。
+        BackupService.migrateLegacyDirectories()
+        CrashReporter.migrateLegacyDirectory()
+
         let schema = Schema([
             Note.self,
             LogEntry.self,
             ShareLog.self,
+            InspectionReport.self,
+            SiteVisitSchedule.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            // B2: 启动时清理孤儿 .m4a。录音中被杀的进程会留下永久不被引用的音频文件,
+            // 长期累积可能占满磁盘。同步执行,失败不阻塞。
+            VoiceCaptureService.cleanupOrphanAudio(modelContext: container.mainContext)
+            // E3.1:启动时跑垃圾桶 GC,把过保留期(30 天)的软删 note 永久清掉。
+            TrashView.runGarbageCollection(modelContext: container.mainContext)
             state = .ready(container)
         } catch {
             print("[SiteNote] ModelContainer 创建失败: \(error.localizedDescription)")
             state = .failed(error)
         }
+    }
+
+    /// E3.5:重排所有未完成且需推送的 note。给时区监听 + scenePhase 钩子复用。
+    @MainActor
+    private func rescheduleAllNotes(in context: ModelContext) {
+        let descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate<Note> { $0.deletedAt == nil && $0.isDone == false }
+        )
+        guard let notes = try? context.fetch(descriptor) else { return }
+        NotificationService.shared.rescheduleAll(notes: notes)
     }
 
     enum InitState {

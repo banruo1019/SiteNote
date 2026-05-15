@@ -45,14 +45,12 @@ enum NoteClassificationPipeline {
         if aiEnabled {
             let sites = SiteTagsStorage.load()
             let subs = SubTagsStorage.load().map(\.name)
-            let tpls = InspectionTemplatesStorage.load().map(\.name)
             let clauses = ClauseRefsStorage.load()
 
             if let ai = await AIService.shared.classifyNote(
                 transcription: note.transcription,
                 availableSites: sites,
                 availableSubTags: subs,
-                availableTemplates: tpls,
                 availableClauses: clauses
             ) {
                 mergeAI(ai, into: &suggestion, hasGPSHit: suggestion.site?.source == .gps)
@@ -60,12 +58,11 @@ enum NoteClassificationPipeline {
         }
 
         // ---------- 日志 note 裁剪 ----------
-        // 施工日记只关心"哪个工地 + 属于哪类任务",不关心 deadline/隐患/模板/条款。
+        // 施工日记只关心"哪个工地 + 属于哪类任务",不关心 deadline/隐患/条款。
         // 把无关字段扔掉,避免建议卡上出现误导的 chips。
         if note.isDiaryRecord {
             suggestion.deadline = nil
             suggestion.hazard = nil
-            suggestion.template = nil
             suggestion.clause = nil
         }
 
@@ -84,7 +81,7 @@ enum NoteClassificationPipeline {
 
     /// 用户点"全部确认"时调。把 suggestion 的各字段**非覆盖式**地合并到 Note 真实字段上,
     /// 记录 GPS 学习,清 JSON。
-    /// - Note: siteTag 和 isHazard 会覆盖(用户点确认就是表示同意);templateName/clauseRef 同理;
+    /// - Note: siteTag 和 isHazard 会覆盖(用户点确认就是表示同意);clauseRef 同理;
     ///         subTags 是去重合并,不清空已有。deadline 覆盖(因为本来就是单值字段)。
     static func apply(suggestion: NoteClassificationSuggestion, to note: Note) {
         if let s = suggestion.site {
@@ -122,9 +119,6 @@ enum NoteClassificationPipeline {
             // 必须 cancel 旧的再 schedule,否则用户少收一半推送。
             NotificationService.shared.cancel(for: note)
             NotificationService.shared.schedule(for: note)
-        }
-        if let t = suggestion.template {
-            note.templateName = t.value
         }
         if let c = suggestion.clause {
             note.contractClauseRef = c.value
@@ -206,15 +200,6 @@ enum NoteClassificationPipeline {
             )
         }
 
-        if let t = ai.templateName, !t.isEmpty {
-            suggestion.template = FieldSuggestion(
-                value: t,
-                confidence: ai.confidences?["templateName"] ?? 0.7,
-                reasoning: ai.reasoning?["templateName"] ?? "AI 建议",
-                source: .ai
-            )
-        }
-
         if let c = ai.clauseRef, !c.isEmpty {
             suggestion.clause = FieldSuggestion(
                 value: c,
@@ -232,7 +217,6 @@ enum NoteClassificationPipeline {
         if let x = s.deadline { parts.append("deadline=\(x.value)") }
         if let x = s.subTags { parts.append("tags=\(x.value.joined(separator: ","))") }
         if let x = s.hazard, x.value { parts.append("hazard") }
-        if let x = s.template { parts.append("tpl=\(x.value)") }
         if let x = s.clause { parts.append("clause=\(x.value)") }
         return parts.joined(separator: " · ")
     }

@@ -45,11 +45,12 @@ enum InsightsService {
                     .prefix(3)
                     .map { String($0.transcription.prefix(20)) }
                     .joined(separator: " · ")
+                let count = longOverdue.count
                 insights.append(Insight(
                     icon: "clock.badge.exclamationmark.fill",
                     severity: .critical,
-                    title: "\(longOverdue.count) 条已延期超过 7 天",
-                    detail: "这些风险在累积,建议今天就处理:\(sample)"
+                    title: String(localized: "\(count) 条已延期超过 7 天", locale: AppLanguageManager.currentLocale),
+                    detail: String(localized: "这些风险在累积,建议今天就处理:\(sample)", locale: AppLanguageManager.currentLocale)
                 ))
             }
         }
@@ -57,11 +58,12 @@ enum InsightsService {
         // 2. 隐患未处理
         let pendingHazards = allNotes.filter { $0.isHazard && !$0.isDone }
         if pendingHazards.count >= 2 {
+            let count = pendingHazards.count
             insights.append(Insight(
                 icon: "exclamationmark.triangle.fill",
                 severity: .warning,
-                title: "有 \(pendingHazards.count) 条隐患未处理",
-                detail: "OHS 合规要求,请尽快解决或上报上级。"
+                title: String(localized: "有 \(count) 条隐患未处理", locale: AppLanguageManager.currentLocale),
+                detail: String(localized: "OHS 合规要求,请尽快解决或上报上级。", locale: AppLanguageManager.currentLocale)
             ))
         }
 
@@ -73,11 +75,13 @@ enum InsightsService {
             }
         }
         if let worst = assigneeOverdue.max(by: { $0.value < $1.value }), worst.value >= 3 {
+            let name = worst.key
+            let cnt = worst.value
             insights.append(Insight(
                 icon: "person.fill.questionmark",
                 severity: .warning,
-                title: "\(worst.key) 有 \(worst.value) 条未处理",
-                detail: "指派给他/她的任务积压,建议当面追一下。"
+                title: String(localized: "\(name) 有 \(cnt) 条未处理", locale: AppLanguageManager.currentLocale),
+                detail: String(localized: "指派给他/她的任务积压,建议当面追一下。", locale: AppLanguageManager.currentLocale)
             ))
         }
 
@@ -97,8 +101,8 @@ enum InsightsService {
             insights.append(Insight(
                 icon: "clock.badge.questionmark",
                 severity: .info,
-                title: "\(site) 已 \(days) 天无记录",
-                detail: "如果工地仍在施工,建议回访或补记,避免记录断层影响 EOT 证据。"
+                title: String(localized: "\(site) 已 \(days) 天无记录", locale: AppLanguageManager.currentLocale),
+                detail: String(localized: "如果工地仍在施工,建议回访或补记,避免记录断层影响 EOT 证据。", locale: AppLanguageManager.currentLocale)
             ))
         }
 
@@ -110,11 +114,12 @@ enum InsightsService {
             }.map { cal.startOfDay(for: $0.createdAt) })
 
             if adverseDays.count >= 2 {
+                let count = adverseDays.count
                 insights.append(Insight(
                     icon: "cloud.rain.fill",
                     severity: .info,
-                    title: "本周有 \(adverseDays.count) 天天气异常",
-                    detail: "可到「报告 → EOT 工期延误」生成正式证据报告。"
+                    title: String(localized: "本周有 \(count) 天天气异常", locale: AppLanguageManager.currentLocale),
+                    detail: String(localized: "可到「报告 → EOT 工期延误」生成正式证据报告。", locale: AppLanguageManager.currentLocale)
                 ))
             }
         }
@@ -123,11 +128,12 @@ enum InsightsService {
         if let weekAgo = cal.date(byAdding: .day, value: -7, to: now) {
             let doneThisWeek = allNotes.filter { $0.isDone && $0.createdAt > weekAgo }
             if doneThisWeek.count >= 5 {
+                let count = doneThisWeek.count
                 insights.append(Insight(
                     icon: "checkmark.seal.fill",
                     severity: .info,
-                    title: "本周完成 \(doneThisWeek.count) 项",
-                    detail: "不错的节奏!可考虑生成周报分享给团队。"
+                    title: String(localized: "本周完成 \(count) 项", locale: AppLanguageManager.currentLocale),
+                    detail: String(localized: "不错的节奏!可考虑生成周报分享给团队。", locale: AppLanguageManager.currentLocale)
                 ))
             }
         }

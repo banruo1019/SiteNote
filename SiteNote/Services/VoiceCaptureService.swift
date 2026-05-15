@@ -8,6 +8,7 @@
 import Foundation
 import Speech
 import AVFoundation
+import SwiftData
 
 /// 语音捕获服务：按住录音期间同步完成流式转写 + 写 .m4a 文件。
 ///
@@ -32,13 +33,13 @@ final class VoiceCaptureService {
         var errorDescription: String? {
             switch self {
             case .notAuthorized:
-                return "请在 iPhone 设置 → SiteNote 里允许「麦克风」和「语音识别」。"
+                return String(localized: "请在 iPhone 设置 → SiteNote 里允许「麦克风」和「语音识别」。", locale: AppLanguageManager.currentLocale)
             case .recognizerUnavailable:
-                return "本机不支持中文语音识别。请检查系统是否已下载中文听写包。"
+                return String(localized: "本机不支持中文语音识别。请检查系统是否已下载中文听写包。", locale: AppLanguageManager.currentLocale)
             case .audioSessionFailed:
-                return "麦克风启动失败,请稍后再试。"
+                return String(localized: "麦克风启动失败,请稍后再试。", locale: AppLanguageManager.currentLocale)
             case .fileWriteFailed:
-                return "音频文件写入失败。"
+                return String(localized: "音频文件写入失败。", locale: AppLanguageManager.currentLocale)
             }
         }
     }
@@ -50,6 +51,9 @@ final class VoiceCaptureService {
         /// 音频文件的相对路径（相对 Documents，例如 "audio/ABC.m4a"）。
         /// 文件为空或写入失败时为 `nil`。
         let audioRelativePath: String?
+        /// E1.4:识别期间 recognizer 抛 error(突然 unavailable / 内部错误)→ true。
+        /// HomeViewModel 看到 true 时给用户一个提示:音频已保留,但识别引擎挂了。
+        let recognitionFailed: Bool
     }
 
     private var recognizer: SFSpeechRecognizer?
@@ -60,8 +64,33 @@ final class VoiceCaptureService {
     private var audioFile: AVAudioFile?
     private var currentFileURL: URL?
     private var latestTranscription: String = ""
+    /// E1.4:recognitionTask 回调收到 error 时置 true。stopCapturing 把它带到结果里。
+    /// 录制中识别引擎抽风(unavailable / network 中断 on-device fail-back / 系统 bug)
+    /// → callback 不再 fire → latestTranscription 为空 → 用户看不到任何反馈。
+    /// 拿这个标记走错误路径,而不是默默吞。
+    private var recognitionFailed: Bool = false
+
+    /// 录音中是否被系统(来电/Siri/闹钟)或路由变更(AirPods 拔掉)打断的回调。
+    /// 在 startCapturing 时由调用方设置,中断发生时主线程触发。
+    var onInterruption: (@MainActor () -> Void)?
+
+    /// 当前是否正在录音(audioEngine 运行中)。用于防御重复 startCapturing。
+    var isRecording: Bool { audioEngine.isRunning }
+
+    /// 已注册的中断 / 路由变更观察者。stopCapturing 时反注册。
+    private var interruptionObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
 
     init() {}
+
+    deinit {
+        if let observer = interruptionObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = routeChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 
     /// 从用户设置里读取当前语言并构造 `SFSpeechRecognizer`。
     /// 每次 `startCapturing` 会调一次，保证设置变更即时生效。
@@ -147,9 +176,16 @@ final class VoiceCaptureService {
         onPartialResult: @escaping @MainActor (String) -> Void,
         onAudioLevel: (@MainActor (Float) -> Void)? = nil
     ) throws {
+        // B5 防御:已经在录音再次进入说明状态机错乱(比如 1.5s 内连按两次)。
+        // 抛错让 HomeViewModel 走错误路径,不要去碰 audioEngine.start 第二次。
+        guard !audioEngine.isRunning else {
+            throw VoiceError.audioSessionFailed
+        }
+
         recognitionTask?.cancel()
         recognitionTask = nil
         latestTranscription = ""
+        recognitionFailed = false
 
         refreshRecognizer()
         guard let recognizer, recognizer.isAvailable else {
@@ -229,7 +265,18 @@ final class VoiceCaptureService {
             throw VoiceError.audioSessionFailed
         }
 
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, _ in
+        // E1.4:不再忽略 error。识别期间 recognizer 抽风时 callback 收到 error,
+        // 我们把 recognitionFailed 置 true,stopCapturing 通过结果 surface 给上层。
+        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            if let error {
+                // 收到 error 一般意味着这次任务已经废掉,后续不会再 fire。
+                // 标记失败让 stopCapturing 能区分"用户没说话"和"识别引擎挂了"。
+                Task { @MainActor in
+                    self?.recognitionFailed = true
+                }
+                print("[SiteNote] STT recognitionTask error: \(error.localizedDescription)")
+                return
+            }
             guard let result else { return }
             let transcription = result.bestTranscription.formattedString
             Task { @MainActor in
@@ -237,11 +284,86 @@ final class VoiceCaptureService {
                 onPartialResult(transcription)
             }
         }
+
+        registerInterruptionObservers()
+    }
+
+    /// 注册 AVAudioSession 中断 / 路由变更观察者。系统中断会停 audioEngine
+    /// 但不会重置我们的状态,所以必须主动收尾,否则 isRecording 永远卡 true。
+    private func registerInterruptionObservers() {
+        // 先反注册旧的(防御性,正常路径里 stopCapturing 已清掉)
+        if let observer = interruptionObserver {
+            NotificationCenter.default.removeObserver(observer)
+            interruptionObserver = nil
+        }
+        if let observer = routeChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            routeChangeObserver = nil
+        }
+
+        let center = NotificationCenter.default
+        interruptionObserver = center.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] note in
+            guard let info = note.userInfo,
+                  let typeRaw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: typeRaw) else {
+                return
+            }
+            if type == .began {
+                Task { @MainActor [weak self] in
+                    self?.handleInterruption()
+                }
+            }
+        }
+
+        routeChangeObserver = center.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] note in
+            guard let info = note.userInfo,
+                  let reasonRaw = info[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                  let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRaw) else {
+                return
+            }
+            // 只处理设备拔出(老设备不可用):AirPods 拔掉、有线耳机拔掉。
+            // 其他类型(.newDeviceAvailable / .categoryChange)系统会自动衔接,不必中断。
+            if reason == .oldDeviceUnavailable {
+                Task { @MainActor [weak self] in
+                    self?.handleInterruption()
+                }
+            }
+        }
+    }
+
+    /// 收到中断:主动停录、清状态、回调 HomeViewModel。
+    /// 与 stopCapturing 的差别:我们不返回 CaptureResult,因为 RecordView
+    /// 的"按住松开"语义已经被破坏,只能丢弃。但音频文件 / partial 已经写到这里,
+    /// HomeViewModel 决定怎么呈现。
+    @MainActor
+    private func handleInterruption() {
+        guard audioEngine.isRunning else { return }
+        _ = stopCapturing()
+        onInterruption?()
     }
 
     /// 停止录音并收尾。幂等。
     /// - Returns: 最终转写 + 音频文件相对路径。
     func stopCapturing() -> CaptureResult {
+        // 反注册中断观察者(B1)。即使 audioEngine 没在跑也要清,handleInterruption
+        // 进来后 stopCapturing 会再调一次 stop()——必须保证幂等。
+        if let observer = interruptionObserver {
+            NotificationCenter.default.removeObserver(observer)
+            interruptionObserver = nil
+        }
+        if let observer = routeChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            routeChangeObserver = nil
+        }
+
         if audioEngine.isRunning {
             audioEngine.stop()
             audioEngine.inputNode.removeTap(onBus: 0)
@@ -268,11 +390,17 @@ final class VoiceCaptureService {
         currentFileURL = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
+        // E1.4:把失败标记带出去——同时只在转写为空且失败时才视为真失败,
+        // 因为 SFSpeechRecognitionTask 在已经吐出 final 之后再报 error 也是常见的(任务收尾正常路径),
+        // 那种情况 latestTranscription 非空,不应该当失败。
+        let failed = recognitionFailed && latestTranscription.isEmpty
         let result = CaptureResult(
             transcription: latestTranscription,
-            audioRelativePath: relativePath
+            audioRelativePath: relativePath,
+            recognitionFailed: failed
         )
         latestTranscription = ""
+        recognitionFailed = false
         return result
     }
 
@@ -291,6 +419,68 @@ final class VoiceCaptureService {
         // 对数缩放到 0-1,让小声音也看得见 bar
         let boosted = min(1.0, rms * 12)
         return boosted
+    }
+
+    /// 启动孤儿 .m4a 清理(B2)。
+    ///
+    /// 录音过程中 App 被杀,`stopCapturing` 不会调,文件永久留在 Documents/audio/。
+    /// 启动时扫一遍:删除 mtime 早于 1 小时前 **且** 没有任何 Note 引用其文件名的文件。
+    /// 1 小时门槛避免误删:正在录的音频或刚保存还没 commit 的 fly。
+    ///
+    /// 同步执行,失败静默不阻塞启动。在 `RootContainerView.initContainer` 成功后调。
+    static func cleanupOrphanAudio(modelContext: ModelContext) {
+        let fm = FileManager.default
+        guard let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return
+        }
+        let audioDir = docs.appendingPathComponent("audio", isDirectory: true)
+        guard fm.fileExists(atPath: audioDir.path) else { return }
+
+        // 拉所有还活着的 Note 的 audioFilePath。集合查可以 O(1) 命中。
+        let descriptor = FetchDescriptor<Note>()
+        let referenced: Set<String>
+        do {
+            let allNotes = try modelContext.fetch(descriptor)
+            referenced = Set(allNotes.compactMap { $0.audioFilePath })
+        } catch {
+            // SwiftData 拉不出来就放弃 GC,不要冒险删任何文件。
+            print("[SiteNote] cleanupOrphanAudio: 读 Note 失败,跳过. \(error.localizedDescription)")
+            return
+        }
+
+        let cutoff = Date().addingTimeInterval(-3600) // 1 小时前
+        let contents: [URL]
+        do {
+            contents = try fm.contentsOfDirectory(
+                at: audioDir,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            )
+        } catch {
+            print("[SiteNote] cleanupOrphanAudio: 列目录失败. \(error.localizedDescription)")
+            return
+        }
+
+        var deleted = 0
+        for fileURL in contents {
+            guard fileURL.pathExtension.lowercased() == "m4a" else { continue }
+            let relative = "audio/\(fileURL.lastPathComponent)"
+            if referenced.contains(relative) { continue }
+
+            let mtime = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? Date()
+            guard mtime < cutoff else { continue }
+
+            do {
+                try fm.removeItem(at: fileURL)
+                deleted += 1
+            } catch {
+                print("[SiteNote] cleanupOrphanAudio: 删除失败 \(fileURL.lastPathComponent). \(error.localizedDescription)")
+            }
+        }
+        if deleted > 0 {
+            print("[SiteNote] cleanupOrphanAudio: 清理 \(deleted) 个孤儿 .m4a")
+        }
     }
 
     /// 在 Documents/audio 下生成一个新文件的 URL，确保目录存在。

@@ -32,11 +32,11 @@ enum LogKind: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .person: return "人员"
-        case .plant: return "机械"
-        case .delivery: return "送达"
-        case .visitor: return "访客"
-        case .event: return "事件"
+        case .person: return String(localized: "人员", locale: AppLanguageManager.currentLocale)
+        case .plant: return String(localized: "机械", locale: AppLanguageManager.currentLocale)
+        case .delivery: return String(localized: "送达", locale: AppLanguageManager.currentLocale)
+        case .visitor: return String(localized: "访客", locale: AppLanguageManager.currentLocale)
+        case .event: return String(localized: "事件", locale: AppLanguageManager.currentLocale)
         }
     }
 }

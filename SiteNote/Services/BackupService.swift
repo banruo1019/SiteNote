@@ -15,8 +15,22 @@ import Foundation
 /// 调用方拿到 URL 后用 UIActivityViewController 让用户选择保存到 iCloud Drive / 邮件 / 文件等。
 enum BackupService {
 
-    /// 备份元数据子目录(临时塞在 Documents 里好让 NSFileCoordinator 一并打包)。
+    /// 备份元数据子目录名。**之前**塞在 Documents/ 下,但 iOS Files App 会把 Documents 暴露给用户,
+    /// 用户看到 `_backup_meta/` 莫名其妙。改成放 Library/Caches/(Caches 不进 iTunes/iCloud 备份,
+    /// 系统空间紧张时会清——对临时元数据来说没问题)。
     private static let metaDirName = "_backup_meta"
+
+    /// 真实存放路径:Library/Caches/_backup_meta。失败回退到 tempDir 子目录(几乎不可能失败)。
+    private static func metaDir() -> URL {
+        let fm = FileManager.default
+        let base = (try? fm.url(
+            for: .cachesDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )) ?? fm.temporaryDirectory
+        return base.appendingPathComponent(metaDirName, isDirectory: true)
+    }
 
     enum BackupError: LocalizedError {
         case documentsDirectoryMissing
@@ -25,9 +39,9 @@ enum BackupService {
         var errorDescription: String? {
             switch self {
             case .documentsDirectoryMissing:
-                return "无法访问 App 的数据目录。"
+                return String(localized: "无法访问 App 的数据目录。", locale: AppLanguageManager.currentLocale)
             case .zipCreationFailed(let detail):
-                return "备份失败: \(detail)"
+                return String(localized: "备份失败:\(detail)", locale: AppLanguageManager.currentLocale)
             }
         }
     }
@@ -36,28 +50,58 @@ enum BackupService {
     /// - Returns: 临时 .zip 文件的 URL。
     /// - Throws: `BackupError`。
     static func createBackupZip() throws -> URL {
-        guard let docs = FileManager.default.urls(
+        let fm = FileManager.default
+        guard let docs = fm.urls(
             for: .documentDirectory,
             in: .userDomainMask
         ).first else {
             throw BackupError.documentsDirectoryMissing
         }
 
-        // 打包前先生成元数据快照(SwiftData 文件 + UserDefaults JSON),临时塞 Documents。
-        // 无论 zip 成败,defer 清掉,避免污染 Documents。
-        let metaDir = docs.appendingPathComponent(metaDirName, isDirectory: true)
-        try? FileManager.default.removeItem(at: metaDir)
-        try? FileManager.default.createDirectory(at: metaDir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: metaDir) }
+        // 元数据快照写到 Caches/_backup_meta(不再污染 Documents,用户在 Files App 看不见)。
+        let metaDir = metaDir()
+        try? fm.removeItem(at: metaDir)
+        try? fm.createDirectory(at: metaDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: metaDir) }
+        // 这层目录从不参与 iCloud/iTunes 备份。
+        var metaResource = URLResourceValues()
+        metaResource.isExcludedFromBackup = true
+        var mutableMeta = metaDir
+        try? mutableMeta.setResourceValues(metaResource)
 
         snapshotSwiftDataStore(into: metaDir)
         snapshotUserDefaults(into: metaDir)
 
-        let tempDir = FileManager.default.temporaryDirectory
+        // 由于 meta 不再在 Documents 下,直接 zip Documents 拿不到 meta。
+        // 改成:在 Caches 下搭个 staging 目录,把 Documents 各子项**硬链/复制**进来 + meta 一并放进去,
+        // 然后 NSFileCoordinator 打 staging 这一坨。
         let timestamp = Int(Date().timeIntervalSince1970)
-        let destURL = tempDir.appendingPathComponent("SiteNote-backup-\(timestamp).zip")
+        let cachesBase: URL = {
+            (try? fm.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)) ?? fm.temporaryDirectory
+        }()
+        let staging = cachesBase.appendingPathComponent("_backup_staging_\(timestamp)", isDirectory: true)
+        try? fm.removeItem(at: staging)
+        try? fm.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: staging) }
 
-        try? FileManager.default.removeItem(at: destURL)
+        // 复制 Documents 下"用户内容"子项;跳过临时/隐藏的(_crash_reports 旧路径 / _backup_meta 旧路径)。
+        if let entries = try? fm.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil) {
+            for entry in entries {
+                let name = entry.lastPathComponent
+                if name == "_backup_meta" || name == "_crash_reports" { continue }
+                let dst = staging.appendingPathComponent(name)
+                // 硬链快(同卷可),失败降级到 copy。
+                if (try? fm.linkItem(at: entry, to: dst)) == nil {
+                    try? fm.copyItem(at: entry, to: dst)
+                }
+            }
+        }
+        // 把 meta 也搬到 staging。
+        let metaInStaging = staging.appendingPathComponent(metaDirName, isDirectory: true)
+        try? fm.copyItem(at: metaDir, to: metaInStaging)
+
+        let destURL = fm.temporaryDirectory.appendingPathComponent("SiteNote-backup-\(timestamp).zip")
+        try? fm.removeItem(at: destURL)
 
         var coordError: NSError?
         var moveError: Error?
@@ -65,12 +109,12 @@ enum BackupService {
         // .forUploading 让系统给我们一个打包好的 zip 临时副本
         let coordinator = NSFileCoordinator()
         coordinator.coordinate(
-            readingItemAt: docs,
+            readingItemAt: staging,
             options: [.forUploading],
             error: &coordError
         ) { coordinatedURL in
             do {
-                try FileManager.default.copyItem(at: coordinatedURL, to: destURL)
+                try fm.copyItem(at: coordinatedURL, to: destURL)
             } catch {
                 moveError = error
             }
@@ -84,6 +128,17 @@ enum BackupService {
         }
 
         return destURL
+    }
+
+    /// 从旧路径搬走遗留:之前 `_backup_meta` 在 Documents/ 下若残留(异常退出时 defer 没跑),
+    /// 启动时静默清掉,避免 Files App 暴露老用户的内部目录。
+    static func migrateLegacyDirectories() {
+        let fm = FileManager.default
+        guard let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let oldMeta = docs.appendingPathComponent(metaDirName, isDirectory: true)
+        if fm.fileExists(atPath: oldMeta.path) {
+            try? fm.removeItem(at: oldMeta)
+        }
     }
 
     /// 把 SwiftData 默认 store 文件(.store / -wal / -shm)拷到 metaDir/store/。
@@ -110,19 +165,61 @@ enum BackupService {
         }
     }
 
-    /// 把 SiteNote 自己的 UserDefaults 键(以 "settings." 开头)序列化为 JSON 写到 metaDir/userdefaults.json。
-    /// 不导出系统/Apple 私有键以减小尺寸 + 避免"导回 App 时把不该恢复的偏好搞乱"。
+    /// E3.4:显式白名单 + 前缀兜底。原来只用 `hasPrefix("settings.")` 模糊匹配,
+    /// 一旦未来引入第三方库往 settings.xxx 写键就被一并备份了。这里给所有当前确认要备份的键
+    /// 列出来,让审计/将来 PR 加键时一眼能看到"这条要不要进备份"。
+    /// 仍然保留前缀兜底,避免漏掉个别小工具自加的 settings.xxx 临时键。
+    static let backupKeys: [String] = [
+        // 语言 / 角色
+        "settings.appLanguage",
+        "settings.userProfile",
+        "settings.userProfile.selected",
+        // 录入 / 提醒
+        "settings.speechLanguage",
+        "settings.morningReminderHour",
+        "settings.morningReminderMinute",
+        "settings.dailyDigestEnabled",
+        "settings.inspectorName",
+        // AI 总开关 / 单功能
+        "settings.aiMasterEnabled",
+        "settings.aiPolishEnabled",
+        "settings.aiAutoTagEnabled",
+        "settings.aiOmniClassifyEnabled",
+        "settings.aiLogExtractEnabled",
+        // AI 引擎配置(API Key 在 Keychain,不进备份)
+        "settings.aiEngine",
+        "settings.openAITextModel",
+        "settings.openAIVisionModel",
+        "settings.openAIEmbeddingModel",
+        // 用户内容列表
+        "settings.siteTags",
+        "settings.subTagsGlobalV1",
+        "settings.clauseRefs",
+        "settings.clauseRefs.seeded",
+        "settings.floorPlans",
+        "settings.siteCentroids.v1",
+        "settings.jargonCustomTerms",
+        "settings.jargonShortcuts",
+        // Obsidian 导出路径(bookmark 是 Data,导出时会被 isValidJSONObject 过滤掉,无害)
+        "settings.obsidian.exportFolderPath",
+        // 引导
+        "settings.onboarding.dismissed.v1",
+        "settings.aiKeyHint.dismissed.v1",
+    ]
+
+    /// 把 SiteNote 自己的 UserDefaults 键序列化为 JSON 写到 metaDir/userdefaults.json。
+    /// 用 `backupKeys` 显式白名单,避免误备份第三方/系统键。
     private static func snapshotUserDefaults(into metaDir: URL) {
         let defaults = UserDefaults.standard
-        let dict = defaults.dictionaryRepresentation()
-        let mineOnly = dict.filter { key, _ in key.hasPrefix("settings.") }
-
-        // 只保留 JSON 可序列化的值(Data 跳过)。
-        let safe = mineOnly.compactMapValues { value -> Any? in
-            JSONSerialization.isValidJSONObject([value]) ? value : nil
+        var picked: [String: Any] = [:]
+        for key in backupKeys {
+            guard let value = defaults.object(forKey: key) else { continue }
+            if JSONSerialization.isValidJSONObject([value]) {
+                picked[key] = value
+            }
         }
         guard let data = try? JSONSerialization.data(
-            withJSONObject: safe,
+            withJSONObject: picked,
             options: [.prettyPrinted, .sortedKeys]
         ) else { return }
 

@@ -42,14 +42,12 @@ struct NoteClassificationSuggestion: Codable {
     var deadline: FieldSuggestion<String>?
     /// 是否隐患。只在明确有安全问题时 true;false/null 不覆盖用户原值。
     var hazard: FieldSuggestion<Bool>?
-    /// 巡检模板名。
-    var template: FieldSuggestion<String>?
     /// 合同条款引用。
     var clause: FieldSuggestion<String>?
 
     var isEmpty: Bool {
         site == nil && subTags == nil && deadline == nil
-            && hazard == nil && template == nil && clause == nil
+            && hazard == nil && clause == nil
     }
 
     /// 高置信度字段的数量(给 UI 判断"是否足以 prefill")。
@@ -59,7 +57,6 @@ struct NoteClassificationSuggestion: Codable {
         if let s = subTags, s.confidence >= 0.85 { n += 1 }
         if let s = deadline, s.confidence >= 0.85 { n += 1 }
         if let s = hazard, s.confidence >= 0.85 { n += 1 }
-        if let s = template, s.confidence >= 0.85 { n += 1 }
         if let s = clause, s.confidence >= 0.85 { n += 1 }
         return n
     }

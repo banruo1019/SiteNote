@@ -209,12 +209,14 @@ struct PDFExportView: View {
     /// 统一的日期范围文案,精确到分钟。
     private var rangeDescription: String {
         let formatter = PDFExportView.rangeFormatter
-        return "\(formatter.string(from: startDate))  至  \(formatter.string(from: endDate))"
+        let s = formatter.string(from: startDate)
+        let e = formatter.string(from: endDate)
+        return String(localized: "\(s)  至  \(e)", locale: AppLanguageManager.currentLocale)
     }
 
     static let rangeFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
+        f.locale = Locale.current
         f.dateFormat = "yyyy-MM-dd HH:mm"
         return f
     }()
@@ -227,10 +229,10 @@ struct PDFExportView: View {
 
     private func generatePDF(with notes: [Note]) {
         guard !notes.isEmpty else {
-            errorMessage = "没有选中任何记录。"
+            errorMessage = String(localized: "没有选中任何记录。", locale: AppLanguageManager.currentLocale)
             return
         }
-        let title = selectedTag.map { "\($0) 巡检日志" } ?? "SiteNote 巡检日志"
+        let title = selectedTag.map { String(localized: "\($0) 巡检日志", locale: AppLanguageManager.currentLocale) } ?? String(localized: "SiteNote 巡检日志", locale: AppLanguageManager.currentLocale)
         Task {
             do {
                 let url = try PDFExportService.generatePDF(
@@ -377,7 +379,7 @@ private struct NoteSelectionSheet: View {
                 ? String(note.transcription.prefix(limit)) + "…"
                 : note.transcription
         }
-        return "(仅录音/照片)"
+        return String(localized: "(仅录音/照片)", locale: AppLanguageManager.currentLocale)
     }
 
     private var bottomBar: some View {

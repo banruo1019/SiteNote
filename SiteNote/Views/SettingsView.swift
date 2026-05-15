@@ -10,22 +10,91 @@ import SwiftUI
 import SwiftData
 import UIKit
 import UserNotifications
+import PhotosUI
 
-/// 设置首页。3 组导航(P1-3)。
+/// 设置首页。3 组导航(P1-3) + 顶部"我是"角色切换。
 struct SettingsView: View {
+    @State private var profileManager = UserProfileManager.shared
+    @State private var languageManager = AppLanguageManager.shared
+    @State private var showLanguageRestartHint = false
+
     var body: some View {
+        if profileManager.current == .engineer {
+            // Engineer 模式:直接走新的精简主页,跳过原 Form。
+            // PM 仍走下面的原 Form(else 分支)。
+            EngineerSettingsRoot()
+        } else {
+            engineerlessForm
+        }
+    }
+
+    /// 原 PM 的设置表单。整段从原 body 搬过来,modifier 全部保留。
+    @ViewBuilder
+    private var engineerlessForm: some View {
         Form {
-            // 常用 — 日常会反复打开:提醒时间、导出报告、清数据
-            Section("常用") {
+            // 我是 — 角色切换(决定主屏分组 / AI 重点 / 默认 PDF)
+            Section {
                 NavigationLink {
-                    RemindersSettingsView()
+                    ProfileSettingsView()
                 } label: {
                     settingsRow(
-                        icon: "bell.badge",
-                        color: .orange,
-                        title: "提醒",
-                        subtitle: "推送时间、每日汇总"
+                        icon: profileManager.current.sfSymbol,
+                        color: profileColor(profileManager.current),
+                        title: "我是 \(profileManager.current.displayName)",
+                        subtitle: LocalizedStringKey(profileManager.current.subtitle)
                     )
+                }
+            } header: {
+                Text("角色")
+            } footer: {
+                Text("决定主屏分组、AI 识别重点、默认导出 PDF 模板。可随时切换。")
+                    .font(.system(size: 12))
+            }
+
+            // 语言 — 三档:跟随系统 / 简体中文 / English
+            Section {
+                Picker(selection: Binding(
+                    get: { languageManager.current },
+                    set: { newValue in
+                        let oldId = languageManager.current.localeIdentifier
+                        languageManager.current = newValue
+                        if oldId != newValue.localeIdentifier {
+                            showLanguageRestartHint = true
+                        }
+                    }
+                )) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                } label: {
+                    Label {
+                        Text("语言")
+                    } icon: {
+                        Image(systemName: "globe")
+                            .foregroundStyle(.indigo)
+                    }
+                }
+            } header: {
+                Text("语言")
+            } footer: {
+                Text("界面立即切换;部分错误信息和 PDF 文案需重启 App 完全生效。")
+                    .font(.system(size: 12))
+            }
+
+            // 常用 — 日常会反复打开:提醒时间、导出报告、清数据
+            // 注:提醒(每日汇总 / 工种到场推送)是 PM 专属,Engineer 不需要,所以条件隐藏。
+            Section("常用") {
+                if profileManager.current != .engineer {
+                    NavigationLink {
+                        RemindersSettingsView()
+                    } label: {
+                        settingsRow(
+                            icon: "bell.badge",
+                            color: .orange,
+                            title: "提醒",
+                            subtitle: "推送时间、每日汇总"
+                        )
+                    }
                 }
                 NavigationLink {
                     ReportsExportSettingsView()
@@ -80,10 +149,22 @@ struct SettingsView: View {
         .navigationTitle("设置")
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
+        .alert("已切换语言", isPresented: $showLanguageRestartHint) {
+            Button("知道了", role: .cancel) { }
+        } message: {
+            Text("界面文字会立刻更新;少量错误信息和 PDF 文案需要重启 App 才完全切换。")
+        }
+    }
+
+    private func profileColor(_ kind: ProfileKind) -> Color {
+        switch kind {
+        case .pm: return .orange
+        case .engineer: return .blue
+        }
     }
 
     @ViewBuilder
-    private func settingsRow(icon: String, color: Color, title: String, subtitle: String) -> some View {
+    private func settingsRow(icon: String, color: Color, title: LocalizedStringKey, subtitle: LocalizedStringKey) -> some View {
         HStack(spacing: DesignTokens.Spacing.medium) {
             Image(systemName: icon)
                 .font(.system(size: 20))
@@ -187,9 +268,9 @@ struct InputAISettingsView: View {
         let engine = AIService.currentEngine
         var parts: [String] = []
         switch engine {
-        case .auto: parts.append("自动")
+        case .auto: parts.append(String(localized: "自动", locale: AppLanguageManager.currentLocale))
         case .openai: parts.append("OpenAI")
-        case .local: parts.append("本地")
+        case .local: parts.append(String(localized: "本地", locale: AppLanguageManager.currentLocale))
         }
         if AIService.isOpenAIAvailable { parts.append("OpenAI ✓") }
         if AIService.isLocalAvailable { parts.append("Apple ✓") }
@@ -200,12 +281,18 @@ struct InputAISettingsView: View {
 // MARK: - 子页 2:提醒
 
 struct RemindersSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
     @AppStorage(SettingsKeys.morningReminderHour) private var morningHour: Int = 7
     @AppStorage(SettingsKeys.morningReminderMinute) private var morningMinute: Int = 30
     @AppStorage(SettingsKeys.dailyDigestEnabled) private var dailyDigestEnabled: Bool = false
 
+    /// E3.6:权限状态。.notDetermined 时给"点开提醒会请求授权"提示;.denied 时给跳设置按钮。
+    @State private var authStatus: UNAuthorizationStatus = .notDetermined
+
     var body: some View {
         Form {
+            permissionBanner
+
             Section {
                 DatePicker(
                     "早上推送时间",
@@ -213,6 +300,9 @@ struct RemindersSettingsView: View {
                     displayedComponents: .hourAndMinute
                 )
                 .font(.system(size: DesignTokens.FontSize.body))
+                // E3.8:时间一改立刻 reschedule(不再等"下次启动")。
+                .onChange(of: morningHour) { _, _ in rescheduleAfterTimeChange() }
+                .onChange(of: morningMinute) { _, _ in rescheduleAfterTimeChange() }
 
                 Toggle(isOn: Binding(
                     get: { dailyDigestEnabled },
@@ -235,13 +325,78 @@ struct RemindersSettingsView: View {
             } header: {
                 Text("推送时间")
             } footer: {
-                Text("改动后下次 App 启动时对所有未完成速记生效。")
+                Text("改时间后立刻对所有未完成速记重新排推送。")
                     .font(.system(size: DesignTokens.FontSize.body))
             }
         }
         .navigationTitle("提醒")
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
+        .task { await refreshAuthStatus() }
+        // 用户从系统设置回来时,UIApplication.willEnterForegroundNotification 触发刷新。
+        .onReceive(NotificationCenter.default.publisher(
+            for: UIApplication.willEnterForegroundNotification
+        )) { _ in
+            Task { await refreshAuthStatus() }
+        }
+    }
+
+    /// E3.6:顶部权限横幅。
+    @ViewBuilder
+    private var permissionBanner: some View {
+        switch authStatus {
+        case .denied:
+            Section {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "bell.slash.fill")
+                            .foregroundStyle(.red)
+                        Text("通知未授权,提醒不会响")
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                            .foregroundStyle(.red)
+                    }
+                    Text("请到「系统设置」打开 SiteNote 的通知权限,否则下面这些时间设置都不会生效。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Button {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    } label: {
+                        Label("打开系统设置", systemImage: "arrow.up.right.square")
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                }
+            }
+        case .notDetermined:
+            Section {
+                HStack(spacing: 8) {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.blue)
+                    Text("首次开启提醒时会请求通知授权。")
+                        .font(.system(size: DesignTokens.FontSize.body))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    private func refreshAuthStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        await MainActor.run { authStatus = settings.authorizationStatus }
+    }
+
+    private func rescheduleAfterTimeChange() {
+        // 改时间立即对全量未完成 note reschedule + 重排每日汇总。
+        let descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate<Note> { $0.deletedAt == nil && $0.isDone == false }
+        )
+        let notes = (try? modelContext.fetch(descriptor)) ?? []
+        NotificationService.shared.rescheduleAll(notes: notes)
     }
 
     private var formattedMorningTime: String {
@@ -274,8 +429,6 @@ struct SiteResourcesSettingsView: View {
     /// 刷新计数器:从 SubTagsEditorView 返回后 bump 一下,让分类数量重算。
     @State private var refreshTick: Int = 0
 
-    @State private var templates: [InspectionTemplate] = InspectionTemplatesStorage.load()
-
     @State private var clauseRefs: [String] = ClauseRefsStorage.load()
     @State private var newClauseRef: String = ""
 
@@ -284,14 +437,15 @@ struct SiteResourcesSettingsView: View {
             siteTagsSection
             subTagsSection
             floorPlansSection
-            templatesSection
             clausesSection
+            buildersSection
+            sitePresetSection
+            disclaimerSection
         }
         .navigationTitle("工地资源")
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
         .onAppear {
-            templates = InspectionTemplatesStorage.load()
             siteTags = SiteTagsStorage.load()
             clauseRefs = ClauseRefsStorage.load()
             refreshTick += 1
@@ -335,7 +489,7 @@ struct SiteResourcesSettingsView: View {
             }
             .buttonStyle(.plain)
             .sheet(isPresented: $showsNewSiteSheet) {
-                NewSiteSheet { _ in
+                NewSiteSheet { _, _ in
                     siteTags = SiteTagsStorage.load()
                 }
             }
@@ -393,50 +547,6 @@ struct SiteResourcesSettingsView: View {
         }
     }
 
-    private var templatesSection: some View {
-        Section {
-            ForEach(templates) { template in
-                NavigationLink {
-                    TemplateEditorView(existing: template)
-                } label: {
-                    HStack {
-                        Image(systemName: "checklist")
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(template.name)
-                                .font(.system(size: DesignTokens.FontSize.body))
-                            Text("\(template.items.count) 项")
-                                .font(.system(size: DesignTokens.FontSize.body))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .onDelete { offsets in
-                for idx in offsets {
-                    InspectionTemplatesStorage.remove(id: templates[idx].id)
-                }
-                templates = InspectionTemplatesStorage.load()
-            }
-
-            NavigationLink {
-                TemplateEditorView(existing: nil)
-            } label: {
-                HStack {
-                    Image(systemName: "plus.circle")
-                    Text("新建模板")
-                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                }
-                .foregroundStyle(Color.accentColor)
-            }
-        } header: {
-            Text("巡检模板")
-        } footer: {
-            Text("录音时可选一个模板跟着检查,漏项会在详情页红字提示。默认提供 3 个典型模板,可改可删。")
-                .font(.system(size: DesignTokens.FontSize.body))
-        }
-    }
-
     private var clausesSection: some View {
         Section {
             ForEach(clauseRefs, id: \.self) { ref in
@@ -473,6 +583,81 @@ struct SiteResourcesSettingsView: View {
         }
     }
 
+    private var buildersSection: some View {
+        Section {
+            NavigationLink {
+                BuildersEditorView()
+            } label: {
+                HStack {
+                    Image(systemName: "person.text.rectangle")
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("建造商联系簿")
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                        Text("Email 一键发送 / Attn 自动填入")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("建造商")
+        } footer: {
+            Text("Inspection 报告里「Attn」字段会从这里挑人,导出 PDF 后还能一键发邮件给收件人。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    private var sitePresetSection: some View {
+        Section {
+            NavigationLink {
+                SitePresetEditorView()
+            } label: {
+                HStack {
+                    Image(systemName: "building.2.crop.circle")
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("工地预设")
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                        Text("Engineer · 导出 PDF 时自动填字段")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("工地预设")
+        } footer: {
+            Text("工程师专用。一个 siteTag 一条预设,导出 Inspection 报告时自动填 Header(项目名 / 编号 / 客户 / 地址 / 默认收件人)。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    private var disclaimerSection: some View {
+        Section {
+            NavigationLink {
+                DisclaimerEditorView()
+            } label: {
+                HStack {
+                    Image(systemName: "doc.plaintext")
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("巡检免责声明")
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                        Text("用户自定义,空则用默认 5 条")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text("免责声明")
+        } footer: {
+            Text("Inspection PDF 末页打印的 \u{201C}This inspection does not include \u{2026}\u{201D} 段落。空则用 QDE 那套标准 5 条。")
+                .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
     private func addTag() {
         let trimmed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -495,8 +680,21 @@ struct SiteResourcesSettingsView: View {
 // MARK: - 子页 4:报告与导出
 
 struct ReportsExportSettingsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(filter: #Predicate<Note> { $0.deletedAt == nil }, sort: \Note.createdAt, order: .reverse)
+    private var allNotes: [Note]
+
     @State private var backupShareURL: URL?
     @State private var backupError: String?
+
+    // PDF 公司 Logo 上传相关
+    @State private var logoPickerItem: PhotosPickerItem?
+    @State private var currentLogo: UIImage? = BrandingStorage.loadLogo()
+
+    // Obsidian 同步相关
+    @State private var showObsidianFolderPicker = false
+    @State private var obsidianFolderPath: String = UserDefaults.standard.string(forKey: ObsidianExportService.displayPathKey) ?? ""
+    @State private var obsidianMessage: String?
 
     var body: some View {
         Form {
@@ -547,15 +745,121 @@ struct ReportsExportSettingsView: View {
                 }
                 .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
             } header: {
-                Text("数据导出与备份")
+                Text("数据导出")
             } footer: {
-                Text("PDF 用于交业主或法律存档;ZIP **包含速记数据 + 录音 + 照片 + 设置**,用于整体备份到 iCloud Drive/邮件。清空全部数据前建议先导一份。")
+                Text("PDF 用于交业主或法律存档。ZIP 含速记数据 + 录音 + 照片 + 设置,**目前仅供发给开发者排查问题或本地归档**(暂不支持自助导回 SiteNote)。换机请用 iCloud 备份恢复 iPhone 整机或重装 App 后重新同步。")
                     .font(.system(size: DesignTokens.FontSize.body))
+            }
+
+            // MARK: - Obsidian 同步
+            Section {
+                Button {
+                    showObsidianFolderPicker = true
+                } label: {
+                    HStack {
+                        Image(systemName: "folder.badge.gearshape")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("导出文件夹")
+                                .font(.system(size: DesignTokens.FontSize.body))
+                            Text(obsidianFolderPath.isEmpty ? "未设置" : obsidianFolderPath)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                                .truncationMode(.middle)
+                        }
+                    }
+                }
+
+                Button {
+                    exportAllToObsidian()
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.up.doc.on.clipboard")
+                        Text("导出全部速记到 Obsidian")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                    }
+                }
+                .disabled(obsidianFolderPath.isEmpty)
+
+                Button {
+                    exportRecentToObsidian(days: 7)
+                } label: {
+                    HStack {
+                        Image(systemName: "calendar.badge.clock")
+                        Text("只导出最近 7 天")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                    }
+                }
+                .disabled(obsidianFolderPath.isEmpty)
+            } header: {
+                Text("Obsidian 同步")
+            } footer: {
+                Text("把速记自动同步到电脑 Obsidian vault（推荐选 iCloud Drive → Obsidian → construction-pm → 00_Inbox）。Mac 上 intake.py 会自动按工地名归到对应项目，🚨 隐患进 followup。")
+                    .font(.system(size: DesignTokens.FontSize.body))
+            }
+
+            Section("PDF 公司 Logo") {
+                HStack {
+                    if let logo = currentLogo {
+                        Image(uiImage: logo)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 60, height: 60)
+                            .background(Ink.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 30))
+                            .foregroundStyle(Ink.fgDim)
+                            .frame(width: 60, height: 60)
+                            .background(Ink.card)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(currentLogo != nil ? String(localized: "已上传", locale: AppLanguageManager.currentLocale) : String(localized: "未上传", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("PDF 导出时显示在左上角")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+
+                PhotosPicker(selection: $logoPickerItem, matching: .images) {
+                    Label("上传 / 替换", systemImage: "photo.badge.plus")
+                }
+
+                if currentLogo != nil {
+                    Button(role: .destructive) {
+                        BrandingStorage.clearLogo()
+                        currentLogo = nil
+                    } label: {
+                        Label("移除 Logo", systemImage: "trash")
+                    }
+                }
             }
         }
         .navigationTitle("报告与导出")
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
+        .onChange(of: logoPickerItem) { _, newItem in
+            // 用户选了图 → 加载 Data → 转 UIImage → 写盘 → 刷新预览。
+            // 中间任何步骤失败,currentLogo 保持原状,picker 自动复位。
+            guard let newItem else { return }
+            Task {
+                if let data = try? await newItem.loadTransferable(type: Data.self),
+                   let img = UIImage(data: data),
+                   BrandingStorage.saveLogo(img) {
+                    await MainActor.run {
+                        currentLogo = BrandingStorage.loadLogo()
+                    }
+                }
+                await MainActor.run {
+                    logoPickerItem = nil
+                }
+            }
+        }
         .sheet(item: Binding(
             get: { backupShareURL.map { BackupShareItem(url: $0) } },
             set: { _ in backupShareURL = nil }
@@ -569,6 +873,57 @@ struct ReportsExportSettingsView: View {
             Button("知道了") { backupError = nil }
         } message: {
             Text(backupError ?? "")
+        }
+        .fileImporter(
+            isPresented: $showObsidianFolderPicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                do {
+                    try ObsidianExportService.persistFolder(url)
+                    obsidianFolderPath = url.path
+                    obsidianMessage = "✓ 文件夹已设置"
+                } catch {
+                    obsidianMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            case .failure(let error):
+                obsidianMessage = error.localizedDescription
+            }
+        }
+        .alert("Obsidian", isPresented: Binding(
+            get: { obsidianMessage != nil },
+            set: { if !$0 { obsidianMessage = nil } }
+        )) {
+            Button("知道了") { obsidianMessage = nil }
+        } message: {
+            Text(obsidianMessage ?? "")
+        }
+    }
+
+    private func exportAllToObsidian() {
+        do {
+            let result = try ObsidianExportService.exportNotes(allNotes)
+            obsidianMessage = "✓ 导出 \(result.exported) 条 / 跳过 \(result.skipped) / 失败 \(result.failed.count)"
+        } catch {
+            obsidianMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func exportRecentToObsidian(days: Int) {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+        let recent = allNotes.filter { $0.createdAt >= cutoff }
+        guard !recent.isEmpty else {
+            obsidianMessage = "最近 \(days) 天没有速记可导"
+            return
+        }
+        do {
+            let result = try ObsidianExportService.exportNotes(recent)
+            obsidianMessage = "✓ 导出 \(result.exported) 条（最近 \(days) 天 / 跳过 \(result.skipped) 已存在）"
+        } catch {
+            obsidianMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
@@ -592,6 +947,9 @@ struct DataAboutSettingsView: View {
     /// 一键清空的倒计时:nil = idle,>0 = 正在数,0 = 即将触发。
     @State private var nukeCountdown: Int? = nil
     @State private var nukeTask: Task<Void, Never>? = nil
+
+    /// E3.7:反馈分享面板的 items(包含正文 + 可选 crash JSON 附件)。
+    @State private var feedbackShareItems: [Any]? = nil
 
     var body: some View {
         Form {
@@ -675,6 +1033,15 @@ struct DataAboutSettingsView: View {
         } message: {
             Text("这会删除所有已完成的速记、对应的录音和照片,不可恢复。")
         }
+        // E3.7:反馈分享面板。有 crash JSON 时把它作为附件,否则只分享正文(等价于以前 mailto 的体验)。
+        .sheet(isPresented: Binding(
+            get: { feedbackShareItems != nil },
+            set: { if !$0 { feedbackShareItems = nil } }
+        )) {
+            if let items = feedbackShareItems {
+                ShareSheet(items: items)
+            }
+        }
     }
 
     private var appVersion: String {
@@ -683,13 +1050,23 @@ struct DataAboutSettingsView: View {
         return "\(version) (\(build))"
     }
 
-    /// 打开邮件 App,预填收件人/主题/带版本+设备信息的正文。用 URLComponents 安全转义。
+    /// 反馈入口。E3.7:有 crash JSON 时弹 ActivityViewController 把 crash 作为附件;
+    /// 没 crash log 则降级为系统 mailto:(预填收件人/主题/正文)。
     private func openFeedbackMail() {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
         let iosVersion = UIDevice.current.systemVersion
         let device = UIDevice.current.model
-        let body = "\n\n---\nSiteNote \(version) (\(build))\niOS \(iosVersion) · \(device)"
+        let body = String(
+            localized: "请描述问题或建议:\n\n\n---\nSiteNote \(version) (\(build))\niOS \(iosVersion) · \(device)\n邮箱:banruostudio@gmail.com",
+            locale: AppLanguageManager.currentLocale
+        )
+
+        // 有最新 crash JSON 就走 ShareSheet,带附件;没有就走 mailto:。
+        if let crash = CrashReporter.latestCrashReport() {
+            feedbackShareItems = [body, crash]
+            return
+        }
 
         var components = URLComponents()
         components.scheme = "mailto"
@@ -786,22 +1163,24 @@ struct DataAboutSettingsView: View {
             for s in shares { modelContext.delete(s) }
         }
 
-        // 2. 一并清掉 Documents 下的三大文件目录(音频/照片/平面图)
+        // 2. 一并清掉 Documents 下的三大文件目录(音频/照片/平面图)+ 隐藏目录(诊断包/备份元/branding logo)
         if let docs = FileManager.default.urls(
             for: .documentDirectory, in: .userDomainMask
         ).first {
-            for sub in ["audio", "photos", "floorplans"] {
+            for sub in ["audio", "photos", "floorplans", "branding", "_crash_reports", "_backup_meta"] {
                 let url = docs.appendingPathComponent(sub, isDirectory: true)
                 try? FileManager.default.removeItem(at: url)
             }
         }
+
+        // 2b. 清 Keychain 里的 OpenAI API Key(否则手机转手时残留)
+        KeychainStorage.delete(for: KeychainKeys.openAIAPIKey)
 
         // 3. 清 UserDefaults 里的"用户内容"(列表数据,不动偏好)
         let defaults = UserDefaults.standard
         for key in [
             "settings.siteTags",
             "settings.subTagsGlobalV1",
-            "settings.inspectionTemplates",
             "settings.clauseRefs",
             "settings.floorPlans",
             "settings.siteCentroids.v1"
@@ -810,6 +1189,8 @@ struct DataAboutSettingsView: View {
         }
         // 术语 / 快捷词也属于用户内容,清空时连带清掉(否则下次录音 AI 还会用旧术语)。
         JargonStorage.clearAll()
+        // 工地预设(Engineer 用)也属于用户内容,清掉(否则手机转手时残留项目/客户信息)。
+        SitePresetStorage.clearAll()
 
         // 4. 干掉所有推送
         let center = UNUserNotificationCenter.current()
@@ -819,9 +1200,9 @@ struct DataAboutSettingsView: View {
         // 5. 落盘
         do {
             try modelContext.save()
-            clearResultMessage = "已清空:\(noteCount) 条速记 + 全部文件与资源"
+            clearResultMessage = String(localized: "已清空:\(noteCount) 条速记 + 全部文件与资源", locale: AppLanguageManager.currentLocale)
         } catch {
-            clearResultMessage = "清空时出错:\(error.localizedDescription)"
+            clearResultMessage = String(localized: "清空时出错:\(error.localizedDescription)", locale: AppLanguageManager.currentLocale)
         }
     }
 
@@ -831,7 +1212,7 @@ struct DataAboutSettingsView: View {
             predicate: #Predicate<Note> { $0.isDone == true }
         )
         guard let completed = try? modelContext.fetch(descriptor) else {
-            clearResultMessage = "清除失败(读取数据库出错)"
+            clearResultMessage = String(localized: "清除失败(读取数据库出错)", locale: AppLanguageManager.currentLocale)
             return
         }
 
@@ -855,9 +1236,9 @@ struct DataAboutSettingsView: View {
         // 导致 @Query 驱动的列表看着"没变化"。显式 save 保证一致。
         do {
             try modelContext.save()
-            clearResultMessage = count == 0 ? "没有已完成的记录可清除" : "已清除 \(count) 条"
+            clearResultMessage = count == 0 ? String(localized: "没有已完成的记录可清除", locale: AppLanguageManager.currentLocale) : String(localized: "已清除 \(count) 条", locale: AppLanguageManager.currentLocale)
         } catch {
-            clearResultMessage = "清除时出错: \(error.localizedDescription)"
+            clearResultMessage = String(localized: "清除时出错: \(error.localizedDescription)", locale: AppLanguageManager.currentLocale)
         }
     }
 }
@@ -905,8 +1286,10 @@ struct ShareLogStatsSection: View {
     private var lastShareLabel: String? {
         guard let last = logs.first(where: { $0.completed }) else { return nil }
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M 月 d 日 HH:mm"
+        f.locale = AppLanguageManager.currentLocale
+        f.dateFormat = nil
+        f.dateStyle = .medium
+        f.timeStyle = .short
         return "\(f.string(from: last.sharedAt)) · \(last.channelLabel)"
     }
 

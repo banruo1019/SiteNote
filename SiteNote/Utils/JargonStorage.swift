@@ -17,6 +17,9 @@ import Foundation
 
 enum JargonStorage {
 
+    /// 术语 + 快捷词共享上限。500 远超普通公司词典需求,但能挡住"粘贴一万行"的失误。
+    static let maxItems: Int = 500
+
     // MARK: - 1. 专业词汇
 
     private static let termsKey = "settings.jargonCustomTerms"
@@ -29,7 +32,9 @@ enum JargonStorage {
         let cleaned = terms
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty && $0.count <= 30 }
-        UserDefaults.standard.set(cleaned, forKey: termsKey)
+        // 超限截断:用前 maxItems 个,丢掉尾部多出来的。
+        let capped = Array(cleaned.prefix(maxItems))
+        UserDefaults.standard.set(capped, forKey: termsKey)
     }
 
     @discardableResult
@@ -37,6 +42,7 @@ enum JargonStorage {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.count <= 30 else { return loadCustomTerms() }
         var current = loadCustomTerms()
+        guard current.count < maxItems else { return current }
         if !current.contains(trimmed) {
             current.append(trimmed)
             saveCustomTerms(current)
@@ -82,7 +88,8 @@ enum JargonStorage {
                 )
             }
             .filter { !$0.from.isEmpty && !$0.to.isEmpty }
-        guard let data = try? JSONEncoder().encode(cleaned) else { return }
+        let capped = Array(cleaned.prefix(maxItems))
+        guard let data = try? JSONEncoder().encode(capped) else { return }
         UserDefaults.standard.set(data, forKey: shortcutsKey)
     }
 
@@ -94,6 +101,7 @@ enum JargonStorage {
         var current = loadShortcuts()
         // 去重:from 相同的最新覆盖旧的。
         current.removeAll { $0.from == trimmedFrom }
+        guard current.count < maxItems else { return current }
         current.append(Shortcut(from: trimmedFrom, to: trimmedTo))
         saveShortcuts(current)
         return current
@@ -109,6 +117,15 @@ enum JargonStorage {
 
     /// 把所有快捷词替换应用到一段原始转写。在 AI polish 之前调,简单直接的字符串替换。
     /// 顺序:按 from 长度倒序(长的先替换,避免短的吃掉长的)。
+    ///
+    /// **F10 (R4-P2-20) 注意——子串替换无词边界**:
+    /// `replacingOccurrences` 是纯子串扫描,不识别词边界。例如配置 "con" → "concrete"
+    /// 会把 "control" 改成 "controlcrete"。中文场景同理:配置 "包" → "包工头"
+    /// 会把 "面包" 错改成 "面包工头"。
+    /// 用户配置 from 时应:
+    ///   - 优先用带空格 / 标点的较长片段(如 "打 con" → "打 concrete")
+    ///   - 避免单字或常见前后缀
+    /// 中文无空格,无法可靠加词边界,因此**不在算法层处理**;由 UI 文案教育。
     static func applyShortcuts(to raw: String) -> String {
         let shortcuts = loadShortcuts().sorted { $0.from.count > $1.from.count }
         var result = raw

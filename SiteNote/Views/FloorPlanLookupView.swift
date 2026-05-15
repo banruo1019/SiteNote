@@ -56,7 +56,7 @@ struct FloorPlanLookupView: View {
                 Divider()
                 if plansForSelectedSite.isEmpty {
                     Spacer()
-                    Text(selectedSite.map { "\($0) 还没有楼层" } ?? "选一个工地")
+                    Text(selectedSite.map { String(localized: "\($0) 还没有楼层", locale: AppLanguageManager.currentLocale) } ?? String(localized: "选一个工地", locale: AppLanguageManager.currentLocale))
                         .font(.system(size: DesignTokens.FontSize.body))
                         .foregroundStyle(.secondary)
                     Spacer()

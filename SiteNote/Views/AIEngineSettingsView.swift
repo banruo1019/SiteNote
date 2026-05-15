@@ -51,10 +51,10 @@ struct AIEngineSettingsView: View {
     }
 
     private var masterStatusText: String {
-        guard aiMasterEnabled else { return "已关闭" }
-        if AIService.isOpenAIAvailable { return "当前: OpenAI · \(textModel)" }
-        if AIService.isLocalAvailable { return "当前: Apple Intelligence(本地)" }
-        return "当前: 无可用引擎(可在高级配置加 OpenAI Key)"
+        guard aiMasterEnabled else { return String(localized: "已关闭", locale: AppLanguageManager.currentLocale) }
+        if AIService.isOpenAIAvailable { return String(localized: "当前: OpenAI · \(textModel)", locale: AppLanguageManager.currentLocale) }
+        if AIService.isLocalAvailable { return String(localized: "当前: Apple Intelligence(本地)", locale: AppLanguageManager.currentLocale) }
+        return String(localized: "当前: 无可用引擎(可在高级配置加 OpenAI Key)", locale: AppLanguageManager.currentLocale)
     }
 
     // MARK: - 高级配置入口
@@ -91,6 +91,9 @@ struct AIEngineSettingsView: View {
                 .font(.system(size: DesignTokens.FontSize.body))
                 .foregroundStyle(.secondary)
             Text("• 定位只在按下录音那一瞬间取一次(精度 100m + 反向地理编码),全程不做后台追踪。")
+                .font(.system(size: DesignTokens.FontSize.body))
+                .foregroundStyle(.secondary)
+            Text("• 天气查询会把当前坐标发给 Open-Meteo(第三方,无需登录),用于在记录里附天气。可在 设置 → 报告与导出 关闭。")
                 .font(.system(size: DesignTokens.FontSize.body))
                 .foregroundStyle(.secondary)
             Text("• 锁屏推送只显示通用提示,不带原始转写文本(避免被路人/同事看到)。")
@@ -168,11 +171,11 @@ struct AIAdvancedSettingsView: View {
     private var engineHint: String {
         switch engine.wrappedValue {
         case .auto:
-            return "优先用 OpenAI(质量好),失败或未配置 key 时自动切到本地 Apple Intelligence。"
+            return String(localized: "优先用 OpenAI(质量好),失败或未配置 key 时自动切到本地 Apple Intelligence。", locale: AppLanguageManager.currentLocale)
         case .openai:
-            return "只用 OpenAI。数据(转写/照片)会发送到 OpenAI 服务器。需要配置下面的 API Key。"
+            return String(localized: "只用 OpenAI。数据(转写/照片)会发送到 OpenAI 服务器。需要配置下面的 API Key。", locale: AppLanguageManager.currentLocale)
         case .local:
-            return "只用本地 Apple Intelligence。无需联网,数据不离开设备。要求 iPhone 15 Pro 及以上并在系统设置启用 Apple Intelligence。"
+            return String(localized: "只用本地 Apple Intelligence。无需联网,数据不离开设备。要求 iPhone 15 Pro 及以上并在系统设置启用 Apple Intelligence。", locale: AppLanguageManager.currentLocale)
         }
     }
 
@@ -285,12 +288,12 @@ struct AIAdvancedSettingsView: View {
             statusRow(
                 label: "OpenAI 文本/视觉",
                 available: AIService.isOpenAIAvailable,
-                hint: AIService.isOpenAIAvailable ? "已配置" : "未配置 API Key"
+                hint: AIService.isOpenAIAvailable ? String(localized: "已配置", locale: AppLanguageManager.currentLocale) : String(localized: "未配置 API Key", locale: AppLanguageManager.currentLocale)
             )
             statusRow(
                 label: "Apple Intelligence",
                 available: AIService.isLocalAvailable,
-                hint: AIService.isLocalAvailable ? "可用" : "机型或 iOS 不支持"
+                hint: AIService.isLocalAvailable ? String(localized: "可用", locale: AppLanguageManager.currentLocale) : String(localized: "机型或 iOS 不支持", locale: AppLanguageManager.currentLocale)
             )
             statusRow(
                 label: "语义搜索 Embedding",
@@ -305,12 +308,12 @@ struct AIAdvancedSettingsView: View {
             return "OpenAI \(embeddingModel)"
         }
         if #available(iOS 17.0, *) {
-            return "Apple 本地(中文)"
+            return String(localized: "Apple 本地(中文)", locale: AppLanguageManager.currentLocale)
         }
-        return "不可用(退回关键词子串)"
+        return String(localized: "不可用(退回关键词子串)", locale: AppLanguageManager.currentLocale)
     }
 
-    private func statusRow(label: String, available: Bool, hint: String) -> some View {
+    private func statusRow(label: LocalizedStringKey, available: Bool, hint: String) -> some View {
         HStack {
             Image(systemName: available ? "checkmark.circle.fill" : "exclamationmark.circle")
                 .foregroundStyle(available ? Ink.fg : Ink.red)
@@ -343,9 +346,9 @@ struct AIAdvancedSettingsView: View {
         Task {
             do {
                 let result = try await OpenAIClient.chat(user: "ping. 只回一个字:好")
-                showsTestResult = "✅ 连通成功。响应: \(result.prefix(40))"
+                showsTestResult = String(localized: "✅ 连通成功。响应: \(String(result.prefix(40)))", locale: AppLanguageManager.currentLocale)
             } catch {
-                showsTestResult = "❌ 失败: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
+                showsTestResult = String(localized: "❌ 失败: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)", locale: AppLanguageManager.currentLocale)
             }
             isTesting = false
         }

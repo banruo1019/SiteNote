@@ -37,6 +37,9 @@ struct SharePDFItem: Identifiable {
 struct FullscreenPhoto: Identifiable {
     let id: UUID = UUID()
     let image: UIImage
+    /// 关联的相对路径(可空)。有值时全屏视图会显示"标注"按钮,
+    /// 点击后关闭全屏并触发详情页的 PhotoEditorView。
+    var path: String? = nil
 }
 
 struct DetailPhotoEdit: Identifiable {
@@ -140,7 +143,7 @@ struct TagPickerSheet: View {
     private var siteSection: some View {
         Section {
             radioRow(
-                text: "不设工地(未命名)",
+                text: String(localized: "不设工地(未命名)", locale: AppLanguageManager.currentLocale),
                 icon: "building.2",
                 tint: .gray,
                 selected: selectedSite == nil,
@@ -176,7 +179,7 @@ struct TagPickerSheet: View {
     private var subTagSection: some View {
         Section {
             radioRow(
-                text: "不设分类",
+                text: String(localized: "不设分类", locale: AppLanguageManager.currentLocale),
                 icon: "tag",
                 tint: .gray,
                 selected: selectedSubName == nil,
@@ -324,7 +327,7 @@ struct NewSubTagSheet: View {
                             Circle()
                                 .fill(SubTag.color(from: colorName))
                                 .frame(width: 10, height: 10)
-                            Text(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "(名字)" : name)
+                            Text(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? String(localized: "(名字)", locale: AppLanguageManager.currentLocale) : name)
                                 .fontWeight(.semibold)
                         }
                         .foregroundStyle(SubTag.color(from: colorName))

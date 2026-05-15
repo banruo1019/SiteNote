@@ -182,8 +182,8 @@ struct DatabaseRecoveryView: View {
     private enum ButtonTone { case primary, neutral, destructive }
 
     private func actionButton(
-        title: String,
-        subtitle: String,
+        title: LocalizedStringKey,
+        subtitle: LocalizedStringKey,
         icon: String,
         tone: ButtonTone,
         disabled: Bool,

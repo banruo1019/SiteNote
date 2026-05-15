@@ -36,7 +36,7 @@ enum EOTAnalysisService {
         case renderFailed(String)
         var errorDescription: String? {
             switch self {
-            case .renderFailed(let s): return "EOT PDF 生成失败: \(s)"
+            case .renderFailed(let s): return String(localized: "EOT PDF 生成失败: \(s)", locale: AppLanguageManager.currentLocale)
             }
         }
     }
@@ -119,16 +119,16 @@ enum EOTAnalysisService {
                  at: CGPoint(x: leftMargin, y: y),
                  fontSize: 24, bold: true)
         y += 30
-        drawText("工期延误主张证据报告",
+        drawText(String(localized: "工期延误主张证据报告", locale: AppLanguageManager.currentLocale),
                  at: CGPoint(x: leftMargin, y: y),
                  fontSize: 16, color: .darkGray)
         y += 50
 
         let df = DateFormatter()
         df.dateStyle = .long
-        df.locale = Locale(identifier: "zh-CN")
+        df.locale = Locale.current
 
-        drawText("评估期间", at: CGPoint(x: leftMargin, y: y), fontSize: 14, bold: true)
+        drawText(String(localized: "评估期间", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 14, bold: true)
         y += 22
         drawText(
             "\(df.string(from: report.startDate))  —  \(df.string(from: report.endDate))",
@@ -136,32 +136,32 @@ enum EOTAnalysisService {
             fontSize: 14
         )
         y += 22
-        drawText("共 \(report.totalCalendarDays) 个日历日", at: CGPoint(x: leftMargin, y: y), fontSize: 14)
+        drawText(String(localized: "共 \(report.totalCalendarDays) 个日历日", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 14)
         y += 50
 
-        drawText("核心结论", at: CGPoint(x: leftMargin, y: y), fontSize: 14, bold: true)
+        drawText(String(localized: "核心结论", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 14, bold: true)
         y += 22
         drawText(
-            "根据 SiteNote 记录的现场天气观测,在上述期间内共有 \(report.claimableDays) 天因不利天气无法进行正常施工。",
+            String(localized: "根据 SiteNote 记录的现场天气观测,在上述期间内共有 \(report.claimableDays) 天因不利天气无法进行正常施工。", locale: AppLanguageManager.currentLocale),
             at: CGPoint(x: leftMargin, y: y),
             fontSize: 14
         )
         y += 24
         drawText(
-            "建议基于合同条款(例如 AS4000 Clause 34 - Extension of Time)主张工期延长 \(report.claimableDays) 天。",
+            String(localized: "建议基于合同条款(例如 AS4000 Clause 34 - Extension of Time)主张工期延长 \(report.claimableDays) 天。", locale: AppLanguageManager.currentLocale),
             at: CGPoint(x: leftMargin, y: y),
             fontSize: 14
         )
         y += 60
 
-        drawText("不利天气认定标准", at: CGPoint(x: leftMargin, y: y), fontSize: 14, bold: true)
+        drawText(String(localized: "不利天气认定标准", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 14, bold: true)
         y += 22
         let criteria = [
-            "- 降雨(WMO 51-67, 80-82)",
-            "- 降雪(WMO 71-77, 85-86)",
-            "- 雷暴(WMO 95-99)",
-            "- 雾(WMO 45, 48)",
-            "- 极端气温(低于 -10°C 或高于 38°C)"
+            String(localized: "- 降雨(WMO 51-67, 80-82)", locale: AppLanguageManager.currentLocale),
+            String(localized: "- 降雪(WMO 71-77, 85-86)", locale: AppLanguageManager.currentLocale),
+            String(localized: "- 雷暴(WMO 95-99)", locale: AppLanguageManager.currentLocale),
+            String(localized: "- 雾(WMO 45, 48)", locale: AppLanguageManager.currentLocale),
+            String(localized: "- 极端气温(低于 -10°C 或高于 38°C)", locale: AppLanguageManager.currentLocale)
         ]
         for line in criteria {
             drawText(line, at: CGPoint(x: leftMargin, y: y), fontSize: 12, color: .darkGray)
@@ -172,15 +172,16 @@ enum EOTAnalysisService {
         drawLine(from: CGPoint(x: leftMargin, y: y),
                  to: CGPoint(x: leftMargin + 300, y: y))
         y += 15
-        drawText("签署人 / Signed", at: CGPoint(x: leftMargin, y: y), fontSize: 12, color: .darkGray)
+        drawText(String(localized: "签署人 / Signed", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 12, color: .darkGray)
         y += 30
         drawLine(from: CGPoint(x: leftMargin, y: y),
                  to: CGPoint(x: leftMargin + 300, y: y))
         y += 15
-        drawText("日期 / Date", at: CGPoint(x: leftMargin, y: y), fontSize: 12, color: .darkGray)
+        drawText(String(localized: "日期 / Date", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 12, color: .darkGray)
 
         y = pageRect.height - 60
-        drawText("由 SiteNote 基于现场观测数据自动生成 · \(Date().formatted(date: .abbreviated, time: .shortened))",
+        let nowStr = Date().formatted(date: .abbreviated, time: .shortened)
+        drawText(String(localized: "由 SiteNote 基于现场观测数据自动生成 · \(nowStr)", locale: AppLanguageManager.currentLocale),
                  at: CGPoint(x: leftMargin, y: y),
                  fontSize: 10, color: .gray)
     }
@@ -193,12 +194,12 @@ enum EOTAnalysisService {
         let leftMargin: CGFloat = 40
         var y: CGFloat = 50
 
-        drawText("不利天气日列表",
+        drawText(String(localized: "不利天气日列表", locale: AppLanguageManager.currentLocale),
                  at: CGPoint(x: leftMargin, y: y),
                  fontSize: 18, bold: true)
         y += 32
         drawText(
-            "共 \(report.adverseDays.count) 天(每天附现场记录作为证据)",
+            String(localized: "共 \(report.adverseDays.count) 天(每天附现场记录作为证据)", locale: AppLanguageManager.currentLocale),
             at: CGPoint(x: leftMargin, y: y),
             fontSize: 12, color: .darkGray
         )
@@ -206,7 +207,7 @@ enum EOTAnalysisService {
 
         let df = DateFormatter()
         df.dateStyle = .long
-        df.locale = Locale(identifier: "zh-CN")
+        df.locale = Locale.current
 
         for (index, day) in report.adverseDays.enumerated() {
             if y > pageRect.height - 80 {
@@ -218,25 +219,26 @@ enum EOTAnalysisService {
                      at: CGPoint(x: leftMargin, y: y),
                      fontSize: 14, bold: true)
             y += 22
-            drawText("天气: \(day.reason) (WMO \(day.weatherCode))",
+            drawText(String(localized: "天气: \(day.reason) (WMO \(day.weatherCode))", locale: AppLanguageManager.currentLocale),
                      at: CGPoint(x: leftMargin + 20, y: y),
                      fontSize: 12)
             y += 18
-            drawText("当天现场记录 \(day.sourceNotes.count) 条:",
+            drawText(String(localized: "当天现场记录 \(day.sourceNotes.count) 条:", locale: AppLanguageManager.currentLocale),
                      at: CGPoint(x: leftMargin + 20, y: y),
                      fontSize: 12, color: .darkGray)
             y += 18
 
             for note in day.sourceNotes.prefix(3) {
                 let t = String(note.transcription.prefix(60))
-                let preview = t.isEmpty ? "(仅录音)" : t
+                let preview = t.isEmpty ? String(localized: "(仅录音)", locale: AppLanguageManager.currentLocale) : t
                 drawText("• \(preview)",
                          at: CGPoint(x: leftMargin + 40, y: y),
                          fontSize: 11, color: .darkGray)
                 y += 16
             }
             if day.sourceNotes.count > 3 {
-                drawText("…(还有 \(day.sourceNotes.count - 3) 条)",
+                let extra = day.sourceNotes.count - 3
+                drawText(String(localized: "…(还有 \(extra) 条)", locale: AppLanguageManager.currentLocale),
                          at: CGPoint(x: leftMargin + 40, y: y),
                          fontSize: 11, color: .gray)
                 y += 16

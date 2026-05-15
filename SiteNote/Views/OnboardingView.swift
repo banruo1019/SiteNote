@@ -2,13 +2,15 @@
 //  OnboardingView.swift
 //  SiteNote
 //
-//  首次启动 4 步引导。
-//  - Step 1:欢迎 + 隐私
+//  首次启动 5 步引导(v2 — 加了 profile 选择)。
+//  - Step 0:欢迎 + 隐私
+//  - Step 1:**选择角色**(PM / Engineer / Tradie),Settings 后续可改
 //  - Step 2:建第一个工地(可跳过)
 //  - Step 3:介绍录音 + 保存后的 UndoToast 4 按钮
 //  - Step 4:试录第一条(引导式,不内嵌录音 — 关闭引导后用户在 RecordView 真录)
 //
 //  完成后 UserDefaults 标记 dismissed,不再出现。
+//  老用户已经 dismiss v1 的不会重新走(默认 PM,可在 Settings 里改 profile)。
 //
 
 import SwiftUI
@@ -18,8 +20,10 @@ struct OnboardingView: View {
 
     @State private var step: Int = 0
     @State private var firstSiteName: String = ""
+    @State private var selectedProfile: ProfileKind = .pm
 
     private static let dismissedKey = "settings.onboarding.dismissed.v1"
+    private static let totalSteps = 5
 
     static var needsToShow: Bool {
         !UserDefaults.standard.bool(forKey: dismissedKey)
@@ -30,36 +34,58 @@ struct OnboardingView: View {
             Color.black.opacity(0.85).ignoresSafeArea()
 
             VStack(spacing: 24) {
-                Spacer()
+                Spacer(minLength: 12)
 
-                // 步骤指示
-                HStack(spacing: 6) {
-                    ForEach(0..<4) { i in
-                        Capsule()
-                            .fill(i == step ? Color.white : Color.white.opacity(0.25))
-                            .frame(width: i == step ? 28 : 8, height: 4)
+                // 步骤指示 + 后退按钮
+                HStack(spacing: 10) {
+                    // 后退按钮:step > 0 时显示。step == 0 留 32pt 占位,避免点指示器横向跳动。
+                    if step > 0 {
+                        Button {
+                            goBackStep()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.7))
+                                .frame(width: 32, height: 28)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(String(localized: "上一步", locale: AppLanguageManager.currentLocale))
+                    } else {
+                        Color.clear.frame(width: 32, height: 28)
                     }
+                    HStack(spacing: 6) {
+                        ForEach(0..<Self.totalSteps, id: \.self) { i in
+                            Capsule()
+                                .fill(i == step ? Color.white : Color.white.opacity(0.25))
+                                .frame(width: i == step ? 28 : 8, height: 4)
+                        }
+                    }
+                    Color.clear.frame(width: 32, height: 28) // 平衡左侧后退按钮宽度
                 }
 
                 // 步骤内容
-                Group {
-                    switch step {
-                    case 0: welcomeStep
-                    case 1: firstSiteStep
-                    case 2: gestureStep
-                    default: tryItStep
+                ScrollView(showsIndicators: false) {
+                    Group {
+                        switch step {
+                        case 0: welcomeStep
+                        case 1: profileStep
+                        case 2: firstSiteStep
+                        case 3: gestureStep
+                        default: tryItStep
+                        }
                     }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
 
-                Spacer()
+                Spacer(minLength: 0)
 
                 // Action 按钮
                 VStack(spacing: 8) {
                     Button {
                         advanceStep()
                     } label: {
-                        Text(step < 3 ? "下一步" : "开始试录")
+                        Text(actionTitle)
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.black)
                             .frame(maxWidth: .infinity)
@@ -68,7 +94,7 @@ struct OnboardingView: View {
                     }
                     .buttonStyle(.plain)
 
-                    if step == 1 {
+                    if step == 2 {
                         Button {
                             advanceStep()
                         } label: {
@@ -84,6 +110,16 @@ struct OnboardingView: View {
             .frame(maxWidth: 380)
         }
         .transition(.opacity)
+    }
+
+    private var actionTitle: String {
+        switch step {
+        case 0: return String(localized: "下一步", locale: AppLanguageManager.currentLocale)
+        case 1: return String(localized: "用 \(selectedProfile.displayName) 模式", locale: AppLanguageManager.currentLocale)
+        case 2: return firstSiteName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? String(localized: "下一步", locale: AppLanguageManager.currentLocale) : String(localized: "保存,下一步", locale: AppLanguageManager.currentLocale)
+        case 3: return String(localized: "下一步", locale: AppLanguageManager.currentLocale)
+        default: return String(localized: "开始试录", locale: AppLanguageManager.currentLocale)
+        }
     }
 
     // MARK: - Steps
@@ -114,6 +150,31 @@ struct OnboardingView: View {
                 .padding(.top, 12)
         }
         .padding(.horizontal, 28)
+    }
+
+    private var profileStep: some View {
+        VStack(spacing: 14) {
+            Text("你是?")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.top, 8)
+
+            Text("选个角色,App 会按你的需求显示界面")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+
+            Text("以后可在 设置 → 我是 ... 随时切换")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.45))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 4)
+
+            ProfileSelectorView(selection: $selectedProfile, mode: .onboarding)
+                .padding(.horizontal, 14)
+        }
     }
 
     private var firstSiteStep: some View {
@@ -202,7 +263,7 @@ struct OnboardingView: View {
         .padding(.horizontal, 28)
     }
 
-    private func tryLine(num: String, text: String) -> some View {
+    private func tryLine(num: String, text: LocalizedStringKey) -> some View {
         HStack(spacing: 12) {
             Text(num)
                 .font(.system(size: 14, weight: .bold, design: .rounded))
@@ -216,7 +277,7 @@ struct OnboardingView: View {
         }
     }
 
-    private func gestureLine(icon: String, color: Color, title: String, sub: String) -> some View {
+    private func gestureLine(icon: String, color: Color, title: LocalizedStringKey, sub: LocalizedStringKey) -> some View {
         HStack(spacing: 12) {
             ZStack {
                 Circle().fill(color).frame(width: 36, height: 36)
@@ -238,15 +299,29 @@ struct OnboardingView: View {
 
     // MARK: - Logic
 
+    /// 回到上一步。step == 0 时无操作。
+    /// 不回滚 step 1 已经写入的 profile / step 2 已经存的工地——这些副作用是幂等的(重写覆盖),
+    /// 用户回去再前进会用最新选择再次覆盖。
+    private func goBackStep() {
+        guard step > 0 else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            step -= 1
+        }
+    }
+
     private func advanceStep() {
         if step == 1 {
+            // 用户在 profile step 选了角色
+            UserProfileManager.shared.select(selectedProfile)
+        }
+        if step == 2 {
             // 保存工地(若填了)
             let trimmed = firstSiteName.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 SiteTagsStorage.add(trimmed)
             }
         }
-        if step >= 3 {
+        if step >= Self.totalSteps - 1 {
             UserDefaults.standard.set(true, forKey: Self.dismissedKey)
             withAnimation(.easeOut(duration: 0.25)) {
                 isShown = false

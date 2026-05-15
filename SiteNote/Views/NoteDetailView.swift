@@ -6,15 +6,14 @@
 //
 //  布局(自顶向下):
 //  1. titleBlock         — 大字转写内容(可编辑)+ AI 助手菜单入口
-//  2. tagsRow            — 一排 chip:隐患 · 工地 · 分类 · 已处理 · 模板 · 条款 · 指派 · 平面图
+//  2. tagsRow            — 一排 chip:隐患 · 工地 · 分类 · 已处理 · 条款 · 指派 · 平面图
 //  3. photosBlock        — 主图 240pt 大图 + 其余水平缩略图
 //  4. addPhotoRow        — 全宽"加照片"虚线按钮
 //  5. datesRow           — 创建时间 | 到期时间 两等分
 //  6. audioDisclosure    — 录音(折叠)
 //  7. floorPlanDisclosure— 平面图位置(折叠)
-//  8. templateSection    — 巡检模板(若有)
-//  9. otherMetaDisclosure— 位置/天气/上次分享(折叠)
-//  10. actionButtonGroup — 处理/改期/分享/指派/隐患/删除
+//  8. otherMetaDisclosure— 位置/天气/上次分享(折叠)
+//  9. actionButtonGroup  — 处理/改期/分享/指派/隐患/删除(Engineer 视角下隐藏 PM 专属按钮)
 //
 //  本文件只保留主 body + 各 section computed vars。
 //  AI 操作 → NoteDetailView+AI.swift
@@ -32,6 +31,11 @@ struct NoteDetailView: View {
     @Bindable var note: Note
     @Environment(\.modelContext) var modelContext
     @Environment(\.dismiss) var dismiss
+
+    /// Engineer 视角下隐藏所有 PM/Tradie 专属的操作按钮 + 分类建议卡 + AI 照片分析,
+    /// 详情页退化为纯查看 / 编辑 transcription / 编辑工地标签 / 标注照片。
+    @State private var profileManager = UserProfileManager.shared
+    var isEngineerProfile: Bool { profileManager.current == .engineer }
 
     /// 关联的 LogEntry(用于 diary 模式的"类型"行)。
     @Query var logEntries: [LogEntry]
@@ -97,11 +101,14 @@ struct NoteDetailView: View {
 
     @State var sharePDFURL: URL?
     @State var isGeneratingShare: Bool = false
+    @State var obsidianMessage: String?
     @State private var showsRescheduleDialog: Bool = false
     @State private var fullscreenPhoto: FullscreenPhoto?
     @State private var showsOriginalTranscription: Bool = false
     @State private var isShowingFloorPlanMark: Bool = false
     @State private var editingDetailPhoto: DetailPhotoEdit?
+    /// 标注保存/加载失败时的提示文案。非 nil = 显示 alert。
+    @State private var photoAnnotationError: String?
     @State var galleryRefreshID: UUID = UUID()
     @State private var showsContactPicker: Bool = false
     @State private var pendingAssignee: PendingAssignee?
@@ -119,6 +126,9 @@ struct NoteDetailView: View {
     @State var aiError: String?
     @State var polishPreview: PolishPreview?
     @State var photoAnalyses: PhotoAnalysesSheet?
+    /// E1.2:当前正在跑的 AI Task 句柄。取消按钮 → task?.cancel()。
+    /// 可能是 polish / photo analysis 中的任一种。
+    @State var currentAITask: Task<Void, Never>?
 
     // 标签选择
     @State private var showsTagPicker: Bool = false
@@ -147,23 +157,24 @@ struct NoteDetailView: View {
         ScrollView {
             VStack(spacing: DesignTokens.Spacing.medium) {
                 titleBlock            // 1. 标题(diary 模式带"施工日记" badge)
-                NoteClassificationCard(note: note) // 1.4 AI 分类建议(diary 已自动裁剪只剩 site+subTags)
+                if !isEngineerProfile {
+                    NoteClassificationCard(note: note) // 1.4 AI 分类建议(diary 已自动裁剪只剩 site+subTags)
+                }
                 tagsRow               // 1.5 工地 + 分类
                 if isDiary && !logEntries.isEmpty {
                     typeRow           // 1.6 diary 专属:已识别的类型 chip(👥 人员 · 🚜 机械)
                 }
-                LogEntryChipSection(note: note)    // 2. AI 识别的结构化条目
+                if !isEngineerProfile {
+                    LogEntryChipSection(note: note)    // 2. AI 识别的结构化条目(Engineer 不要)
+                }
                 photosBlock           // 3. 照片
                 addPhotoRow           // 4. 加照片
-                if !isDiary {
-                    datesRow          // 5. 到期时间(只普通 note)
+                if !isDiary && !isEngineerProfile {
+                    datesRow          // 5. 到期时间(Engineer / 日志 都不显示——没有 deadline 概念)
                 }
                 audioDisclosure       // 6. 录音
                 if !isDiary {
-                    floorPlanDisclosure   // 7. 平面图(只普通 note,日志不需要)
-                }
-                if !isDiary, note.templateName != nil {
-                    templateSection   // 8. 巡检模板(只普通 note)
+                    floorPlanDisclosure   // 7. 平面图(只普通 note,日志不需要;Engineer 保留——核心功能)
                 }
                 otherMetaDisclosure   // 9. 位置/天气/分享(两种都有)
                 actionButtonGroup     // 10. 操作按钮(diary 只显示 删除)
@@ -205,12 +216,23 @@ struct NoteDetailView: View {
             }
         }
         .sheet(item: $fullscreenPhoto) { photo in
-            FullscreenPhotoView(image: photo.image)
+            FullscreenPhotoView(
+                image: photo.image,
+                onAnnotate: photo.path.map { path in
+                    { editingDetailPhoto = DetailPhotoEdit(path: path, image: photo.image) }
+                }
+            )
         }
         .sheet(item: $editingDetailPhoto) { edit in
             PhotoEditorView(originalImage: edit.image) { newImage in
-                writeEditedPhoto(newImage, toPath: edit.path)
-                galleryRefreshID = UUID()
+                if writeEditedPhoto(newImage, toPath: edit.path) {
+                    galleryRefreshID = UUID()
+                } else {
+                    photoAnnotationError = String(
+                        localized: "标注保存失败,原图保留",
+                        locale: AppLanguageManager.currentLocale
+                    )
+                }
             }
         }
         .sheet(isPresented: $showsContactPicker) {
@@ -221,7 +243,7 @@ struct NoteDetailView: View {
                         pendingAssignee = PendingAssignee(name: name, phone: phone)
                     }
                 } else {
-                    assignError = "该联系人没有电话号码"
+                    assignError = String(localized: "该联系人没有电话号码", locale: AppLanguageManager.currentLocale)
                 }
             }
         }
@@ -356,6 +378,14 @@ struct NoteDetailView: View {
         } message: {
             Text(aiError ?? "")
         }
+        .alert("标注提示", isPresented: Binding(
+            get: { photoAnnotationError != nil },
+            set: { if !$0 { photoAnnotationError = nil } }
+        )) {
+            Button("知道了") { photoAnnotationError = nil }
+        } message: {
+            Text(photoAnnotationError ?? "")
+        }
     }
 
     // MARK: - 1. 标题块(转写正文大字 + AI 助手)
@@ -391,7 +421,9 @@ struct NoteDetailView: View {
                         .foregroundStyle(Color.accentColor)
                     }
                 }
-                aiMenu
+                if !isEngineerProfile {
+                    aiMenu
+                }
             }
 
             TextField("(空内容)", text: $note.transcription, axis: .vertical)
@@ -404,7 +436,7 @@ struct NoteDetailView: View {
         }
     }
 
-    // MARK: - 2. 标签一排(工地 + 分类 + 状态 + 模板 + 条款 + 指派 + 平面图 ref)
+    // MARK: - 2. 标签一排(工地 + 分类 + 状态 + 条款 + 指派 + 平面图 ref)
 
     private var tagsRow: some View {
         let chips = contextChips
@@ -425,7 +457,7 @@ struct NoteDetailView: View {
         if note.isHazard {
             list.append(ContextChip(
                 icon: "exclamationmark.triangle.fill",
-                text: "隐患",
+                text: String(localized: "隐患", locale: AppLanguageManager.currentLocale),
                 color: Ink.red,
                 kind: .hazard
             ))
@@ -433,7 +465,7 @@ struct NoteDetailView: View {
         let siteName = note.siteTag
         list.append(ContextChip(
             icon: siteName == nil ? "building.2" : "building.2.fill",
-            text: siteName ?? "未命名工地",
+            text: siteName ?? String(localized: "未命名工地", locale: AppLanguageManager.currentLocale),
             color: siteName == nil ? Ink.fgDim : Ink.accent,
             kind: .tag
         ))
@@ -449,16 +481,8 @@ struct NoteDetailView: View {
         if note.isDone {
             list.append(ContextChip(
                 icon: "checkmark.circle.fill",
-                text: "已处理",
+                text: String(localized: "已处理", locale: AppLanguageManager.currentLocale),
                 color: Ink.green,
-                kind: .other
-            ))
-        }
-        if let template = note.templateName {
-            list.append(ContextChip(
-                icon: "checklist",
-                text: template,
-                color: Ink.fgDim,
                 kind: .other
             ))
         }
@@ -605,7 +629,7 @@ struct NoteDetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    fullscreenPhoto = FullscreenPhoto(image: image)
+                    fullscreenPhoto = FullscreenPhoto(image: image, path: path)
                 }
 
             Button {
@@ -669,7 +693,7 @@ struct NoteDetailView: View {
         }
     }
 
-    private func dateCell(icon: String, label: String, value: String, tint: Color) -> some View {
+    private func dateCell(icon: String, label: LocalizedStringKey, value: String, tint: Color) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 14))
@@ -726,12 +750,15 @@ struct NoteDetailView: View {
             }
             .disabled(!available || note.transcription.isEmpty)
 
-            Button {
-                runPhotoAnalysis()
-            } label: {
-                Label("分析照片", systemImage: "photo.badge.checkmark")
+            // Engineer 视角下不提供 AI 照片分析(任务 3:Engineer 不调照片 AI)。
+            if !isEngineerProfile {
+                Button {
+                    runPhotoAnalysis()
+                } label: {
+                    Label("分析照片", systemImage: "photo.badge.checkmark")
+                }
+                .disabled(!available || note.photoPaths.isEmpty)
             }
-            .disabled(!available || note.photoPaths.isEmpty)
 
             if !available {
                 Divider()
@@ -767,7 +794,7 @@ struct NoteDetailView: View {
                         .background(Ink.card)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
 
-                    Text(note.transcriptionOriginal.isEmpty ? "(无原始文本)" : note.transcriptionOriginal)
+                    Text(note.transcriptionOriginal.isEmpty ? String(localized: "(无原始文本)", locale: AppLanguageManager.currentLocale) : note.transcriptionOriginal)
                         .font(.system(size: DesignTokens.FontSize.large))
                         .textSelection(.enabled)
                         .padding(DesignTokens.Spacing.medium)
@@ -808,7 +835,7 @@ struct NoteDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        fullscreenPhoto = FullscreenPhoto(image: image)
+                        fullscreenPhoto = FullscreenPhoto(image: image, path: path)
                     }
                 Button {
                     editingDetailPhoto = DetailPhotoEdit(path: path, image: image)
@@ -826,55 +853,6 @@ struct NoteDetailView: View {
                 .frame(width: 120, height: 120)
                 .overlay(Image(systemName: "photo").font(.title))
         }
-    }
-
-    // MARK: - 3. 模板检查清单
-
-    private var templateSection: some View {
-        let templateItems = InspectionTemplatesStorage.load()
-            .first(where: { $0.name == note.templateName })?.items ?? []
-        let checkedSet = Set(note.checkedItems)
-
-        return VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
-            HStack {
-                Image(systemName: "checklist")
-                Text("巡检模板: \(note.templateName ?? "")")
-                    .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-            }
-
-            if templateItems.isEmpty {
-                Text("(模板已被删除,检查清单不可用)")
-                    .font(.system(size: DesignTokens.FontSize.body))
-                    .foregroundStyle(.tertiary)
-            } else {
-                ForEach(templateItems, id: \.self) { item in
-                    Button {
-                        toggleChecked(item: item)
-                    } label: {
-                        HStack {
-                            Image(systemName: checkedSet.contains(item) ? "checkmark.square.fill" : "square")
-                                .foregroundStyle(checkedSet.contains(item) ? Ink.fg : Ink.fgDim)
-                            Text(item)
-                                .font(.system(size: DesignTokens.FontSize.body))
-                                .strikethrough(checkedSet.contains(item))
-                                .foregroundStyle(checkedSet.contains(item) ? .secondary : .primary)
-                            Spacer()
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.vertical, 2)
-                }
-                let unchecked = templateItems.count - checkedSet.count
-                Text(unchecked == 0 ? "✓ 全部勾选完成" : "⚠️ \(unchecked) 项未勾选")
-                    .font(.system(size: DesignTokens.FontSize.body))
-                    .foregroundStyle(unchecked == 0 ? Ink.fg : Ink.red)
-                    .padding(.top, 4)
-            }
-        }
-        .padding(DesignTokens.Spacing.medium)
-        .background(Ink.card)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - 7. 平面图(折叠)
@@ -906,9 +884,9 @@ struct NoteDetailView: View {
 
     private var floorPlanDisclosureLabel: String {
         if let name = note.floorPlanRef {
-            return "平面图位置: \(name)"
+            return String(localized: "平面图位置: \(name)", locale: AppLanguageManager.currentLocale)
         }
-        return "平面图位置"
+        return String(localized: "平面图位置", locale: AppLanguageManager.currentLocale)
     }
 
     @ViewBuilder
@@ -973,9 +951,9 @@ struct NoteDetailView: View {
         DisclosureGroup {
             VStack(spacing: 0) {
                 Divider()
-                infoRow("位置", value: note.locationAddress ?? "未记录")
+                infoRow("位置", value: note.locationAddress ?? String(localized: "未记录", locale: AppLanguageManager.currentLocale))
                 Divider()
-                infoRow("天气", value: note.weatherSummary ?? "未记录")
+                infoRow("天气", value: note.weatherSummary ?? String(localized: "未记录", locale: AppLanguageManager.currentLocale))
                 if let sharedAt = note.lastSharedAt {
                     Divider()
                     infoRow("上次分享", value: sharedAt.formatted(date: .abbreviated, time: .shortened))
@@ -996,7 +974,7 @@ struct NoteDetailView: View {
     }
 
     @ViewBuilder
-    private func infoRow(_ label: String, value: String) -> some View {
+    private func infoRow(_ label: LocalizedStringKey, value: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(label)
                 .font(.system(size: DesignTokens.FontSize.body))
@@ -1012,7 +990,7 @@ struct NoteDetailView: View {
 
     private var deadlineDisplay: String {
         if note.deadline == .archive {
-            return "归档"
+            return String(localized: "归档", locale: AppLanguageManager.currentLocale)
         }
         let due = note.dueDate.formatted(date: .abbreviated, time: .omitted)
         return "\(note.deadline.displayName) · \(due)"
@@ -1024,10 +1002,14 @@ struct NoteDetailView: View {
     /// - 第 1 排:已处理 + 改期(常用主操作,填充色)
     /// - 第 2 排:分享 + 指派(中性 tonal)
     /// - 第 3 排:标记隐患 + 删除(描边 ghost,警示/危险)
+    ///
+    /// Engineer 视角下:隐藏 完成 / 改期 / 指派 / 标隐患 这些 todo 性质的按钮,
+    /// 只保留 分享 + 删除 + 转换模式 + Obsidian 导出。详情页定位为"查看/编辑"。
     @ViewBuilder
     private var actionButtonGroup: some View {
-        if isDiary {
-            // 日志只保留:分享 + 删除。todo 类的(完成/改期/指派/标隐患)全部省去。
+        if isDiary || isEngineerProfile {
+            // 日志 / Engineer:都不需要 todo 类的(完成/改期/指派/标隐患)按钮。
+            // Engineer 也不要"转为施工日志" / Obsidian 导出 —— 工程师工作流以 InspectionReport 为出口。
             VStack(spacing: DesignTokens.Spacing.small) {
                 HStack(spacing: DesignTokens.Spacing.small) {
                     tonalActionButton(
@@ -1043,7 +1025,9 @@ struct NoteDetailView: View {
                         tint: Ink.red
                     ) { showsDeleteConfirm = true }
                 }
-                convertModeButton
+                if !isEngineerProfile {
+                    convertModeButton
+                }
             }
         } else {
             VStack(spacing: DesignTokens.Spacing.small) {
@@ -1068,7 +1052,7 @@ struct NoteDetailView: View {
                         if MessageComposer.canSendMessages {
                             showsContactPicker = true
                         } else {
-                            assignError = "当前设备不支持发送短信(可能是 iPad 或模拟器)"
+                            assignError = String(localized: "当前设备不支持发送短信(可能是 iPad 或模拟器)", locale: AppLanguageManager.currentLocale)
                         }
                     }
                 }
@@ -1095,12 +1079,37 @@ struct NoteDetailView: View {
 
     /// 记录 ↔ 施工日志 切换(录错模式时修正)。
     private var convertModeButton: some View {
+        VStack(spacing: DesignTokens.Spacing.small) {
+            Button {
+                showsConvertConfirm = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text(isDiary ? "转为普通记录" : "转为施工日志")
+                }
+                .font(.system(size: DesignTokens.FontSize.body, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 36)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            obsidianExportButton
+        }
+    }
+
+    /// 一键导出当前 note 到 Obsidian vault（需先在设置里配置文件夹）。
+    private var obsidianExportButton: some View {
         Button {
-            showsConvertConfirm = true
+            exportThisNoteToObsidian()
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                Text(isDiary ? "转为普通记录" : "转为施工日志")
+                Image(systemName: "square.and.arrow.up.on.square")
+                Text("导出到 Obsidian")
             }
             .font(.system(size: DesignTokens.FontSize.body, weight: .medium))
             .foregroundStyle(.secondary)
@@ -1112,6 +1121,23 @@ struct NoteDetailView: View {
             )
         }
         .buttonStyle(.plain)
+        .alert("Obsidian 导出", isPresented: Binding(
+            get: { obsidianMessage != nil },
+            set: { if !$0 { obsidianMessage = nil } }
+        )) {
+            Button("知道了") { obsidianMessage = nil }
+        } message: {
+            Text(obsidianMessage ?? "")
+        }
+    }
+
+    private func exportThisNoteToObsidian() {
+        do {
+            try ObsidianExportService.exportSingleNote(note)
+            obsidianMessage = "✓ 已导出。Mac 上的 vault 几秒后通过 iCloud 同步可见。"
+        } catch {
+            obsidianMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
     }
 
     /// 执行模式切换。diary↔note:切 deadline + 清 LogEntry(日志→记录)+ 重排推送。
@@ -1183,7 +1209,7 @@ struct NoteDetailView: View {
     /// Tonal 次级按钮:纯灰调,不抢主色。
     private func tonalActionButton(
         icon: String,
-        title: String,
+        title: LocalizedStringKey,
         tint: Color,
         bg: Color,
         action: @escaping () -> Void
@@ -1210,7 +1236,7 @@ struct NoteDetailView: View {
     /// Ghost 三级按钮:描边样式。
     private func ghostActionButton(
         icon: String,
-        title: String,
+        title: LocalizedStringKey,
         tint: Color,
         action: @escaping () -> Void
     ) -> some View {

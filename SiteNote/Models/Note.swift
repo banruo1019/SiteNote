@@ -18,14 +18,14 @@ enum Deadline: String, Codable, CaseIterable {
     /// 只想记下来,永不提醒(备忘)。
     case archive
 
-    /// 面向用户的中文显示名。
+    /// 面向用户的显示名。
     var displayName: String {
         switch self {
-        case .inbox: return "待分类"
-        case .today: return "今天"
-        case .threeDays: return "3 天内"
-        case .thisWeek: return "7 天内"
-        case .archive: return "只是记录"
+        case .inbox: return String(localized: "待分类", locale: AppLanguageManager.currentLocale)
+        case .today: return String(localized: "今天", locale: AppLanguageManager.currentLocale)
+        case .threeDays: return String(localized: "3 天内", locale: AppLanguageManager.currentLocale)
+        case .thisWeek: return String(localized: "7 天内", locale: AppLanguageManager.currentLocale)
+        case .archive: return String(localized: "只是记录", locale: AppLanguageManager.currentLocale)
         }
     }
 

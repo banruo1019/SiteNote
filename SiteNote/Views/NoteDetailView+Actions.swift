@@ -3,7 +3,7 @@
 //  SiteNote
 //
 //  从 NoteDetailView.swift 拆分出来的 Actions & helpers:
-//  - toggleChecked / reschedule / softDeleteNote
+//  - reschedule / softDeleteNote
 //  - writeEditedPhoto / appendPhoto
 //  - generateSharePDF
 //  - buildAssignMessage / loadNotePhotosForAssignment / renderFloorPlanWithPin
@@ -16,16 +16,6 @@ import UIKit
 extension NoteDetailView {
 
     // MARK: - Actions & helpers
-
-    func toggleChecked(item: String) {
-        var set = Set(note.checkedItems)
-        if set.contains(item) {
-            set.remove(item)
-        } else {
-            set.insert(item)
-        }
-        note.checkedItems = Array(set)
-    }
 
     func reschedule(to newDeadline: Deadline) {
         note.deadline = newDeadline
@@ -40,10 +30,18 @@ extension NoteDetailView {
         dismiss()
     }
 
-    func writeEditedPhoto(_ image: UIImage, toPath path: String) {
+    /// 把标注完的图覆盖回原路径(就地保存,不产生孤儿文件)。
+    /// 失败时返回 false,调用方应提示"标注保存失败,原图保留"。
+    @discardableResult
+    func writeEditedPhoto(_ image: UIImage, toPath path: String) -> Bool {
         guard let url = PhotoStorage.absoluteURL(forRelative: path),
-              let data = image.jpegData(compressionQuality: 0.85) else { return }
-        try? data.write(to: url)
+              let data = image.jpegData(compressionQuality: 0.85) else { return false }
+        do {
+            try data.write(to: url, options: .atomic)
+            return true
+        } catch {
+            return false
+        }
     }
 
     /// 把一张新图保存到磁盘并加到当前 note。
@@ -67,14 +65,14 @@ extension NoteDetailView {
                     notes: [note],
                     startDate: nil,
                     endDate: nil,
-                    title: "SiteNote 记录",
+                    title: String(localized: "SiteNote 记录", locale: AppLanguageManager.currentLocale),
                     includeCoverPage: false,
                     filenamePrefix: "SiteNote-Note"
                 )
                 sharePDFURL = url
                 isGeneratingShare = false
             } catch {
-                aiError = "分享 PDF 生成失败: \(error.localizedDescription)"
+                aiError = String(localized: "分享 PDF 生成失败: \(error.localizedDescription)", locale: AppLanguageManager.currentLocale)
                 isGeneratingShare = false
             }
         }
@@ -83,14 +81,15 @@ extension NoteDetailView {
     func buildAssignMessage() -> String {
         let dateStr = note.createdAt.formatted(date: .abbreviated, time: .shortened)
         let loc = note.locationAddress.map { " · \($0)" } ?? ""
-        let deadline = "到期: \(note.deadline.displayName)"
-        let body = note.transcription.isEmpty ? "(见照片)" : note.transcription
+        let deadlineName = note.deadline.displayName
+        let deadline = String(localized: "到期: \(deadlineName)", locale: AppLanguageManager.currentLocale)
+        let body = note.transcription.isEmpty ? String(localized: "(见照片)", locale: AppLanguageManager.currentLocale) : note.transcription
         var lines: [String] = ["[SiteNote \(dateStr)\(loc)]", body]
-        if let tag = note.siteTag { lines.append("工地: \(tag)") }
-        if !note.otherTags.isEmpty { lines.append("类型: " + note.otherTags.joined(separator: " / ")) }
-        if let planName = note.floorPlanRef { lines.append("位置: 平面图 \(planName)") }
+        if let tag = note.siteTag { lines.append(String(localized: "工地: \(tag)", locale: AppLanguageManager.currentLocale)) }
+        if !note.otherTags.isEmpty { lines.append(String(localized: "类型: ", locale: AppLanguageManager.currentLocale) + note.otherTags.joined(separator: " / ")) }
+        if let planName = note.floorPlanRef { lines.append(String(localized: "位置: 平面图 \(planName)", locale: AppLanguageManager.currentLocale)) }
         lines.append(deadline)
-        lines.append("—— 请处理并回复。")
+        lines.append(String(localized: "—— 请处理并回复。", locale: AppLanguageManager.currentLocale))
         return lines.joined(separator: "\n")
     }
 

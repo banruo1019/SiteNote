@@ -103,8 +103,9 @@ enum WeeklySummaryService {
     static func describeWeather(code: Int, tempC: Double?) -> String {
         var desc = WeatherService.description(code: code)
         if let t = tempC {
-            if t > 38 { desc += " + 高温 \(Int(t))°C" }
-            if t < -10 { desc += " + 极寒 \(Int(t))°C" }
+            let tInt = Int(t)
+            if t > 38 { desc += String(localized: " + 高温 \(tInt)°C", locale: AppLanguageManager.currentLocale) }
+            if t < -10 { desc += String(localized: " + 极寒 \(tInt)°C", locale: AppLanguageManager.currentLocale) }
         }
         return desc
     }
@@ -112,41 +113,41 @@ enum WeeklySummaryService {
     /// 把 Summary 拼成一段可复制/分享的文本。
     static func formatAsText(_ s: Summary) -> String {
         let df = DateFormatter()
-        df.dateFormat = "M 月 d 日"
-        df.locale = Locale(identifier: "zh-CN")
+        df.setLocalizedDateFormatFromTemplate("Md")
+        df.locale = Locale.current
 
         var lines: [String] = []
-        lines.append("📊 本周总结")
+        lines.append(String(localized: "📊 本周总结", locale: AppLanguageManager.currentLocale))
         lines.append("\(df.string(from: s.weekStart)) - \(df.string(from: s.weekEnd))")
         lines.append("")
-        lines.append("• 总共 \(s.totalNotes) 条速记")
-        lines.append("• 已完成 \(s.doneCount) 条")
+        lines.append(String(localized: "• 总共 \(s.totalNotes) 条速记", locale: AppLanguageManager.currentLocale))
+        lines.append(String(localized: "• 已完成 \(s.doneCount) 条", locale: AppLanguageManager.currentLocale))
         if s.overdueCount > 0 {
-            lines.append("• ⚠️ 逾期未处理 \(s.overdueCount) 条")
+            lines.append(String(localized: "• ⚠️ 逾期未处理 \(s.overdueCount) 条", locale: AppLanguageManager.currentLocale))
         }
         if s.hazardCount > 0 {
-            lines.append("• 🚨 隐患 \(s.hazardCount) 条")
+            lines.append(String(localized: "• 🚨 隐患 \(s.hazardCount) 条", locale: AppLanguageManager.currentLocale))
         }
 
         if !s.topSiteTags.isEmpty {
             lines.append("")
-            lines.append("📍 工地分布:")
+            lines.append(String(localized: "📍 工地分布:", locale: AppLanguageManager.currentLocale))
             for (tag, count) in s.topSiteTags {
-                lines.append("  - \(tag): \(count) 条")
+                lines.append(String(localized: "  - \(tag): \(count) 条", locale: AppLanguageManager.currentLocale))
             }
         }
 
         if !s.topAssignees.isEmpty {
             lines.append("")
-            lines.append("👥 指派给:")
+            lines.append(String(localized: "👥 指派给:", locale: AppLanguageManager.currentLocale))
             for (name, count) in s.topAssignees {
-                lines.append("  - \(name): \(count) 条")
+                lines.append(String(localized: "  - \(name): \(count) 条", locale: AppLanguageManager.currentLocale))
             }
         }
 
         if !s.adverseWeather.isEmpty {
             lines.append("")
-            lines.append("🌧 天气异常日(EOT 参考):")
+            lines.append(String(localized: "🌧 天气异常日(EOT 参考):", locale: AppLanguageManager.currentLocale))
             for (date, reason) in s.adverseWeather {
                 lines.append("  - \(df.string(from: date)) \(reason)")
             }
@@ -154,7 +155,7 @@ enum WeeklySummaryService {
 
         if !s.pending.isEmpty {
             lines.append("")
-            lines.append("📋 待处理(按紧迫度,前 5 条):")
+            lines.append(String(localized: "📋 待处理(按紧迫度,前 5 条):", locale: AppLanguageManager.currentLocale))
             for note in s.pending.prefix(5) {
                 let preview = String(note.transcription.prefix(40))
                 let flag = note.isHazard ? "🚨 " : ""
@@ -163,7 +164,7 @@ enum WeeklySummaryService {
         }
 
         lines.append("")
-        lines.append("—— 由 SiteNote 自动生成")
+        lines.append(String(localized: "—— 由 SiteNote 自动生成", locale: AppLanguageManager.currentLocale))
 
         return lines.joined(separator: "\n")
     }

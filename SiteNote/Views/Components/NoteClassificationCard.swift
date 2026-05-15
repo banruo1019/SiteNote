@@ -62,9 +62,6 @@ struct NoteClassificationCard: View {
                         suggestion: x,
                         tint: Ink.red)
                 }
-                if let x = s.template {
-                    row(icon: "checklist", label: "巡检模板", field: x.value, suggestion: x)
-                }
                 if let x = s.clause {
                     row(icon: "doc.text", label: "合同条款", field: x.value, suggestion: x)
                 }
@@ -191,7 +188,6 @@ struct NoteClassificationCard: View {
         if s.subTags != nil { n += 1 }
         if s.deadline != nil { n += 1 }
         if s.hazard != nil { n += 1 }
-        if s.template != nil { n += 1 }
         if s.clause != nil { n += 1 }
         return n
     }

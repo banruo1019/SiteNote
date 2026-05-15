@@ -2,7 +2,7 @@
 //  DeadlineSheet.swift
 //  SiteNote
 //
-//  录音完成后的弹窗:工地标签 + 照片 + 隐患开关 + 巡检模板 + 合同条款 + 到期。
+//  录音完成后的弹窗:工地标签 + 照片 + 隐患开关 + 合同条款 + 到期。
 //  选 deadline 即保存。
 //
 
@@ -16,8 +16,6 @@ struct DeadlineSheetResult {
     let photos: [UIImage]
     let siteTag: String?
     let isHazard: Bool
-    let templateName: String?
-    let checkedItems: [String]
     let contractClauseRef: String?
     let floorPlanRef: String?
     let floorPlanX: Double?
@@ -48,10 +46,6 @@ struct DeadlineSheet: View {
     @State private var availableTags: [String] = []
 
     @State private var isHazard: Bool = false
-
-    @State private var availableTemplates: [InspectionTemplate] = []
-    @State private var selectedTemplate: InspectionTemplate?
-    @State private var checkedItems: Set<String> = []
 
     @State private var availableClauseRefs: [String] = []
     @State private var selectedClauseRef: String?
@@ -129,10 +123,6 @@ struct DeadlineSheet: View {
                         VStack(spacing: DesignTokens.Spacing.medium) {
                             hazardToggle
 
-                            if !availableTemplates.isEmpty {
-                                templatePicker
-                            }
-
                             if !availableClauseRefs.isEmpty {
                                 clauseRefPicker
                             }
@@ -152,7 +142,6 @@ struct DeadlineSheet: View {
         .interactiveDismissDisabled(true)
         .onAppear {
             availableTags = SiteTagsStorage.load()
-            availableTemplates = InspectionTemplatesStorage.load()
             availableClauseRefs = ClauseRefsStorage.load()
             availableFloorPlans = FloorPlansStorage.load()
             runAutoTagSuggestion()
@@ -188,22 +177,16 @@ struct DeadlineSheet: View {
         guard enabled,
               !transcription.isEmpty,
               selectedSiteTag == nil,
-              selectedTemplate == nil,
               selectedClauseRef == nil
         else { return }
 
         let suggestion = AIService.shared.suggestTags(
             transcription: transcription,
             availableSites: availableTags,
-            availableTemplates: availableTemplates,
             availableClauses: availableClauseRefs
         )
         if let site = suggestion.suggestedSiteTag {
             selectedSiteTag = site
-        }
-        if let templateName = suggestion.suggestedTemplateName,
-           let tpl = availableTemplates.first(where: { $0.name == templateName }) {
-            selectedTemplate = tpl
         }
         if let clause = suggestion.suggestedClauseRef {
             selectedClauseRef = clause
@@ -215,7 +198,7 @@ struct DeadlineSheet: View {
 
     @ViewBuilder
     private var transcriptionPreview: some View {
-        let text = transcription.isEmpty ? "(无转写,仅保存录音)" : transcription
+        let text = transcription.isEmpty ? String(localized: "(无转写,仅保存录音)", locale: AppLanguageManager.currentLocale) : transcription
         Text(text)
             .font(.system(size: DesignTokens.FontSize.body))
             .foregroundStyle(transcription.isEmpty ? .tertiary : .primary)
@@ -234,7 +217,7 @@ struct DeadlineSheet: View {
         } label: {
             HStack {
                 Image(systemName: showsAdvanced ? "chevron.up.circle" : "chevron.down.circle")
-                Text(showsAdvanced ? "收起高级选项" : "更多选项(隐患 / 模板 / 条款 / 平面图)")
+                Text(showsAdvanced ? "收起高级选项" : "更多选项(隐患 / 条款 / 平面图)")
                     .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
                 Spacer()
             }
@@ -271,7 +254,7 @@ struct DeadlineSheet: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DesignTokens.Spacing.small) {
-                    chip(title: "未分类", isSelected: selectedSiteTag == nil) {
+                    chip(title: String(localized: "未分类", locale: AppLanguageManager.currentLocale), isSelected: selectedSiteTag == nil) {
                         selectedSiteTag = nil
                     }
                     ForEach(availableTags, id: \.self) { tag in
@@ -284,74 +267,6 @@ struct DeadlineSheet: View {
         }
     }
 
-    // MARK: - Template picker
-
-    private var templatePicker: some View {
-        VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
-            Text("巡检模板")
-                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: DesignTokens.Spacing.small) {
-                    chip(title: "无模板", isSelected: selectedTemplate == nil) {
-                        selectedTemplate = nil
-                        checkedItems.removeAll()
-                    }
-                    ForEach(availableTemplates) { template in
-                        chip(title: template.name, isSelected: selectedTemplate?.id == template.id) {
-                            selectedTemplate = template
-                            checkedItems.removeAll()
-                        }
-                    }
-                }
-            }
-
-            if let template = selectedTemplate {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(template.items, id: \.self) { item in
-                        templateCheckRow(item: item)
-                    }
-                    if template.items.contains(where: { !checkedItems.contains($0) }) {
-                        Text("⚠️ 还有 \(template.items.count - checkedItems.count) 项未勾选")
-                            .font(.system(size: DesignTokens.FontSize.body))
-                            .foregroundStyle(.orange)
-                            .padding(.top, 4)
-                    } else if !template.items.isEmpty {
-                        Text("✓ 全部勾选完成")
-                            .font(.system(size: DesignTokens.FontSize.body))
-                            .foregroundStyle(.green)
-                            .padding(.top, 4)
-                    }
-                }
-                .padding(DesignTokens.Spacing.small)
-                .background(Color.gray.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-        }
-    }
-
-    private func templateCheckRow(item: String) -> some View {
-        Button {
-            if checkedItems.contains(item) {
-                checkedItems.remove(item)
-            } else {
-                checkedItems.insert(item)
-            }
-        } label: {
-            HStack {
-                Image(systemName: checkedItems.contains(item) ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(checkedItems.contains(item) ? .green : .secondary)
-                Text(item)
-                    .font(.system(size: DesignTokens.FontSize.body))
-                    .foregroundStyle(.primary)
-                Spacer()
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .padding(.vertical, 4)
-    }
-
     // MARK: - Clause ref picker
 
     private var clauseRefPicker: some View {
@@ -361,7 +276,7 @@ struct DeadlineSheet: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: DesignTokens.Spacing.small) {
-                    chip(title: "无", isSelected: selectedClauseRef == nil) {
+                    chip(title: String(localized: "无", locale: AppLanguageManager.currentLocale), isSelected: selectedClauseRef == nil) {
                         selectedClauseRef = nil
                     }
                     ForEach(availableClauseRefs, id: \.self) { ref in
@@ -398,13 +313,18 @@ struct DeadlineSheet: View {
                 Image(systemName: floorPlanMark == nil ? "map" : "mappin.circle.fill")
                     .foregroundStyle(floorPlanMark == nil ? Color.accentColor : .red)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(floorPlanMark == nil ? "在平面图上标位置(可选)" : "已标位置: \(floorPlanMark!.planName)")
-                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                        .foregroundStyle(.primary)
                     if let mark = floorPlanMark {
-                        Text(String(format: "x=%.2f y=%.2f(点击修改)", mark.x, mark.y))
+                        Text("已标位置: \(mark.planName)")
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        let coords = String(format: "x=%.2f y=%.2f", mark.x, mark.y)
+                        Text("\(coords)(点击修改)")
                             .font(.system(size: DesignTokens.FontSize.body))
                             .foregroundStyle(.secondary)
+                    } else {
+                        Text("在平面图上标位置(可选)")
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                            .foregroundStyle(.primary)
                     }
                 }
                 Spacer()
@@ -568,8 +488,6 @@ struct DeadlineSheet: View {
                 photos: images,
                 siteTag: selectedSiteTag,
                 isHazard: isHazard,
-                templateName: selectedTemplate?.name,
-                checkedItems: Array(checkedItems),
                 contractClauseRef: selectedClauseRef,
                 floorPlanRef: floorPlanMark?.planName,
                 floorPlanX: floorPlanMark?.x,
@@ -577,7 +495,7 @@ struct DeadlineSheet: View {
             )
             onCommit(result)
         } label: {
-            Text(deadline.displayName + (deadline == primaryDeadline ? " (默认)" : ""))
+            Text(deadline.displayName + (deadline == primaryDeadline ? String(localized: " (默认)", locale: AppLanguageManager.currentLocale) : ""))
                 .font(.system(size: DesignTokens.FontSize.large, weight: style.fontWeight))
                 .foregroundStyle(style.textColor)
                 .frame(maxWidth: .infinity)

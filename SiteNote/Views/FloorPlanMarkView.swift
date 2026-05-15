@@ -152,15 +152,15 @@ struct FloorPlanMarkView: View {
 
     private var navigationTitleText: String {
         if let preferredSiteTag {
-            return "\(preferredSiteTag) · 标位置"
+            return String(localized: "\(preferredSiteTag) · 标位置", locale: AppLanguageManager.currentLocale)
         }
         if needsSitePick {
-            return "选工地"
+            return String(localized: "选工地", locale: AppLanguageManager.currentLocale)
         }
         if let site = chosenSite {
-            return "\(site) · 标位置"
+            return String(localized: "\(site) · 标位置", locale: AppLanguageManager.currentLocale)
         }
-        return "平面图标位置"
+        return String(localized: "平面图标位置", locale: AppLanguageManager.currentLocale)
     }
 
     // MARK: - 工地选择(仅当外部没传 preferredSiteTag)
@@ -191,7 +191,7 @@ struct FloorPlanMarkView: View {
                             HStack {
                                 Image(systemName: "mappin.and.ellipse")
                                     .foregroundStyle(Color.accentColor)
-                                Text(site ?? "未分类")
+                                Text(site ?? String(localized: "未分类", locale: AppLanguageManager.currentLocale))
                                     .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
                                     .foregroundStyle(.primary)
                                 Spacer()
@@ -220,7 +220,7 @@ struct FloorPlanMarkView: View {
         HStack(spacing: DesignTokens.Spacing.small) {
             Image(systemName: "mappin.and.ellipse")
                 .foregroundStyle(Color.accentColor)
-            Text(chosenSite ?? "未分类")
+            Text(chosenSite ?? String(localized: "未分类", locale: AppLanguageManager.currentLocale))
                 .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
             Spacer()
             Button {
@@ -266,7 +266,7 @@ struct FloorPlanMarkView: View {
             Image(systemName: "map")
                 .font(.system(size: 48, weight: .light))
                 .foregroundStyle(.tertiary)
-            Text("\(effectiveSite ?? "未分类") 还没有楼层")
+            Text("\(effectiveSite ?? String(localized: "未分类", locale: AppLanguageManager.currentLocale)) 还没有楼层")
                 .font(.system(size: DesignTokens.FontSize.large, weight: .semibold))
             Text("请先在「设置 → 工地资源 → 工地平面图」为此工地添加一个楼层。")
                 .font(.system(size: DesignTokens.FontSize.body))

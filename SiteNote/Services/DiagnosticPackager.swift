@@ -23,9 +23,9 @@ enum DiagnosticPackager {
         var errorDescription: String? {
             switch self {
             case .appSupportMissing:
-                return "无法访问 App 的内部数据目录。"
+                return String(localized: "无法访问 App 的内部数据目录。", locale: AppLanguageManager.currentLocale)
             case .packageFailed(let detail):
-                return "打包失败: \(detail)"
+                return String(localized: "打包失败:\(detail)", locale: AppLanguageManager.currentLocale)
             }
         }
     }

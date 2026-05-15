@@ -122,7 +122,7 @@ struct NoteRow: View {
 
     private var previewText: String {
         if note.transcription.isEmpty {
-            return "(仅录音/照片)"
+            return String(localized: "(仅录音/照片)", locale: AppLanguageManager.currentLocale)
         }
         return note.transcription
     }

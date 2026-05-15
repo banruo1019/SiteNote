@@ -16,7 +16,7 @@ enum PDFExportService {
 
         var errorDescription: String? {
             switch self {
-            case .renderFailed(let detail): return "PDF 生成失败: \(detail)"
+            case .renderFailed(let detail): return String(localized: "PDF 生成失败:\(detail)", locale: AppLanguageManager.currentLocale)
             }
         }
     }
@@ -32,7 +32,7 @@ enum PDFExportService {
         notes: [Note],
         startDate: Date?,
         endDate: Date?,
-        title: String = "SiteNote 巡检日志",
+        title: String = String(localized: "SiteNote 巡检日志", locale: AppLanguageManager.currentLocale),
         includeCoverPage: Bool = true,
         filenamePrefix: String = "SiteNote-Log"
     ) throws -> URL {
@@ -94,15 +94,18 @@ enum PDFExportService {
         y += 60
 
         if let start = startDate, let end = endDate {
-            let range = "日期范围: \(rangeFormatter.string(from: start))  —  \(rangeFormatter.string(from: end))"
+            let startStr = rangeFormatter.string(from: start)
+            let endStr = rangeFormatter.string(from: end)
+            let range = String(localized: "日期范围: \(startStr)  —  \(endStr)", locale: AppLanguageManager.currentLocale)
             drawText(range, at: CGPoint(x: leftMargin, y: y), fontSize: 16)
             y += 30
         }
 
-        drawText("共 \(notes.count) 条速记", at: CGPoint(x: leftMargin, y: y), fontSize: 16)
+        drawText(String(localized: "共 \(notes.count) 条速记", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 16)
         y += 30
 
-        let exportAt = "导出时间: \(rangeFormatter.string(from: Date()))"
+        let nowStr = rangeFormatter.string(from: Date())
+        let exportAt = String(localized: "导出时间: \(nowStr)", locale: AppLanguageManager.currentLocale)
         drawText(exportAt, at: CGPoint(x: leftMargin, y: y), fontSize: 14, color: .darkGray)
     }
 
@@ -121,7 +124,7 @@ enum PDFExportService {
             UIColor.systemRed.withAlphaComponent(0.15).setFill()
             UIBezierPath(roundedRect: bannerRect, cornerRadius: 6).fill()
             drawText(
-                "🚨 隐患 / HAZARD",
+                String(localized: "🚨 隐患 / HAZARD", locale: AppLanguageManager.currentLocale),
                 at: CGPoint(x: leftMargin + 10, y: y + 6),
                 fontSize: 14,
                 bold: true,
@@ -136,11 +139,11 @@ enum PDFExportService {
 
         // 元信息
         var metaLines: [String] = []
-        if let addr = note.locationAddress { metaLines.append("位置: \(addr)") }
-        if let weather = note.weatherSummary { metaLines.append("天气: \(weather)") }
-        if let tag = note.siteTag { metaLines.append("工地: \(tag)") }
-        if let assignee = note.assignedTo { metaLines.append("分派给: \(assignee)") }
-        if let clauseRef = note.contractClauseRef { metaLines.append("合同条款: \(clauseRef)") }
+        if let addr = note.locationAddress { metaLines.append(String(localized: "位置: \(addr)", locale: AppLanguageManager.currentLocale)) }
+        if let weather = note.weatherSummary { metaLines.append(String(localized: "天气: \(weather)", locale: AppLanguageManager.currentLocale)) }
+        if let tag = note.siteTag { metaLines.append(String(localized: "工地: \(tag)", locale: AppLanguageManager.currentLocale)) }
+        if let assignee = note.assignedTo { metaLines.append(String(localized: "分派给: \(assignee)", locale: AppLanguageManager.currentLocale)) }
+        if let clauseRef = note.contractClauseRef { metaLines.append(String(localized: "合同条款: \(clauseRef)", locale: AppLanguageManager.currentLocale)) }
         for line in metaLines {
             drawText(line, at: CGPoint(x: leftMargin, y: y), fontSize: 12, color: .darkGray)
             y += 18
@@ -148,8 +151,11 @@ enum PDFExportService {
 
         // Deadline + 状态
         let dueStr = note.dueDate.formatted(date: .abbreviated, time: .omitted)
-        let deadlineStr = "到期: \(note.deadline.displayName) (\(dueStr))"
-        let statusStr = note.isDone ? "状态: ✓ 已完成" : "状态: 待处理"
+        let deadlineName = note.deadline.displayName
+        let deadlineStr = String(localized: "到期: \(deadlineName) (\(dueStr))", locale: AppLanguageManager.currentLocale)
+        let statusStr = note.isDone
+            ? String(localized: "状态: ✓ 已完成", locale: AppLanguageManager.currentLocale)
+            : String(localized: "状态: 待处理", locale: AppLanguageManager.currentLocale)
         drawText("\(deadlineStr)    \(statusStr)", at: CGPoint(x: leftMargin, y: y), fontSize: 12)
         y += 24
 
@@ -161,48 +167,16 @@ enum PDFExportService {
         y += 15
 
         // 内容
-        drawText("内容", at: CGPoint(x: leftMargin, y: y), fontSize: 14, bold: true)
+        drawText(String(localized: "内容", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 14, bold: true)
         y += 22
 
-        let bodyText = note.transcription.isEmpty ? "(无转写,仅录音)" : note.transcription
+        let bodyText = note.transcription.isEmpty ? String(localized: "(无转写,仅录音)", locale: AppLanguageManager.currentLocale) : note.transcription
         let bodyHeight = drawWrappedText(
             bodyText,
             in: CGRect(x: leftMargin, y: y, width: contentWidth, height: 250),
             fontSize: 14
         )
         y += bodyHeight + 15
-
-        // 模板 checklist
-        if let templateName = note.templateName {
-            drawText("巡检模板: \(templateName)",
-                     at: CGPoint(x: leftMargin, y: y),
-                     fontSize: 14,
-                     bold: true)
-            y += 20
-
-            let template = InspectionTemplatesStorage.load().first(where: { $0.name == templateName })
-            let items = template?.items ?? []
-            let checkedSet = Set(note.checkedItems)
-
-            if items.isEmpty {
-                drawText("(模板不存在,原检查项: \(note.checkedItems.joined(separator: ", ")))",
-                         at: CGPoint(x: leftMargin, y: y),
-                         fontSize: 12,
-                         color: .darkGray)
-                y += 18
-            } else {
-                for item in items {
-                    let checked = checkedSet.contains(item)
-                    let marker = checked ? "☑" : "☐"
-                    drawText("\(marker) \(item)",
-                             at: CGPoint(x: leftMargin, y: y),
-                             fontSize: 12,
-                             color: checked ? .darkGray : .black)
-                    y += 18
-                }
-            }
-            y += 10
-        }
 
         // 平面图(若有)+ 图钉位置
         if let planName = note.floorPlanRef,
@@ -211,7 +185,7 @@ enum PDFExportService {
            let plan = FloorPlansStorage.find(name: planName),
            let planURL = FloorPlansStorage.absoluteURL(forRelative: plan.imageRelativePath),
            let planImage = UIImage(contentsOfFile: planURL.path) {
-            drawText("平面图位置: \(planName)",
+            drawText(String(localized: "平面图位置: \(planName)", locale: AppLanguageManager.currentLocale),
                      at: CGPoint(x: leftMargin, y: y),
                      fontSize: 14,
                      bold: true)
@@ -232,7 +206,8 @@ enum PDFExportService {
 
         // 照片 2x2,最多 4 张
         if !note.photoPaths.isEmpty {
-            drawText("照片 (\(note.photoPaths.count) 张,最多显示 4)",
+            let photoCount = note.photoPaths.count
+            drawText(String(localized: "照片 (\(photoCount) 张,最多显示 4)", locale: AppLanguageManager.currentLocale),
                      at: CGPoint(x: leftMargin, y: y),
                      fontSize: 14,
                      bold: true)

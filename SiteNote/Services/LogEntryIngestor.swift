@@ -22,16 +22,28 @@ enum LogEntryIngestor {
     /// 是产品红线(参见 project_ai_strategy.md "绝不静默自动应用")。
     /// 仅向 `DiaryConversionTracker` 登记一条 *pending* 建议,由 banner 让用户确认。
     /// 不 save context——由调用方决定 save 时机(通常 SwiftData 自动保存)。
+    ///
+    /// **Profile defense-in-depth**:即使 AI 没遵守 prompt,这里也按 profile 丢掉越界 kind:
+    ///   - engineer:丢 person/plant(只允许问题类)
+    ///   - tradie:丢 plant/delivery/visitor(只允许 person + event)
+    ///   - pm:不过滤
     static func ingest(drafts: [AIService.LogEntryDraft], from note: Note, into ctx: ModelContext) {
         guard !drafts.isEmpty else { return }
 
         let isoParser = ISO8601DateFormatter()
         isoParser.formatOptions = [.withInternetDateTime]
 
+        let profile = UserProfileManager.shared.current
+
         var processed = 0
         for draft in drafts {
             guard let kind = LogKind(rawValue: draft.kind) else {
                 print("[SiteNote] LogEntryIngestor: 未知 kind \(draft.kind),跳过")
+                continue
+            }
+            // Profile 兜底过滤:AI 偶尔会越界,这里再保险一次。
+            if !isKindAllowed(kind, for: profile) {
+                print("[SiteNote] LogEntryIngestor: profile=\(profile.rawValue) 不允许 kind=\(draft.kind),跳过 \(draft.subject)")
                 continue
             }
             // 时间处理:AI 给了 ISO → 用它,`startAtExplicit=true`
@@ -68,6 +80,23 @@ enum LogEntryIngestor {
                 processed += 1
             default:
                 print("[SiteNote] LogEntryIngestor: 未知 action \(draft.action),跳过")
+            }
+        }
+
+        // E2.14:siteTag 一致性 propagate。
+        // 同一 sourceNoteID 的所有未删除 LogEntry 都同步到当前 note.siteTag,
+        // 防止 ingest 早期取了过时的 siteTag(用户在 AI 处理途中改了 note 的工地标签)
+        // 或老条目还残留旧 siteTag。代价小:LogEntry 量级有限。
+        let noteID = note.id
+        let currentSiteTag = note.siteTag
+        let propagateDescriptor = FetchDescriptor<LogEntry>(
+            predicate: #Predicate<LogEntry> { e in
+                e.sourceNoteID == noteID && e.deletedAt == nil
+            }
+        )
+        if let related = try? ctx.fetch(propagateDescriptor) {
+            for entry in related where entry.siteTag != currentSiteTag {
+                entry.siteTag = currentSiteTag
             }
         }
 
@@ -128,7 +157,7 @@ enum LogEntryIngestor {
             return
         }
 
-        if let open = findOpenPlantSession(subject: draft.subject, siteTag: siteTag, ctx: ctx) {
+        if let open = findOpenPlantSession(subject: draft.subject, siteTag: siteTag, sourceNoteID: note.id, ctx: ctx) {
             open.endAt = time
             if open.note == nil, let extra = draft.note { open.note = extra }
             // 保留源 Note 为"开 session 时那条",但 confidence 按两者平均拉高一点
@@ -143,7 +172,7 @@ enum LogEntryIngestor {
                 startAtExplicit: timeExplicit,
                 endAt: time,                // 闭合的单点,duration=0
                 isAbsent: false,
-                note: "⚠️ 无对应到场记录" + (draft.note.map { " · \($0)" } ?? ""),
+                note: String(localized: "⚠️ 无对应到场记录", locale: AppLanguageManager.currentLocale) + (draft.note.map { " · \($0)" } ?? ""),
                 siteTag: siteTag,
                 sourceNoteID: note.id,
                 confidence: draft.confidence * 0.5
@@ -206,20 +235,43 @@ enum LogEntryIngestor {
         ctx.insert(entry)
     }
 
+    // MARK: - Profile 越界 kind 过滤
+
+    /// 按 profile 决定哪些 LogKind 允许写入。AI prompt 已经按 profile 调优,
+    /// 这里再做一次 defense-in-depth——AI 偶发越界也不会让用户看到不该看到的条目。
+    private static func isKindAllowed(_ kind: LogKind, for profile: ProfileKind) -> Bool {
+        switch profile {
+        case .pm:
+            return true
+        case .engineer:
+            // 工程师看:问题(event)+ 业主/监理/质监站到场(visitor)。
+            // person/plant/delivery 不属于巡检视角。
+            return kind == .event || kind == .visitor
+        }
+    }
+
     // MARK: - Session 匹配
 
     /// 查找匹配的"未闭合 plant session":同 subject + 同 siteTag + endAt==nil + deletedAt==nil,
     /// 按 startAt 倒序取第一条(最近的)。
     ///
+    /// 跨工地约束(E2.13):
+    /// - 只在 startAt > now - 24h 的窗口内匹配。超过 24h 还没关的 session 视为孤儿,新条目应该开新 session,
+    ///   而不是跨日合并(用户明天上午报"挖机走"不应该关掉昨天遗留的 open session)。
+    /// - siteTag 双方都为 nil 时,**收紧到只匹配同 sourceNoteID** 的 entry——避免不同 note 没填 siteTag
+    ///   各自开 dingo 时被错误合并。两条 nil siteTag 的 entry 不能假设是同一个 session。
+    ///
     /// 注意:SwiftData #Predicate 对 Optional 等值比较(尤其 nil siteTag)支持不稳,
-    /// 所以先 predicate 过滤基础条件,再 in-memory 过滤 siteTag。LogEntry 数量有限,开销可以忽略。
+    /// 所以先 predicate 过滤基础条件,再 in-memory 过滤。LogEntry 数量有限,开销可以忽略。
     private static func findOpenPlantSession(
         subject: String,
         siteTag: String?,
+        sourceNoteID: UUID,
         ctx: ModelContext
     ) -> LogEntry? {
         let plantRaw = LogKind.plant.rawValue
         let targetSubject = subject
+        let cutoff = Date().addingTimeInterval(-24 * 3600)
 
         let descriptor = FetchDescriptor<LogEntry>(
             predicate: #Predicate<LogEntry> { e in
@@ -227,10 +279,23 @@ enum LogEntryIngestor {
                     && e.subject == targetSubject
                     && e.endAt == nil
                     && e.deletedAt == nil
+                    && e.startAt > cutoff
             },
             sortBy: [SortDescriptor(\LogEntry.startAt, order: .reverse)]
         )
         let candidates = (try? ctx.fetch(descriptor)) ?? []
-        return candidates.first { $0.siteTag == siteTag }
+        return candidates.first { entry in
+            // siteTag 都有值:必须相等
+            // siteTag 一边有一边没有:不匹配
+            // siteTag 两边都为 nil:只匹配同 sourceNoteID(避免跨 note 错误合并)
+            switch (entry.siteTag, siteTag) {
+            case let (a?, b?):
+                return a == b
+            case (nil, nil):
+                return entry.sourceNoteID == sourceNoteID
+            default:
+                return false
+            }
+        }
     }
 }

@@ -59,7 +59,7 @@ struct LogTabView: View {
     // 每个分组的折叠状态(独立 binding)
     // P1-2:纵览 mode 4 大段折叠状态。要盯/今天/待分类默认展开,归档默认折叠。
     @State private var urgentExpanded = true       // 要盯 = 隐患 + 逾期
-    @State private var todayExpanded = true        // 今天
+    @State private var todayExpanded = true        // 今天到期
     @State private var inboxExpanded = true        // 待分类 = inbox(非隐患非日记) + 施工日记
     @State private var archivedExpanded = false    // 归档 = 3天/本周/以后/备忘/已完成
 
@@ -215,7 +215,7 @@ struct LogTabView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 18) {
                     filterChip(
-                        label: "全部 \(siteAllCount)",
+                        label: String(localized: "全部 \(siteAllCount)", locale: AppLanguageManager.currentLocale),
                         isOn: selectedSiteFilter == nil && selectedSubTagFilter == nil
                     ) {
                         selectedSiteFilter = nil
@@ -327,8 +327,8 @@ struct LogTabView: View {
 
     private var modeSegment: some View {
         HStack(spacing: 0) {
-            modeButton(.overview, label: "纵览")
-            modeButton(.ledger, label: "台账")
+            modeButton(.overview, label: String(localized: "纵览", locale: AppLanguageManager.currentLocale))
+            modeButton(.ledger, label: String(localized: "台账", locale: AppLanguageManager.currentLocale))
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 8)
@@ -405,7 +405,7 @@ struct LogTabView: View {
 
     // P1-2 4 段聚合:
     //  - 要盯 = 隐患(任何状态)+ 逾期非隐患
-    //  - 今天 = 今日到期非隐患
+    //  - 今天到期 = 今日到期非隐患
     //  - 待分类 = inbox(非隐患非日记)+ 施工日记
     //  - 归档 = 3 天/本周/以后/备忘/已完成 全部塞这里
     // 隐患优先级最高:从 inbox 和 pending 里都剔出来,避免一条隐患在两段重复出现。
@@ -447,16 +447,16 @@ struct LogTabView: View {
         } else {
             List {
                 if !urgentGroup.isEmpty {
-                    overviewSection(title: "要盯", color: Ink.red, notes: urgentGroup, expanded: $urgentExpanded)
+                    overviewSection(title: String(localized: "要盯", locale: AppLanguageManager.currentLocale), color: Ink.red, notes: urgentGroup, expanded: $urgentExpanded)
                 }
                 if !todayGroup.isEmpty {
-                    overviewSection(title: "今天", color: Ink.fg, notes: todayGroup, expanded: $todayExpanded)
+                    overviewSection(title: String(localized: "今天到期", locale: AppLanguageManager.currentLocale), color: Ink.fg, notes: todayGroup, expanded: $todayExpanded)
                 }
                 if !inboxGroup.isEmpty {
-                    overviewSection(title: "待分类", color: Ink.fgDim, notes: inboxGroup, expanded: $inboxExpanded)
+                    overviewSection(title: String(localized: "待分类", locale: AppLanguageManager.currentLocale), color: Ink.fgDim, notes: inboxGroup, expanded: $inboxExpanded)
                 }
                 if !archivedGroup.isEmpty {
-                    overviewSection(title: "归档", color: Ink.dim, notes: archivedGroup, expanded: $archivedExpanded)
+                    overviewSection(title: String(localized: "归档", locale: AppLanguageManager.currentLocale), color: Ink.dim, notes: archivedGroup, expanded: $archivedExpanded)
                 }
             }
             .listStyle(.plain)
@@ -709,18 +709,18 @@ struct LogTabView: View {
 
     private var dayLabel: String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M 月 d 日"
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("MMMd")
         return f.string(from: selectedDate)
     }
 
     private var dayWeekdayLabel: String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
+        f.locale = Locale.current
         f.dateFormat = "EEEE"
         let w = f.string(from: selectedDate)
-        if Calendar.current.isDateInToday(selectedDate) { return "今天 · \(w)" }
-        if Calendar.current.isDateInYesterday(selectedDate) { return "昨天 · \(w)" }
+        if Calendar.current.isDateInToday(selectedDate) { return String(localized: "今天 · \(w)", locale: AppLanguageManager.currentLocale) }
+        if Calendar.current.isDateInYesterday(selectedDate) { return String(localized: "昨天 · \(w)", locale: AppLanguageManager.currentLocale) }
         return w
     }
 
@@ -734,14 +734,14 @@ struct LogTabView: View {
 
     private var summaryStrip: some View {
         HStack(spacing: 10) {
-            summaryCell(value: "\(totalHeadcount)", label: "到场人数", color: Ink.fg)
-            summaryCell(value: "\(plantEntries.count)", label: "机械记录", color: Ink.fg)
+            summaryCell(value: "\(totalHeadcount)", label: String(localized: "到场人数", locale: AppLanguageManager.currentLocale), color: Ink.fg)
+            summaryCell(value: "\(plantEntries.count)", label: String(localized: "机械记录", locale: AppLanguageManager.currentLocale), color: Ink.fg)
             summaryCell(
                 value: openPlantCount > 0 ? "⏱ \(openPlantCount)" : "✓",
-                label: openPlantCount > 0 ? "未结束" : "已结束",
+                label: openPlantCount > 0 ? String(localized: "未结束", locale: AppLanguageManager.currentLocale) : String(localized: "已结束", locale: AppLanguageManager.currentLocale),
                 color: openPlantCount > 0 ? Ink.red : Ink.green
             )
-            summaryCell(value: "\(todayNotes.count)", label: "速记", color: Ink.fgDim)
+            summaryCell(value: "\(todayNotes.count)", label: String(localized: "速记", locale: AppLanguageManager.currentLocale), color: Ink.fgDim)
         }
     }
 
@@ -766,10 +766,10 @@ struct LogTabView: View {
 
     private var daySegment: some View {
         HStack(spacing: 0) {
-            daySegmentButton(.person, label: "人员", count: personEntries.count)
-            daySegmentButton(.plant, label: "机械", count: plantEntries.count)
-            daySegmentButton(.event, label: "事件", count: otherEntries.count)
-            daySegmentButton(.notes, label: "速记", count: todayNotes.count)
+            daySegmentButton(.person, label: String(localized: "人员", locale: AppLanguageManager.currentLocale), count: personEntries.count)
+            daySegmentButton(.plant, label: String(localized: "机械", locale: AppLanguageManager.currentLocale), count: plantEntries.count)
+            daySegmentButton(.event, label: String(localized: "事件", locale: AppLanguageManager.currentLocale), count: otherEntries.count)
+            daySegmentButton(.notes, label: String(localized: "速记", locale: AppLanguageManager.currentLocale), count: todayNotes.count)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 8)
@@ -816,7 +816,7 @@ struct LogTabView: View {
     @ViewBuilder
     private var personList: some View {
         if personEntries.isEmpty {
-            emptyDayState(icon: "person.3", text: "当天还没人员记录")
+            emptyDayState(icon: "person.3", text: String(localized: "当天还没人员记录", locale: AppLanguageManager.currentLocale))
         } else {
             List {
                 ForEach(personEntries) { entry in
@@ -910,7 +910,7 @@ struct LogTabView: View {
     @ViewBuilder
     private var plantList: some View {
         if plantEntries.isEmpty {
-            emptyDayState(icon: "wrench.and.screwdriver", text: "当天还没机械记录")
+            emptyDayState(icon: "wrench.and.screwdriver", text: String(localized: "当天还没机械记录", locale: AppLanguageManager.currentLocale))
         } else {
             List {
                 ForEach(plantEntries) { entry in
@@ -1036,7 +1036,7 @@ struct LogTabView: View {
     @ViewBuilder
     private var eventList: some View {
         if otherEntries.isEmpty {
-            emptyDayState(icon: "shippingbox", text: "当天还没送达 / 访客 / 事件")
+            emptyDayState(icon: "shippingbox", text: String(localized: "当天还没送达 / 访客 / 事件", locale: AppLanguageManager.currentLocale))
         } else {
             List {
                 ForEach(otherEntries) { entry in
@@ -1115,7 +1115,7 @@ struct LogTabView: View {
     @ViewBuilder
     private var rawNotesList: some View {
         if todayNotes.isEmpty {
-            emptyDayState(icon: "doc.text", text: "当天还没速记")
+            emptyDayState(icon: "doc.text", text: String(localized: "当天还没速记", locale: AppLanguageManager.currentLocale))
         } else {
             List {
                 ForEach(todayNotes) { note in
@@ -1166,10 +1166,10 @@ struct LogTabView: View {
 
     /// 底部按钮用的日期文案:今天/昨天/具体日期。区分顶部"今日简报"按钮。
     private var bottomBarDateLabel: String {
-        if Calendar.current.isDateInToday(selectedDate) { return "今日" }
-        if Calendar.current.isDateInYesterday(selectedDate) { return "昨日" }
+        if Calendar.current.isDateInToday(selectedDate) { return String(localized: "今日", locale: AppLanguageManager.currentLocale) }
+        if Calendar.current.isDateInYesterday(selectedDate) { return String(localized: "昨日", locale: AppLanguageManager.currentLocale) }
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
+        f.locale = Locale.current
         f.dateFormat = "M/d"
         return f.string(from: selectedDate)
     }

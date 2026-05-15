@@ -166,7 +166,7 @@ struct GlobalSearchView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func sectionHeader(_ text: String) -> some View {
+    private func sectionHeader(_ text: LocalizedStringKey) -> some View {
         HStack {
             Text(text)
                 .font(.system(size: 11, weight: .semibold))
@@ -194,7 +194,7 @@ struct GlobalSearchView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(Ink.red)
                     }
-                    Text(note.transcription.isEmpty ? "(仅录音/照片)" : highlight(note.transcription))
+                    Text(note.transcription.isEmpty ? String(localized: "(仅录音/照片)", locale: AppLanguageManager.currentLocale) : highlight(note.transcription))
                         .font(.system(size: 14))
                         .foregroundStyle(Ink.fg)
                         .lineLimit(2)
@@ -335,11 +335,17 @@ struct GlobalSearchView: View {
 
     private func timeAgo(_ d: Date) -> String {
         let secs = Date().timeIntervalSince(d)
-        if secs < 3600 { return "\(Int(secs / 60)) 分钟前" }
-        if secs < 86400 { return "\(Int(secs / 3600)) 小时前" }
+        if secs < 3600 {
+            let m = Int(secs / 60)
+            return String(localized: "\(m) 分钟前", locale: AppLanguageManager.currentLocale)
+        }
+        if secs < 86400 {
+            let h = Int(secs / 3600)
+            return String(localized: "\(h) 小时前", locale: AppLanguageManager.currentLocale)
+        }
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M 月 d 日"
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("Md")
         return f.string(from: d)
     }
 

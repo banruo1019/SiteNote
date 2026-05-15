@@ -27,9 +27,9 @@ enum AIEngine: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var displayName: String {
         switch self {
-        case .auto: return "自动(推荐)"
-        case .openai: return "仅 OpenAI GPT"
-        case .local: return "仅本地 Apple Intelligence"
+        case .auto: return String(localized: "自动(推荐)", locale: AppLanguageManager.currentLocale)
+        case .openai: return String(localized: "仅 OpenAI GPT", locale: AppLanguageManager.currentLocale)
+        case .local: return String(localized: "仅本地 Apple Intelligence", locale: AppLanguageManager.currentLocale)
         }
     }
 }
@@ -46,16 +46,15 @@ final class AIService {
         var errorDescription: String? {
             switch self {
             case .unavailable:
-                return "当前没有可用的 AI 引擎。请到「设置 → AI 辅助」配置 OpenAI API Key 或启用 Apple Intelligence。"
+                return String(localized: "当前没有可用的 AI 引擎。请到「设置 → AI 辅助」配置 OpenAI API Key 或启用 Apple Intelligence。", locale: AppLanguageManager.currentLocale)
             case .generationFailed(let msg):
-                return "AI 生成失败:\(msg)"
+                return String(localized: "AI 生成失败:\(msg)", locale: AppLanguageManager.currentLocale)
             }
         }
     }
 
     struct TagSuggestion: Equatable {
         let suggestedSiteTag: String?
-        let suggestedTemplateName: String?
         let suggestedClauseRef: String?
         let reasoning: String?
     }
@@ -158,18 +157,12 @@ final class AIService {
     func suggestTags(
         transcription: String,
         availableSites: [String],
-        availableTemplates: [InspectionTemplate],
         availableClauses: [String]
     ) -> TagSuggestion {
         let normalized = transcription.lowercased()
 
         let site = availableSites.first {
             normalized.contains($0.lowercased())
-        }
-
-        let template = availableTemplates.first { tpl in
-            if normalized.contains(tpl.name.lowercased()) { return true }
-            return tpl.items.contains { normalized.contains($0.lowercased()) }
         }
 
         let clause = availableClauses.first {
@@ -179,14 +172,18 @@ final class AIService {
         }
 
         var reasonParts: [String] = []
-        if let s = site { reasonParts.append("工地「\(s)」") }
-        if let t = template { reasonParts.append("模板「\(t.name)」") }
-        if let c = clause { reasonParts.append("条款「\(c)」") }
-        let reasoning = reasonParts.isEmpty ? nil : "检测到内容涉及: " + reasonParts.joined(separator: "、")
+        if let s = site { reasonParts.append(String(localized: "工地「\(s)」", locale: AppLanguageManager.currentLocale)) }
+        if let c = clause { reasonParts.append(String(localized: "条款「\(c)」", locale: AppLanguageManager.currentLocale)) }
+        let reasoning: String?
+        if reasonParts.isEmpty {
+            reasoning = nil
+        } else {
+            let joined = reasonParts.joined(separator: "、")
+            reasoning = String(localized: "检测到内容涉及: \(joined)", locale: AppLanguageManager.currentLocale)
+        }
 
         return TagSuggestion(
             suggestedSiteTag: site,
-            suggestedTemplateName: template?.name,
             suggestedClauseRef: clause,
             reasoning: reasoning
         )
@@ -210,7 +207,7 @@ final class AIService {
             }
             if engine == .openai {
                 // 严格 OpenAI 模式不回退
-                throw AIError.generationFailed("OpenAI 图像分析失败")
+                throw AIError.generationFailed(String(localized: "OpenAI 图像分析失败", locale: AppLanguageManager.currentLocale))
             }
         }
 
@@ -221,8 +218,9 @@ final class AIService {
         }
 
         // 全部失败:只返回 Vision 原始标签
+        let labelsStr = labels.prefix(3).joined(separator: "、")
         return PhotoAnalysis(
-            description: labels.isEmpty ? "未能识别照片内容" : "识别到: \(labels.prefix(3).joined(separator: "、"))",
+            description: labels.isEmpty ? String(localized: "未能识别照片内容", locale: AppLanguageManager.currentLocale) : String(localized: "识别到: \(labelsStr)", locale: AppLanguageManager.currentLocale),
             suggestedHazard: false,
             suggestedAction: nil,
             rawLabels: labels
@@ -305,7 +303,12 @@ final class AIService {
         }
 
         if description.isEmpty {
-            description = labels.isEmpty ? text : "识别到: \(labels.prefix(3).joined(separator: "、"))"
+            if labels.isEmpty {
+                description = text
+            } else {
+                let labelsStr = labels.prefix(3).joined(separator: "、")
+                description = String(localized: "识别到: \(labelsStr)", locale: AppLanguageManager.currentLocale)
+            }
         }
 
         return PhotoAnalysis(
@@ -412,6 +415,11 @@ final class AIService {
 
     /// 从一条 Note 的 transcription 抽出 0~N 条结构化日志草稿。
     /// 失败或无可抽内容都返回 []。保存流程靠它异步拿 draft,再交给 LogEntryIngestor 落库。
+    ///
+    /// **Profile-aware**:根据 `UserProfileManager.shared.current` 切换 prompt:
+    ///   - PM:抽全 5 类(person/plant/delivery/visitor/event)
+    ///   - Engineer:跳过 person/plant,聚焦巡检问题/合规/隐患(走 event)
+    ///   - Tradie:只抽 person + 问题 event,不抽 plant/delivery/visitor
     func extractLogEntries(from note: Note) async -> [LogEntryDraft] {
         let text = note.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, Self.isLanguageModelAvailable else { return [] }
@@ -421,65 +429,13 @@ final class AIService {
         let nowISO = iso.string(from: note.createdAt)
         let siteLabel = note.siteTag ?? "未指定"
 
-        let prompt = """
-        你是建筑工地日志抽取器。读下面这段现场语音转写,抽出结构化条目:\
-        人员到场 / 机械进出场 / 材料送达 / 访客 / 事件。
-
-        **只返回纯 JSON 数组**。不要 markdown 代码块、不要任何解释文字。\
-        没有可抽取的返回 []。
-
-        每条字段:
-          kind: "person" | "plant" | "delivery" | "visitor" | "event"
-          subject: 主语短词(如 "水工"、"挖机"、"钢筋"、"监理"、"停电")
-          quantity: 整数(只 person 用,"水工4人"→4)| null
-          action: "arrive"(到/开工) | "leave"(走/收工) | "absent"(缺席/没来) | "event"(单点事件)
-          time: ISO8601 时间 | null,规则:
-            - 语音明说具体时间("7 点半"、"上午 10 点"、"下午 3:15") → 结合录音日期给出 ISO
-            - 语音说"现在"、"刚刚"、"马上"、"just now" 等指向当前 → 用录音时间 \(nowISO)
-            - 没说任何时间 → null(**不要瞎填,会显示"—"**)
-          note: 附加说明(缺席原因、上下文)| null
-          confidence: 0.0–1.0(你对这条的置信度)
-
-        # 示例(**重点看 time 字段怎么填**)
-
-        ## 示例 1:没说时间 → time: null
-        输入: 记录,水工来了 4 个,电工来了 2 个,窗户安装工没来,原因是下雨
-        输出: [
-        {"kind":"person","subject":"水工","quantity":4,"action":"arrive","time":null,"note":null,"confidence":0.95},
-        {"kind":"person","subject":"电工","quantity":2,"action":"arrive","time":null,"note":null,"confidence":0.95},
-        {"kind":"person","subject":"窗户安装工","quantity":null,"action":"absent","time":null,"note":"下雨","confidence":0.9}
-        ]
-
-        ## 示例 2:明说具体时间 → 结合录音日期填 ISO
-        (假设录音时间 = 2026-04-23T14:30:00+11:00)
-        输入: 挖机 7 点半到了
-        输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T07:30:00+11:00","note":null,"confidence":0.9}]
-
-        ## 示例 3:说"现在/刚刚" → 用录音时间当 time
-        (假设录音时间 = 2026-04-23T14:30:00+11:00)
-        输入: 挖机现在到了
-        输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T14:30:00+11:00","note":null,"confidence":0.95}]
-
-        ## 示例 4:机械开始(与"到"同义) + 明说时间
-        (假设录音时间 = 2026-04-23T14:30:00+11:00)
-        输入: 挖机早上 9 点开始
-        输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T09:00:00+11:00","note":null,"confidence":0.9}]
-
-        # 不要抽
-        - 是巡检清单、质量观察、隐患描述 → []
-        - 纯工作内容描述("今天浇了梁") → []
-        - 模棱两可、没主语 → []
-
-        # 本次输入
-        录音时间: \(nowISO)
-        工地: \(siteLabel)
-        转写:
-        \"\"\"
-        \(text)
-        \"\"\"
-
-        JSON:
-        """
+        let profile = UserProfileManager.shared.current
+        let prompt = Self.buildExtractionPrompt(
+            for: profile,
+            text: text,
+            nowISO: nowISO,
+            siteLabel: siteLabel
+        )
 
         let raw: String
         do {
@@ -493,6 +449,152 @@ final class AIService {
         return Self.parseLogDraftJSON(raw)
     }
 
+    /// 按 Profile 拼装 LogEntry 抽取 prompt。三个分支共享 time 规则与 JSON 输出格式,
+    /// 只在"抽什么 / 不要抽 / 示例"上分歧。
+    private static func buildExtractionPrompt(
+        for profile: ProfileKind,
+        text: String,
+        nowISO: String,
+        siteLabel: String
+    ) -> String {
+        switch profile {
+        case .pm:
+            return """
+            你是建筑工地日志抽取器。读下面这段现场语音转写,抽出结构化条目:\
+            人员到场 / 机械进出场 / 材料送达 / 访客 / 事件。
+
+            **只返回纯 JSON 数组**。不要 markdown 代码块、不要任何解释文字。\
+            没有可抽取的返回 []。
+
+            每条字段:
+              kind: "person" | "plant" | "delivery" | "visitor" | "event"
+              subject: 主语短词(如 "水工"、"挖机"、"钢筋"、"监理"、"停电")
+              quantity: 整数(只 person 用,"水工4人"→4)| null
+              action: "arrive"(到/开工) | "leave"(走/收工) | "absent"(缺席/没来) | "event"(单点事件)
+              time: ISO8601 时间 | null,规则:
+                - 语音明说具体时间("7 点半"、"上午 10 点"、"下午 3:15") → 结合录音日期给出 ISO
+                - 语音说"现在"、"刚刚"、"马上"、"just now" 等指向当前 → 用录音时间 \(nowISO)
+                - 没说任何时间 → null(**不要瞎填,会显示"—"**)
+              note: 附加说明(缺席原因、上下文)| null
+              confidence: 0.0–1.0(你对这条的置信度)
+
+            # 示例(**重点看 time 字段怎么填**)
+
+            ## 示例 1:没说时间 → time: null
+            输入: 记录,水工来了 4 个,电工来了 2 个,窗户安装工没来,原因是下雨
+            输出: [
+            {"kind":"person","subject":"水工","quantity":4,"action":"arrive","time":null,"note":null,"confidence":0.95},
+            {"kind":"person","subject":"电工","quantity":2,"action":"arrive","time":null,"note":null,"confidence":0.95},
+            {"kind":"person","subject":"窗户安装工","quantity":null,"action":"absent","time":null,"note":"下雨","confidence":0.9}
+            ]
+
+            ## 示例 2:明说具体时间 → 结合录音日期填 ISO
+            (假设录音时间 = 2026-04-23T14:30:00+11:00)
+            输入: 挖机 7 点半到了
+            输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T07:30:00+11:00","note":null,"confidence":0.9}]
+
+            ## 示例 3:说"现在/刚刚" → 用录音时间当 time
+            (假设录音时间 = 2026-04-23T14:30:00+11:00)
+            输入: 挖机现在到了
+            输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T14:30:00+11:00","note":null,"confidence":0.95}]
+
+            ## 示例 4:机械开始(与"到"同义) + 明说时间
+            (假设录音时间 = 2026-04-23T14:30:00+11:00)
+            输入: 挖机早上 9 点开始
+            输出: [{"kind":"plant","subject":"挖机","quantity":null,"action":"arrive","time":"2026-04-23T09:00:00+11:00","note":null,"confidence":0.9}]
+
+            # 不要抽
+            - 是巡检清单、质量观察、隐患描述 → []
+            - 纯工作内容描述("今天浇了梁") → []
+            - 模棱两可、没主语 → []
+
+            # 本次输入
+            录音时间: \(nowISO)
+            工地: \(siteLabel)
+            转写:
+            \"\"\"
+            \(text)
+            \"\"\"
+
+            JSON:
+            """
+
+        case .engineer:
+            return """
+            你是建筑工地巡检/检验员的日志抽取器。读下面这段现场语音转写,\
+            **抽两类**:(1) 巡检发现的问题(质量缺陷 / 合规违规 / 安全隐患 / 技术问题),\
+            (2) 业主 / 监理 / 质监站到场访视(visitor)。
+
+            **只返回纯 JSON 数组**。不要 markdown 代码块、不要任何解释文字。\
+            没有可抽取的返回 []。
+
+            每条字段:
+              kind: "event" | "visitor"
+                - event:工程师视角下的所有问题都归 event
+                - visitor:业主 / 监理 / 质监站 / 设计院 / 第三方检测等到场,需要存档
+              subject: 问题短语(event)或来访方简称(visitor,如 "业主"、"监理"、"质监站")
+              quantity: null
+              action: event 用 "event";visitor 用 "arrive"
+              time: ISO8601 时间 | null,规则:
+                - 语音明说具体时间 → 结合录音日期给出 ISO
+                - 语音说"现在"、"刚刚" → 用录音时间 \(nowISO)
+                - 没说时间 → null
+              note: 位置、严重程度、整改要求、来访目的等上下文 | null
+              confidence: 0.0–1.0
+
+            # 抽取门槛低
+            工程师的语气往往很简短,**只要提到问题/缺陷/不达标的迹象就抽**:
+            - "东区柱子混凝土有蜂窝" → {kind:"event", subject:"混凝土蜂窝", note:"东区柱子", ...}
+            - "5 楼防护栏没装" → {kind:"event", subject:"防护栏缺失", note:"5 楼", ...}
+            - "钢筋间距不符合标准" → {kind:"event", subject:"钢筋间距不符", note:null, ...}
+            - "脚手架松动" → {kind:"event", subject:"脚手架松动", ...}
+            - "现场临电违规" → {kind:"event", subject:"临电违规", ...}
+
+            # 来访(visitor)抽取
+            - "业主/监理/质监站到场" → {kind:"visitor", subject:"<来访方>", action:"arrive", ...}
+            - "今天业主来验收 3 楼" → {kind:"visitor", subject:"业主", action:"arrive", note:"验收 3 楼", ...}
+            - "监理 10 点到场检查钢筋" → {kind:"visitor", subject:"监理", action:"arrive", time:..., note:"检查钢筋", ...}
+
+            # 示例
+
+            ## 示例 1:多个问题(没说时间)
+            输入: 巡检东区,3 楼柱子混凝土有蜂窝,5 楼防护栏没装,临电箱没盖盖板
+            输出: [
+            {"kind":"event","subject":"混凝土蜂窝","quantity":null,"action":"event","time":null,"note":"东区 3 楼柱子","confidence":0.9},
+            {"kind":"event","subject":"防护栏缺失","quantity":null,"action":"event","time":null,"note":"5 楼","confidence":0.9},
+            {"kind":"event","subject":"临电箱未封盖","quantity":null,"action":"event","time":null,"note":null,"confidence":0.85}
+            ]
+
+            ## 示例 2:明说时间
+            (假设录音时间 = 2026-04-23T14:30:00+11:00)
+            输入: 上午 10 点发现地下室漏水
+            输出: [{"kind":"event","subject":"地下室漏水","quantity":null,"action":"event","time":"2026-04-23T10:00:00+11:00","note":null,"confidence":0.9}]
+
+            ## 示例 3:业主到场验收
+            (假设录音时间 = 2026-04-23T14:30:00+11:00)
+            输入: 业主下午 2 点到场验收混凝土
+            输出: [{"kind":"visitor","subject":"业主","quantity":null,"action":"arrive","time":"2026-04-23T14:00:00+11:00","note":"验收混凝土","confidence":0.9}]
+
+            # 不要抽(工程师视角)
+            - 人员到场("水工来了 4 个") → []
+            - 机械进出场("挖机 7 点到") → []
+            - 材料送达 → []
+            - 纯工作内容描述("今天浇了梁") → []
+            - 模棱两可、没主语 → []
+
+            # 本次输入
+            录音时间: \(nowISO)
+            工地: \(siteLabel)
+            转写:
+            \"\"\"
+            \(text)
+            \"\"\"
+
+            JSON:
+            """
+        }
+    }
+
     // MARK: - 5. 综合分类(omni-classify,Phase B)
 
     /// AI omni-classify 的 JSON 输出结构。所有字段可空——AI 判断不出就 null。
@@ -501,15 +603,14 @@ final class AIService {
         let subTags: [String]?
         let deadline: String?
         let isHazard: Bool?
-        let templateName: String?
         let clauseRef: String?
-        /// 每个字段一句理由(中文,≤20 字)。字段名就是 site/subTags/deadline/hazard/templateName/clauseRef。
+        /// 每个字段一句理由(中文,≤20 字)。字段名就是 site/subTags/deadline/hazard/clauseRef。
         let reasoning: [String: String]?
         /// 每个字段的置信度 0-1。
         let confidences: [String: Double]?
     }
 
-    /// 一次 AI 调用同时判断工地 / 分类 / deadline / 隐患 / 模板 / 条款。
+    /// 一次 AI 调用同时判断工地 / 分类 / deadline / 隐患 / 条款。
     /// - 所有"选项"从参数传入(AI 只能从已有列表选,不生成新值)
     /// - 用于 `NoteClassificationPipeline` 的 Phase B,保存流程后异步跑
     /// - 失败返回 nil,调用方把 Phase A(GPS)结果留住即可,不阻断
@@ -517,7 +618,6 @@ final class AIService {
         transcription: String,
         availableSites: [String],
         availableSubTags: [String],
-        availableTemplates: [String],
         availableClauses: [String]
     ) async -> ClassificationAIOutput? {
         let text = transcription.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -525,54 +625,49 @@ final class AIService {
 
         let sitesList = availableSites.isEmpty ? "(无)" : availableSites.joined(separator: ", ")
         let subsList = availableSubTags.isEmpty ? "(无)" : availableSubTags.joined(separator: ", ")
-        let tplsList = availableTemplates.isEmpty ? "(无)" : availableTemplates.joined(separator: ", ")
         let clauseList = availableClauses.isEmpty ? "(无)" : availableClauses.joined(separator: ", ")
 
         let prompt = """
         你是建筑工地语音速记的智能分类器。读下面一段转写,大多数字段从**已有列表**中选出对应项。
-        **subTags / templates / clauses / deadline 不要生成新值**——选不出就填 null。
+        **subTags / clauses / deadline 不要生成新值**——选不出就填 null。
         **site 例外**:用户明说了工地名(如"在 Olympic Park"、"在地铁西区项目")但列表里没有,
         **可以提议**新工地名,confidence 压到 0.65 表示建议(用户确认后 app 会自动加入工地列表)。
         每项给置信度 0.0-1.0 和一句中文理由(≤20 字)。
         **只返回纯 JSON**,不要 markdown 代码块、不要任何解释。
 
         可选项:
-          sites:     \(sitesList)
-          subTags:   \(subsList)
-          templates: \(tplsList)
-          clauses:   \(clauseList)
-          deadline:  "inbox" | "today" | "threeDays" | "thisWeek" | "archive"
+          sites:    \(sitesList)
+          subTags:  \(subsList)
+          clauses:  \(clauseList)
+          deadline: "inbox" | "today" | "threeDays" | "thisWeek" | "archive"
 
         JSON schema(所有字段都可 null):
         {
-          "site":         string|null,   // 列表里有 → 用列表的;明说但没列 → 给新工地名(confidence ≤ 0.7);未提 → null
-          "subTags":      [string],      // 从 subTags 里挑 0-3 个,没匹配给空数组 []
-          "deadline":     string|null,   // **只处理明确时间信号**:"今天/明天"→today、"三天内"→threeDays、"这周"→thisWeek、"备忘/记下就行"→archive。"赶紧/有空"这类模糊词给 null
-          "isHazard":     boolean|null,  // 转写明显涉及漏电/裂缝/脚手架松动/坠落/火灾/违规 → true。无明显问题 → null(不要 false,避免覆盖用户自己标的)
-          "templateName": string|null,
-          "clauseRef":    string|null,
-          "reasoning":    { "site": "...", "subTags": "...", ... },
-          "confidences":  { "site": 0.9, ... }
+          "site":      string|null,   // 列表里有 → 用列表的;明说但没列 → 给新工地名(confidence ≤ 0.7);未提 → null
+          "subTags":   [string],      // 从 subTags 里挑 0-3 个,没匹配给空数组 []
+          "deadline":  string|null,   // **只处理明确时间信号**:"今天/明天"→today、"三天内"→threeDays、"这周"→thisWeek、"备忘/记下就行"→archive。"赶紧/有空"这类模糊词给 null
+          "isHazard":  boolean|null,  // 转写明显涉及漏电/裂缝/脚手架松动/坠落/火灾/违规 → true。无明显问题 → null(不要 false,避免覆盖用户自己标的)
+          "clauseRef": string|null,
+          "reasoning": { "site": "...", "subTags": "...", ... },
+          "confidences": { "site": 0.9, ... }
         }
 
         # 示例
         输入: "悉尼 Olympic Park 东区 3 楼混凝土浇筑,配比 C30,钢筋 HRB400。今天下午业主要验收。"
-          (sites 包含 "悉尼 Olympic Park",subTags 包含 "混凝土"、"钢筋",templates 包含 "混凝土浇筑")
+          (sites 包含 "悉尼 Olympic Park",subTags 包含 "混凝土"、"钢筋")
         输出: {
           "site": "悉尼 Olympic Park",
           "subTags": ["混凝土", "钢筋"],
           "deadline": "today",
           "isHazard": null,
-          "templateName": "混凝土浇筑",
           "clauseRef": null,
           "reasoning": {
             "site": "明说 Olympic Park",
             "subTags": "提到混凝土/钢筋",
-            "deadline": "下午验收 = 今天",
-            "templateName": "匹配混凝土浇筑模板"
+            "deadline": "下午验收 = 今天"
           },
           "confidences": {
-            "site": 0.95, "subTags": 0.9, "deadline": 0.9, "templateName": 0.8
+            "site": 0.95, "subTags": 0.9, "deadline": 0.9
           }
         }
 
@@ -588,7 +683,10 @@ final class AIService {
             let raw = try await runTextStrict(prompt: prompt)
             return Self.parseClassificationJSON(raw)
         } catch {
+            // B4:把 classify 的失败也 record 到 AIFailureTracker,
+            // AIStatusBar 据此变红。之前只 print,用户感知不到。
             print("[SiteNote] classifyNote AI 失败: \(error.localizedDescription)")
+            await AIFailureTracker.shared.record(reason: HomeViewModel.aiFailureReason(error))
             return nil
         }
     }

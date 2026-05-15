@@ -44,7 +44,7 @@ struct AIStatusBar: View {
     private var engineLabel: String {
         if AIService.isOpenAIAvailable { return "OpenAI ✓" }
         if AIService.isLocalAvailable { return "Apple ✓" }
-        return "未配置"
+        return String(localized: "未配置", locale: AppLanguageManager.currentLocale)
     }
 
     private var engineColor: Color {

@@ -29,6 +29,12 @@ struct SiteCentroid: Codable, Equatable {
 enum SiteCentroidsStorage {
     private static let key = "settings.siteCentroids.v1"
 
+    /// F8 (R4-P2-18):滑动窗口上限。超过后 sampleCount 截到 maxSamples,
+    /// 后续 observe 用"近似最近窗口平均"——避免 GPS 飘 5 km 的噪声样本被
+    /// 永远纳入 mean(老样本权重一直无穷大)。50 是经验值:覆盖一个工地 1-2 周
+    /// 录音量,既能学到位置又允许中长期漂移自适应。
+    private static let maxSamples: Int = 50
+
     static func load() -> [String: SiteCentroid] {
         guard let data = UserDefaults.standard.data(forKey: key),
               let dict = try? JSONDecoder().decode([String: SiteCentroid].self, from: data) else {
@@ -51,13 +57,19 @@ enum SiteCentroidsStorage {
 
         var all = load()
         if let existing = all[name] {
-            let n = Double(existing.sampleCount)
-            let newLat = (existing.latitude * n + latitude) / (n + 1)
-            let newLng = (existing.longitude * n + longitude) / (n + 1)
+            // F8 (R4-P2-18):滑动窗口——sampleCount 封顶 maxSamples。
+            // 超过后用 effectiveN = maxSamples 算 weighted mean,等价于
+            // "用最近 maxSamples 个样本的平均"。新样本仍能影响 mean,
+            // 老的飘点也不会因为 n 无限增长而被永远锁住。
+            let cappedN = Double(min(existing.sampleCount, maxSamples))
+            let newLat = (existing.latitude * cappedN + latitude) / (cappedN + 1)
+            let newLng = (existing.longitude * cappedN + longitude) / (cappedN + 1)
+            // sampleCount 真实计数仍保留(不超过 maxSamples)以反映窗口已满。
+            let nextCount = min(existing.sampleCount + 1, maxSamples)
             all[name] = SiteCentroid(
                 latitude: newLat,
                 longitude: newLng,
-                sampleCount: existing.sampleCount + 1,
+                sampleCount: nextCount,
                 lastUpdated: Date()
             )
         } else {

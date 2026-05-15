@@ -189,6 +189,33 @@ enum OpenAIClient {
         body: [String: Any],
         config: Config
     ) async throws -> String {
+        // F4 (R2-P2-19):带退避重试。429 / 5xx 重试最多 2 次(共 3 次尝试),
+        // jitter 退避 ~1s 后再 ~3s。401/404/400 等不可重试错误立刻抛。
+        let retryDelays: [UInt64] = [
+            1_000_000_000 + UInt64.random(in: 0...1_000_000_000), // 1s + 0..1s jitter
+            3_000_000_000 + UInt64.random(in: 0...2_000_000_000)  // 3s + 0..2s jitter
+        ]
+        var attempt = 0
+        while true {
+            do {
+                return try await postOnce(path: path, body: body, config: config)
+            } catch let OpenAIError.api(status, _) where Self.isRetryable(status: status) && attempt < retryDelays.count {
+                let delay = retryDelays[attempt]
+                attempt += 1
+                try? await Task.sleep(nanoseconds: delay)
+                continue
+            }
+            // 走到这里说明:不可重试错误,或 attempt 用完。直接 rethrow。
+            // 上面的 `continue` 会回到 do/try;catch 没匹配上时 throw 自动外抛,但
+            // 编译器需要在 while 末尾的可达路径里给一个 throw/return —— 已经被 try 抛出。
+        }
+    }
+
+    private static func postOnce(
+        path: String,
+        body: [String: Any],
+        config: Config
+    ) async throws -> String {
         let url = config.baseURL.appendingPathComponent(path)
         var request = URLRequest(url: url, timeoutInterval: config.timeout)
         request.httpMethod = "POST"
@@ -224,5 +251,11 @@ enum OpenAIClient {
             throw OpenAIError.decodeFailed
         }
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 判断 HTTP 状态码是否值得重试。仅 429 + 5xx 子集——
+    /// 401(认证)/ 400(请求错)/ 404(路径错)再试也是同样结果,浪费时间。
+    private static func isRetryable(status: Int) -> Bool {
+        return status == 429 || status == 500 || status == 502 || status == 503 || status == 504
     }
 }

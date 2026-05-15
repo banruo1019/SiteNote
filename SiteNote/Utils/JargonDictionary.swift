@@ -24,7 +24,6 @@ enum JargonDictionary {
         all.formUnion(baseline)
         all.formUnion(SiteTagsStorage.load())
         all.formUnion(SubTagsStorage.load().map { $0.name })
-        all.formUnion(InspectionTemplatesStorage.load().map { $0.name })
         all.formUnion(ClauseRefsStorage.load())
         all.formUnion(JargonStorage.loadCustomTerms())
 
