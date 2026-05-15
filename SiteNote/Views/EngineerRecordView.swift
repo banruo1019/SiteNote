@@ -34,7 +34,7 @@ struct EngineerRecordView: View {
 
     @State private var isShowingCamera = false
     @State private var cameraCapturedImage: UIImage?
-    @State private var editingStagedIndex: EditingStagedIndex?
+    @State private var editingStagedIndex: EngineerStagedIndex?
 
     @State private var navPath = NavigationPath()
 
@@ -99,7 +99,7 @@ struct EngineerRecordView: View {
             .onChange(of: cameraCapturedImage) { _, newImage in
                 guard let img = newImage else { return }
                 cameraCapturedImage = nil
-                editingStagedIndex = EditingStagedIndex(value: -1, image: img)
+                editingStagedIndex = EngineerStagedIndex(value: -1, image: img)
             }
             .sheet(item: $editingStagedIndex) { item in
                 PhotoEditorView(originalImage: item.image) { edited in
@@ -328,7 +328,7 @@ struct EngineerRecordView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            editingStagedIndex = EditingStagedIndex(value: lastIdx, image: last)
+                            editingStagedIndex = EngineerStagedIndex(value: lastIdx, image: last)
                         }
 
                     deletePhotoButton {
@@ -345,7 +345,7 @@ struct EngineerRecordView: View {
                         ForEach(Array(viewModel.stagedPhotos.dropLast().enumerated()), id: \.offset) { idx, image in
                             ZStack(alignment: .topTrailing) {
                                 Button {
-                                    editingStagedIndex = EditingStagedIndex(value: idx, image: image)
+                                    editingStagedIndex = EngineerStagedIndex(value: idx, image: image)
                                 } label: {
                                     Image(uiImage: image)
                                         .resizable()
@@ -586,7 +586,7 @@ private struct EngineerBlinkingCursor: View {
     }
 }
 
-private struct EditingStagedIndex: Identifiable {
+private struct EngineerStagedIndex: Identifiable {
     let id: UUID = UUID()
     let value: Int
     let image: UIImage

@@ -19,7 +19,7 @@ struct RecordView: View {
         filter: #Predicate<Note> { $0.deletedAt == nil },
         sort: \Note.dueDate
     ) private var allNotes: [Note]
-    @State private var viewModel = HomeViewModel()
+    @State var viewModel = HomeViewModel()
     /// 当前用户角色。@Observable 单例,角色切换时本视图自动重画。
     @State private var profileManager = UserProfileManager.shared
 
@@ -31,10 +31,10 @@ struct RecordView: View {
 
     @State private var isShowingCamera = false
     @State private var cameraCapturedImage: UIImage?
-    @State private var editingStagedIndex: EditingStagedIndex?
+    @State var editingStagedIndex: EditingStagedIndex?
 
-    @State private var photoAnalysisResult: PhotoAnalysisDisplay?
-    @State private var isAnalyzingPhoto = false
+    @State var photoAnalysisResult: PhotoAnalysisDisplay?
+    @State var isAnalyzingPhoto = false
 
     @State private var navPath = NavigationPath()
 
@@ -797,157 +797,6 @@ struct RecordView: View {
         note.deletedAt = Date()
     }
 
-    // MARK: - 拍照暂存"专注"模式
-    //
-    // 用户点相机拍完后,stagedPhotos 非空。我们隐藏 stats / 最紧急 / 列表,
-    // 整个上方区域只显示:标题 + 最后一张大图预览(小图缩略行在下面),
-    // 主操作按钮("直接存" / "AI 分析")**下移到右手拇指可达的位置**。
-    @ViewBuilder
-    private var stagedPhotoFocusArea: some View {
-        VStack(spacing: 0) {
-            // 顶部栏:标题 + 齿轮 + "丢弃"
-            HStack {
-                Text("刚拍 \(viewModel.stagedPhotos.count) 张")
-                    .font(.system(size: 22, weight: .semibold))
-                    .tracking(-0.6)
-                    .foregroundStyle(Ink.fg)
-                Spacer()
-                Button {
-                    viewModel.clearStagedPhotos()
-                } label: {
-                    Text("丢弃")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Ink.red)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 12)
-
-            // 大图(最后一张)+ 右上角减号删除
-            if let last = viewModel.stagedPhotos.last {
-                let lastIdx = viewModel.stagedPhotos.count - 1
-                ZStack(alignment: .topTrailing) {
-                    Image(uiImage: last)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity)
-                        .frame(maxHeight: 380)
-                        .background(Ink.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            editingStagedIndex = EditingStagedIndex(value: lastIdx, image: last)
-                        }
-
-                    deletePhotoButton {
-                        viewModel.removeStagedPhoto(at: lastIdx)
-                    }
-                    .padding(10)
-                }
-                .padding(.horizontal, 24)
-            }
-
-            // 缩略图行(非最后一张)+ 每张右上角减号
-            if viewModel.stagedPhotos.count > 1 {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(Array(viewModel.stagedPhotos.dropLast().enumerated()), id: \.offset) { idx, image in
-                            ZStack(alignment: .topTrailing) {
-                                Button {
-                                    editingStagedIndex = EditingStagedIndex(value: idx, image: image)
-                                } label: {
-                                    Image(uiImage: image)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 56, height: 56)
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .strokeBorder(Ink.line, lineWidth: 1)
-                                        )
-                                }
-                                .buttonStyle(.plain)
-
-                                deletePhotoButton(size: 18) {
-                                    viewModel.removeStagedPhoto(at: idx)
-                                }
-                                .offset(x: 6, y: -6)
-                            }
-                            .frame(width: 62, height: 62, alignment: .topTrailing)
-                        }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 6)
-                }
-                .padding(.top, 8)
-            }
-
-            Spacer(minLength: 12)
-
-            // 主操作按钮:下移到右手拇指触碰区(屏幕下半部)
-            HStack(spacing: 10) {
-                Button {
-                    viewModel.savePhotosOnly()
-                } label: {
-                    Text("直接存")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Ink.fg)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Ink.fg, lineWidth: 1.5)
-                        )
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    analyzeLastStagedPhoto()
-                } label: {
-                    HStack(spacing: 6) {
-                        if isAnalyzingPhoto {
-                            SparkleLoading(label: "分析中")
-                        } else {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("AI 分析")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                    }
-                    .foregroundStyle(Color.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Ink.fg)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .disabled(isAnalyzingPhoto)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 20)
-        }
-    }
-
-    /// 删除按钮:黑圆底白色减号,右上角悬浮。用于暂存照片的大图和缩略图。
-    private func deletePhotoButton(size: CGFloat = 24, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "minus")
-                .font(.system(size: size * 0.55, weight: .heavy))
-                .foregroundStyle(Color.white)
-                .frame(width: size, height: size)
-                .background(Ink.fg)
-                .clipShape(Circle())
-                .overlay(
-                    Circle().strokeBorder(Color.white, lineWidth: 1.5)
-                )
-                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("删除这张照片")
-    }
-
-
     // MARK: - Recording top area
 
     private var recordingTopArea: some View {
@@ -1134,19 +983,19 @@ private struct BlinkingCursor: View {
     }
 }
 
-private struct EditingStagedIndex: Identifiable {
+struct EditingStagedIndex: Identifiable {
     let id: UUID = UUID()
     let value: Int
     let image: UIImage
 }
 
-private struct PhotoAnalysisDisplay: Identifiable {
+struct PhotoAnalysisDisplay: Identifiable {
     let id = UUID()
     let analysis: AIService.PhotoAnalysis
 }
 
 extension RecordView {
-    fileprivate func analyzeLastStagedPhoto() {
+    func analyzeLastStagedPhoto() {
         guard let image = viewModel.stagedPhotos.last else { return }
         isAnalyzingPhoto = true
         Task {
