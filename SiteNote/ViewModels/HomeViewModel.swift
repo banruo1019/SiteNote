@@ -333,7 +333,9 @@ final class HomeViewModel {
                         applyPolishedTranscription(noteID: noteID, polished: polished)
                     }
                 } catch {
+                    #if DEBUG
                     print("[SiteNote] AI polish (bilingual retry) failed: \(error.localizedDescription)")
+                    #endif
                 }
             }
         }
@@ -600,6 +602,7 @@ final class HomeViewModel {
             SiteCentroidsStorage.observe(siteName: siteTag, latitude: lat, longitude: lng)
         }
 
+        #if DEBUG
         print("""
         [SiteNote] Committed note:
           transcription: \(transcription.isEmpty ? "(空)" : transcription)
@@ -607,6 +610,7 @@ final class HomeViewModel {
           deadline: \(deadline.rawValue) hazard: \(isHazard)
           site: \(siteTag ?? "nil") template: \(templateName ?? "nil")
         """)
+        #endif
 
         lastSave = LastSaveSnapshot(
             noteID: note.id,
@@ -645,7 +649,9 @@ final class HomeViewModel {
                         }
                         AIFailureTracker.shared.clear()
                     } catch {
+                        #if DEBUG
                         print("[SiteNote] AI polish unavailable/failed: \(error.localizedDescription)")
+                        #endif
                         AIFailureTracker.shared.record(reason: Self.aiFailureReason(error))
                     }
                 }
@@ -707,7 +713,9 @@ final class HomeViewModel {
             guard note.deletedAt == nil else { return }
             note.transcription = polished
             try? ctx.save() // B6:polish 是关键内容字段,显式落盘。
+            #if DEBUG
             print("[SiteNote] AI polish applied to \(noteID.uuidString.prefix(8))")
+            #endif
         }
     }
 
@@ -726,7 +734,9 @@ final class HomeViewModel {
 
         let drafts = await AIService.shared.extractLogEntries(from: note)
         guard !drafts.isEmpty else {
+            #if DEBUG
             print("[SiteNote] LogEntry extract: 0 条 for \(noteID.uuidString.prefix(8))")
+            #endif
             return
         }
         // B3:抽完成可能耗时,二次确认状态。
@@ -734,7 +744,9 @@ final class HomeViewModel {
         guard note.deletedAt == nil else { return }
         LogEntryIngestor.ingest(drafts: drafts, from: note, into: ctx)
         try? ctx.save() // B6:LogEntry 是新对象,显式落盘。
+        #if DEBUG
         print("[SiteNote] LogEntry extract: \(drafts.count) 条 for \(noteID.uuidString.prefix(8))")
+        #endif
     }
 
     /// 把任意 AI 错误压缩成 < 30 字的中文短原因,给 AIStatusBar 红字行用。

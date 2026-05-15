@@ -35,7 +35,9 @@ enum SiteSuggestionService {
                 lat1: latitude, lng1: longitude,
                 lat2: c.latitude, lng2: c.longitude
             )
-            if best == nil || d < best!.distance {
+            if let current = best {
+                if d < current.distance { best = (name, d) }
+            } else {
                 best = (name, d)
             }
         }
