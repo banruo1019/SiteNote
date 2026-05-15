@@ -75,7 +75,7 @@ struct TeamManagementView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(team.name)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                     Text(String(localized: "\(mockMembers.count) / \(Team.maxMembers) 成员", locale: AppLanguageManager.currentLocale))
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)

@@ -715,7 +715,7 @@ struct NoteDetailView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: note.isDone ? "arrow.uturn.left.circle.fill" : "checkmark.circle.fill")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                 Text(note.isDone ? "未完成" : "已处理")
                     .font(.system(size: DesignTokens.FontSize.body, weight: .bold))
             }
@@ -734,7 +734,7 @@ struct NoteDetailView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                 Text("改期")
                     .font(.system(size: DesignTokens.FontSize.body, weight: .bold))
             }

@@ -405,7 +405,7 @@ struct SiteResourcesSettingsView: View {
                         Image(systemName: "minus.circle.fill")
                             .foregroundStyle(.red)
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                 }
             }
 

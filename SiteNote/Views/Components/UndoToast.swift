@@ -31,9 +31,9 @@ struct UndoToast: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
         .background(Ink.bg)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Ink.line, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.12), radius: 24, y: 4)

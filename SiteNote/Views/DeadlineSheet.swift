@@ -517,6 +517,6 @@ private struct EditingImageIndex: Identifiable {
         transcription: "3 楼钢筋没到货下午 2 点前解决",
         locationLabel: "Willoughby, NSW"
     ) { result in
-        print("Committed:", result)
+        _ = result  // preview no-op
     }
 }

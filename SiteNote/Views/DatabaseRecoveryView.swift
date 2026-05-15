@@ -192,7 +192,7 @@ struct DatabaseRecoveryView: View {
         Button(action: action) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: icon)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(iconColor(for: tone))
                     .frame(width: 28, alignment: .leading)
                 VStack(alignment: .leading, spacing: 3) {

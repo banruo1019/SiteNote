@@ -94,7 +94,7 @@ struct InspectionReportListView: View {
                     createNewReport()
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(Ink.fg)
                 }
                 .accessibilityLabel(String(localized: "新建巡检", locale: AppLanguageManager.currentLocale))

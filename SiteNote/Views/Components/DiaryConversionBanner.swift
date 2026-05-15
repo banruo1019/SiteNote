@@ -42,7 +42,7 @@ struct DiaryConversionBanner: View {
                     Button("保留提醒") {
                         DiaryConversionTracker.shared.dismissCurrent()
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Ink.fgDim)
 
@@ -50,7 +50,7 @@ struct DiaryConversionBanner: View {
                         confirmDiary(noteID: c.noteID)
                         DiaryConversionTracker.shared.dismissCurrent()
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Ink.accentBlue)
                 }

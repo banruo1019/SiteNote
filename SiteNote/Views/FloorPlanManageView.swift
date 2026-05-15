@@ -434,7 +434,7 @@ struct PDFPageSelectorSheet: View {
                         }
                         .padding(DesignTokens.Spacing.large)
                         .background(Color.black.opacity(0.7))
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                 }
             }

@@ -336,7 +336,7 @@ struct LogEntryEditSheet: View {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundStyle(Ink.fgDim)
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.plain)
                         }
                     } else {
                         Button {
@@ -367,7 +367,7 @@ struct LogEntryEditSheet: View {
                                     Image(systemName: "xmark.circle.fill")
                                         .foregroundStyle(Ink.fgDim)
                                 }
-                                .buttonStyle(.borderless)
+                                .buttonStyle(.plain)
                             }
                         } else {
                             Button {
