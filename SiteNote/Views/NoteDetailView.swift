@@ -32,7 +32,7 @@ struct NoteDetailView: View {
     @Environment(\.modelContext) var modelContext
     @Environment(\.dismiss) var dismiss
 
-    /// Engineer 视角下隐藏所有 PM/Tradie 专属的操作按钮 + 分类建议卡 + AI 照片分析,
+    /// Engineer 视角下隐藏所有 PM 专属的操作按钮 + 分类建议卡 + AI 照片分析,
     /// 详情页退化为纯查看 / 编辑 transcription / 编辑工地标签 / 标注照片。
     @State private var profileManager = UserProfileManager.shared
     var isEngineerProfile: Bool { profileManager.current == .engineer }

@@ -419,7 +419,6 @@ final class AIService {
     /// **Profile-aware**:根据 `UserProfileManager.shared.current` 切换 prompt:
     ///   - PM:抽全 5 类(person/plant/delivery/visitor/event)
     ///   - Engineer:跳过 person/plant,聚焦巡检问题/合规/隐患(走 event)
-    ///   - Tradie:只抽 person + 问题 event,不抽 plant/delivery/visitor
     func extractLogEntries(from note: Note) async -> [LogEntryDraft] {
         let text = note.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, Self.isLanguageModelAvailable else { return [] }

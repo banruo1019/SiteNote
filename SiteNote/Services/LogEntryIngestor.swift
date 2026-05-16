@@ -25,7 +25,6 @@ enum LogEntryIngestor {
     ///
     /// **Profile defense-in-depth**:即使 AI 没遵守 prompt,这里也按 profile 丢掉越界 kind:
     ///   - engineer:丢 person/plant(只允许问题类)
-    ///   - tradie:丢 plant/delivery/visitor(只允许 person + event)
     ///   - pm:不过滤
     static func ingest(drafts: [AIService.LogEntryDraft], from note: Note, into ctx: ModelContext) {
         guard !drafts.isEmpty else { return }

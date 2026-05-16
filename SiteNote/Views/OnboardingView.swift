@@ -4,7 +4,7 @@
 //
 //  首次启动 5 步引导(v2 — 加了 profile 选择)。
 //  - Step 0:欢迎 + 隐私
-//  - Step 1:**选择角色**(PM / Engineer / Tradie),Settings 后续可改
+//  - Step 1:**选择角色**(PM / Engineer),Settings 后续可改
 //  - Step 2:建第一个工地(可跳过)
 //  - Step 3:介绍录音 + 保存后的 UndoToast 4 按钮
 //  - Step 4:试录第一条(引导式,不内嵌录音 — 关闭引导后用户在 RecordView 真录)
