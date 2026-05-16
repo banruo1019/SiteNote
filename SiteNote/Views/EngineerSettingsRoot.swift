@@ -19,15 +19,8 @@ import PhotosUI
 
 /// Engineer 角色的设置首页。5 section、~15 row,刻意保持薄。
 struct EngineerSettingsRoot: View {
-    // MARK: - 我和公司
-    @AppStorage("settings.engineerCompanyName") private var companyName: String = ""
-    @AppStorage("settings.engineerABN") private var abn: String = ""
-    @State private var logoPickerItem: PhotosPickerItem?
-    @State private var currentLogo: UIImage? = BrandingStorage.loadLogo()
-
-    // MARK: - 工作资源(工地)
-    @State private var siteTags: [String] = SiteTagsStorage.load()
-    @State private var showsNewSiteSheet: Bool = false
+    // 我和公司:内容搬到 CompanyInfoSettingsView 子页。
+    // 工作资源:工地内容搬到 SitePresetEditorView 子页。
 
     // MARK: - 日程默认提醒
     /// 取值:1440(1 天) / 60(1 小时) / 30(30 分钟) / 0(关闭)。
@@ -58,26 +51,6 @@ struct EngineerSettingsRoot: View {
         .navigationTitle(String(localized: "设置", locale: locale))
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
-        .onChange(of: logoPickerItem) { _, newItem in
-            guard let newItem else { return }
-            Task {
-                if let data = try? await newItem.loadTransferable(type: Data.self),
-                   let img = UIImage(data: data),
-                   BrandingStorage.saveLogo(img) {
-                    await MainActor.run {
-                        currentLogo = BrandingStorage.loadLogo()
-                    }
-                }
-                await MainActor.run {
-                    logoPickerItem = nil
-                }
-            }
-        }
-        .sheet(isPresented: $showsNewSiteSheet) {
-            NewSiteSheet { _, _ in
-                siteTags = SiteTagsStorage.load()
-            }
-        }
         .sheet(item: Binding(
             get: { backupShareURL.map { EngineerSettingsBackupItem(url: $0) } },
             set: { _ in backupShareURL = nil }
@@ -119,10 +92,6 @@ struct EngineerSettingsRoot: View {
         } message: {
             Text(String(localized: "请完全退出 App(从后台划掉)再打开,新设置才会生效。本地数据已保留,不会丢失。", locale: locale))
         }
-        .onAppear {
-            siteTags = SiteTagsStorage.load()
-            currentLogo = BrandingStorage.loadLogo()
-        }
     }
 
     // MARK: - Section 0: 角色(v1.3 统一 settings 顶部)
@@ -160,90 +129,22 @@ struct EngineerSettingsRoot: View {
     private var meAndCompanySection: some View {
         Section {
             NavigationLink {
-                ProfileSettingsView()
+                CompanyInfoSettingsView()
             } label: {
-                HStack {
-                    Image(systemName: "person.crop.square")
-                        .foregroundStyle(Ink.fg)
-                    Text(String(localized: "我的角色", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
-                }
-            }
-
-            HStack {
-                Text(String(localized: "公司名", locale: locale))
-                    .font(.system(size: DesignTokens.FontSize.body))
-                    .frame(width: 80, alignment: .leading)
-                TextField(
-                    String(localized: "如 ABC Engineering Pty Ltd", locale: locale),
-                    text: $companyName
-                )
-                .font(.system(size: DesignTokens.FontSize.body))
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
-            }
-
-            HStack {
-                Text(String(localized: "ABN", locale: locale))
-                    .font(.system(size: DesignTokens.FontSize.body))
-                    .frame(width: 80, alignment: .leading)
-                TextField(
-                    String(localized: "11 位 ABN(可留空)", locale: locale),
-                    text: $abn
-                )
-                .font(.system(size: DesignTokens.FontSize.body))
-                .keyboardType(.numbersAndPunctuation)
-                .autocorrectionDisabled()
-            }
-
-            // 公司 Logo
-            HStack {
-                if let logo = currentLogo {
-                    Image(uiImage: logo)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 50, height: 50)
-                        .background(Ink.bg)
+                HStack(spacing: DesignTokens.Spacing.medium) {
+                    Image(systemName: "building.columns")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(Color.purple)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
-                } else {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.system(size: 24))
-                        .foregroundStyle(Ink.fgDim)
-                        .frame(width: 50, height: 50)
-                        .background(Ink.bg)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(localized: "公司 Logo", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                    Text(currentLogo != nil
-                        ? String(localized: "已上传", locale: locale)
-                        : String(localized: "未上传", locale: locale)
-                    )
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-
-            PhotosPicker(selection: $logoPickerItem, matching: .images) {
-                Label(
-                    String(localized: "上传 / 替换 Logo", locale: locale),
-                    systemImage: "photo.badge.plus"
-                )
-                .font(.system(size: DesignTokens.FontSize.body))
-            }
-
-            if currentLogo != nil {
-                Button(role: .destructive) {
-                    BrandingStorage.clearLogo()
-                    currentLogo = nil
-                } label: {
-                    Label(
-                        String(localized: "移除 Logo", locale: locale),
-                        systemImage: "trash"
-                    )
-                    .font(.system(size: DesignTokens.FontSize.body))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "我和公司", locale: locale))
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                        Text(String(localized: "公司名 / ABN / Logo", locale: locale))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         } header: {

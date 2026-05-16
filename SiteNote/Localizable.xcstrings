@@ -5909,9 +5909,6 @@
         }
       }
     },
-    "左滑删除工地。" : {
-
-    },
     "左滑删除工地。删工地不影响已打过标签的历史 note。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11110,9 +11107,6 @@
           }
         }
       }
-    },
-    "资源" : {
-
     },
     "起" : {
       "extractionState" : "manual",
