@@ -282,58 +282,17 @@ struct EngineerSettingsRoot: View {
 
     // MARK: - Section 2: 工作资源
 
-    @ViewBuilder
     private var workResourcesSection: some View {
-        // Section A:工地列表 + 新建按钮(同一层 — 现有工地 + 添加)
-        Section {
-            ForEach(siteTags, id: \.self) { tag in
-                HStack {
-                    Image(systemName: "building.2.fill")
-                        .foregroundStyle(.green)
-                    Text(tag)
-                        .font(.system(size: DesignTokens.FontSize.body))
-                    Spacer()
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        siteTags = SiteTagsStorage.remove(tag)
-                    } label: {
-                        Label(
-                            String(localized: "删除", locale: locale),
-                            systemImage: "trash"
-                        )
-                    }
-                }
-            }
-            Button {
-                showsNewSiteSheet = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundStyle(.green)
-                    Text(String(localized: "新建工地", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                        .foregroundStyle(Ink.fg)
-                    Spacer()
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        } header: {
-            SectionHeader(String(localized: "工地", locale: locale))
-        } footer: {
-            SectionFooter(String(localized: "左滑删除工地。", locale: locale))
-        }
-
-        // Section B:跨工地资源管理(配置类,进子页详细编辑)
+        // 工地资源:工地 / 平面图 / 联系簿 都是跨工地的"资源",同一层级。
+        // 工地的"实例"管理在 SitePresetEditorView 子页内(包含新建 + 删除 + 编辑预设)。
         Section {
             NavigationLink {
                 SitePresetEditorView()
             } label: {
                 HStack {
-                    Image(systemName: "building.2.crop.circle")
-                        .foregroundStyle(.blue)
-                    Text(String(localized: "工地预设", locale: locale))
+                    Image(systemName: "building.2.fill")
+                        .foregroundStyle(.green)
+                    Text(String(localized: "工地", locale: locale))
                         .font(.system(size: DesignTokens.FontSize.body))
                 }
             }
@@ -360,7 +319,7 @@ struct EngineerSettingsRoot: View {
                 }
             }
         } header: {
-            SectionHeader(String(localized: "资源", locale: locale))
+            SectionHeader(String(localized: "工地资源", locale: locale))
         } footer: {
             SectionFooter(String(localized: "首次使用建议先建工地 + 上传平面图。", locale: locale))
         }

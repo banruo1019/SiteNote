@@ -5580,6 +5580,7 @@
       }
     },
     "工作资源" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -5907,6 +5908,9 @@
           }
         }
       }
+    },
+    "左滑删除工地。" : {
+
     },
     "左滑删除工地。删工地不影响已打过标签的历史 note。" : {
       "extractionState" : "manual",
@@ -7467,6 +7471,9 @@
           }
         }
       }
+    },
+    "提前提醒" : {
+
     },
     "提醒" : {
       "extractionState" : "manual",
@@ -11103,6 +11110,9 @@
           }
         }
       }
+    },
+    "资源" : {
+
     },
     "起" : {
       "extractionState" : "manual",

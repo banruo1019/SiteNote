@@ -63,7 +63,7 @@ struct SitePresetEditorView: View {
             }
         }
         .industrialForm()
-        .navigationTitle(String(localized: "工地预设", locale: locale))
+        .navigationTitle(String(localized: "工地", locale: locale))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -99,7 +99,19 @@ struct SitePresetEditorView: View {
             Text(alertMessage ?? "")
         }
         .onAppear {
+            syncFromSiteTagsStorage()
             presets = SitePresetStorage.load()
+        }
+    }
+
+    /// 把 SiteTagsStorage 里有但 SitePresetStorage 没有的工地补成空 SitePreset。
+    /// v1.3:让"工地"页是工地的唯一入口 — 老 siteTag(只有名字)也要能在这里看到/编辑预设。
+    private func syncFromSiteTagsStorage() {
+        let allSiteTags = SiteTagsStorage.load()
+        let presetTags = Set(SitePresetStorage.load().map { $0.siteTag })
+        for tag in allSiteTags where !presetTags.contains(tag) {
+            let stub = SitePreset(siteTag: tag, address: "")
+            _ = SitePresetStorage.add(stub)
         }
     }
 
