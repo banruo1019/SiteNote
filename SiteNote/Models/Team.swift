@@ -23,7 +23,10 @@ import SwiftData
 
 @Model
 final class Team {
-    @Attribute(.unique) var id: UUID = UUID()
+    // ⚠️ 不能加 @Attribute(.unique) —— CloudKit integration 不支持 unique constraint,
+    // 会让 ModelContainer 初始化抛 NSCocoaErrorDomain 134060(即使没开 iCloud)。
+    // 唯一性由业务层保证(创建 Team 时用 UUID() 自然唯一)。
+    var id: UUID = UUID()
     var name: String = ""
     /// CKRecord.creatorUserRecordID(Apple ID,team 创建者)。
     var ownerUserID: String = ""
@@ -61,7 +64,8 @@ final class Team {
 
 @Model
 final class TeamMember {
-    @Attribute(.unique) var id: UUID = UUID()
+    // ⚠️ 不能加 @Attribute(.unique) —— 见 Team 上面注释。
+    var id: UUID = UUID()
 
     /// 属于哪个团队(软引用替代 @Relationship)。
     var teamID: UUID = UUID()
