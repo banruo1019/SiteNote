@@ -12,8 +12,11 @@
 
 import Foundation
 
+// FoundationModels 只在 iOS 26+ 存在。**必须 weak link**,否则 iOS 24/25 真机
+// dyld 找不到 framework → 启动 SIGKILL。@_weakLinked 让 binary 标记为
+// "optional dependency",运行时按需加载。
 #if canImport(FoundationModels)
-import FoundationModels
+@_weakLinked import FoundationModels
 #endif
 
 @MainActor
