@@ -80,16 +80,17 @@ private struct RootContainerView: View {
         BackupService.migrateLegacyDirectories()
         CrashReporter.migrateLegacyDirectory()
 
-        // Schema 含 Team / TeamMember(CloudKit Sharing 用)。即便用户没开 iCloud sync,
-        // 本地也能用 Team(单机 mock 模式)。打开 sync 后整个 schema 自动跟随 cloudKitDatabase 配置同步。
+        // Schema:v1.1 范围 + v1.2 加 SiteVisitSchedule。
+        // Team / TeamMember 暂不加入主 Schema(方案 C):
+        //   - v1.2 先上 iCloud 备份(单人多设备 sync)
+        //   - 团队功能 prototype 阶段,等 v1.3 写 VersionedSchema + MigrationPlan 一起接入
+        //   - 避免老用户从 v1.0/v1.1 升级时 schema migration 失败
         let schema = Schema([
             Note.self,
             LogEntry.self,
             ShareLog.self,
             InspectionReport.self,
             SiteVisitSchedule.self,
-            Team.self,
-            TeamMember.self,
         ])
 
         // ⚠️ iCloud sync 由 ICloudSyncConfig.shared.isEnabled feature flag 控制(默认 false)。
