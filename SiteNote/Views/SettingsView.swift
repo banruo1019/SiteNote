@@ -1003,6 +1003,7 @@ struct DataAboutSettingsView: View {
     /// 保留:AppStorage 偏好(识别语言、AI Key、早推送时间等)。
     private func nukeEverything() {
         // 1. 硬删所有 Note(含已软删/已完成)
+        // TODO(v1.2 主线):Team/TeamMember 接入 Schema 后,这里也要补。
         let descriptor = FetchDescriptor<Note>()
         var noteCount = 0
         if let notes = try? modelContext.fetch(descriptor) {
@@ -1020,6 +1021,15 @@ struct DataAboutSettingsView: View {
         }
         if let shares = try? modelContext.fetch(FetchDescriptor<ShareLog>()) {
             for s in shares { modelContext.delete(s) }
+        }
+
+        // 1c. InspectionReport(QDE 巡检报告 model)+ SiteVisitSchedule(工程师日程)
+        //     这两个表也在主 Schema 里,清空时一并硬删。
+        if let reports = try? modelContext.fetch(FetchDescriptor<InspectionReport>()) {
+            for r in reports { modelContext.delete(r) }
+        }
+        if let schedules = try? modelContext.fetch(FetchDescriptor<SiteVisitSchedule>()) {
+            for s in schedules { modelContext.delete(s) }
         }
 
         // 2. 一并清掉 Documents 下的三大文件目录(音频/照片/平面图)+ 隐藏目录(诊断包/备份元/branding logo)
@@ -1112,6 +1122,12 @@ enum SettingsKeys {
     /// P1-5:AI 总开关。默认开(符合"AI 显眼"约束)。关掉 = polish/autoTag 都不跑。
     static let aiMasterEnabled = "settings.aiMasterEnabled"
     static let aiPolishEnabled = "settings.aiPolishEnabled"
+    /// HomeViewModel:633 用此 key 控分类管线;UI 里"自动推断标签" toggle 直接对它。
+    /// 旧 key aiAutoTagEnabled 已废,SiteNoteApp.init 里做一次性 migration 把旧值复制过来。
+    static let aiOmniClassifyEnabled = "settings.aiOmniClassifyEnabled"
+    /// HomeViewModel:634 用此 key 控 LogEntry 抽取。需要独立 UI 入口。
+    static let aiLogExtractEnabled = "settings.aiLogExtractEnabled"
+    /// **已废**(保留常量给 SiteNoteApp.init 做一次性 migration,删常量 = 升级用户 toggle 状态丢失)。
     static let aiAutoTagEnabled = "settings.aiAutoTagEnabled"
     static let dailyDigestEnabled = "settings.dailyDigestEnabled"
 }
