@@ -149,24 +149,17 @@ private struct RootContainerView: View {
         BackupService.migrateLegacyDirectories()
         CrashReporter.migrateLegacyDirectory()
 
-        // Schema 通过 VersionedSchema + MigrationPlan 管理(SiteNote/Schemas/)。
-        // v1.0/v1.1 老用户升级 v1.2 时,SwiftData 自动跑 V1 → V2 lightweight
-        // migration:加 InspectionReport / SiteVisitSchedule / Team / TeamMember
-        // 4 张空表,旧 3 张数据保留。
-        //
-        // **架构**(单 Configuration):所有 7 张表共享一个 store。
+        // Schema:所有 7 张表共享一个 store。
         //   - 速记/照片/巡检报告/日程 → SwiftData CloudKit private DB auto-sync(开启 toggle 后)
-        //   - Team / TeamMember 也在同 store,SwiftData 会 sync 到 default zone
-        //     (Owner 多设备能看见自己的 team)。**跨用户共享**另由
-        //     TeamCloudKitService 用 raw CKDatabase 写到 custom zone + CKShare 处理 ——
-        //     SwiftData 和 raw CloudKit 双轨,各自独立工作。
+        //   - Team / TeamMember 也在同 store(Owner 多设备能看见自己的 team)
+        //   - 跨用户 Team 共享另由 TeamCloudKitService 用 raw CKDatabase 处理
         //
-        // ⚠️ 之前尝试过拆 2 个 Configuration(core/team_local),但 SwiftData
-        // MigrationPlan 跨 configuration 工作不稳,ModelContainer 创建失败。
-        //
-        // Schema 用 `versionedSchema:` 形式构造,让 SwiftData 把 V2 版本元数据
-        // 写进 store —— 否则 MigrationPlan 找不到目标版本,init 会抛错。
-        let schema = Schema(versionedSchema: SiteNoteSchemaV2.self)
+        // **不传 MigrationPlan,不用 VersionedSchema**:经多次实测,Apple
+        // SwiftData 在 iOS 18+ 的 VersionedSchema + MigrationPlan 在某些
+        // model 配置下会抛 SwiftDataError 1(具体根因未公开)。回退到 v1.0
+        // 那种最简单的 schema 用法,让 SwiftData 自动 lightweight inference。
+        // v1.0 老用户升级:旧 3 张表数据保留,新加的 4 张表 SwiftData 自动建空表。
+        let schema = Schema(SiteNoteSchemaV2.models)
 
         let modelConfiguration: ModelConfiguration
         if ICloudSyncConfig.shared.isEnabled {
@@ -178,7 +171,6 @@ private struct RootContainerView: View {
         do {
             let container = try ModelContainer(
                 for: schema,
-                migrationPlan: SiteNoteMigrationPlan.self,
                 configurations: [modelConfiguration]
             )
             // B2: 启动时清理孤儿 .m4a。录音中被杀的进程会留下永久不被引用的音频文件,
@@ -197,9 +189,19 @@ private struct RootContainerView: View {
 
             state = .ready(container)
         } catch {
-            #if DEBUG
-            print("[SiteNote] ModelContainer 创建失败: \(error.localizedDescription)")
-            #endif
+            // SwiftDataError 1 等通用错误 localizedDescription 信息很少,
+            // 把 NSError 详情都打出来方便排查。Xcode Console 直接看。
+            print("[SiteNote] ❌ ModelContainer 创建失败")
+            print("  error: \(error)")
+            print("  localizedDescription: \(error.localizedDescription)")
+            let nsError = error as NSError
+            print("  domain: \(nsError.domain)")
+            print("  code: \(nsError.code)")
+            print("  userInfo: \(nsError.userInfo)")
+            if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                print("  underlying: \(underlying)")
+                print("  underlying.userInfo: \(underlying.userInfo)")
+            }
             state = .failed(error)
         }
     }
