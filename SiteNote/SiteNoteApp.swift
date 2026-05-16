@@ -11,9 +11,14 @@
 
 import SwiftUI
 import SwiftData
+import CloudKit
 
 @main
 struct SiteNoteApp: App {
+    /// 接收 CloudKit share invitation(用户点 Mail/Messages 里的 share URL 后系统调回来)。
+    /// SiteNoteAppDelegate 把 metadata 派发给 .shareInvitationReceived 通知。
+    @UIApplicationDelegateAdaptor(SiteNoteAppDelegate.self) private var appDelegate
+
     init() {
         // E3.11:删 App 再装回会把 sandbox 文件清掉,但 Keychain 默认幸存。
         // 用 UserDefaults 上的"首次启动 flag"判定:不存在 = 新装/重装,主动清掉残留的 OpenAI Key。
@@ -68,6 +73,7 @@ struct SiteNoteApp: App {
 private struct RootContainerView: View {
     @State private var state: InitState = .loading
     @State private var languageManager = AppLanguageManager.shared
+    @State private var shareInviteMessage: String?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -99,6 +105,42 @@ private struct RootContainerView: View {
             // SwiftUI 的 scenePhase 也覆盖了"App 长时间挂后台又回来"的场景。
             guard newPhase == .active, case .ready(let container) = state else { return }
             rescheduleAllNotes(in: container.mainContext)
+        }
+        // CloudKit share invitation:SiteNoteAppDelegate 把 metadata 派发到这里,
+        // ModelContext 准备好后(.ready)接受 share + 在本地建 Team/TeamMember mirror。
+        .onReceive(NotificationCenter.default.publisher(
+            for: .shareInvitationReceived
+        )) { note in
+            guard case .ready(let container) = state,
+                  let metadata = note.userInfo?["metadata"] as? CKShare.Metadata else { return }
+            Task { @MainActor in
+                do {
+                    try await TeamCloudKitService.shared.acceptShareInvitation(
+                        metadata: metadata,
+                        modelContext: container.mainContext
+                    )
+                    shareInviteMessage = String(
+                        localized: "已加入团队",
+                        locale: AppLanguageManager.currentLocale
+                    )
+                } catch {
+                    shareInviteMessage = (error as? LocalizedError)?.errorDescription
+                        ?? error.localizedDescription
+                }
+            }
+        }
+        .alert(
+            String(localized: "团队邀请", locale: AppLanguageManager.currentLocale),
+            isPresented: Binding(
+                get: { shareInviteMessage != nil },
+                set: { if !$0 { shareInviteMessage = nil } }
+            )
+        ) {
+            Button(String(localized: "知道了", locale: AppLanguageManager.currentLocale)) {
+                shareInviteMessage = nil
+            }
+        } message: {
+            Text(shareInviteMessage ?? "")
         }
     }
 
