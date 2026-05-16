@@ -47,6 +47,7 @@ struct EngineerSettingsRoot: View {
 
     var body: some View {
         Form {
+            roleSection
             meAndCompanySection
             teamSection
             workResourcesSection
@@ -121,6 +122,36 @@ struct EngineerSettingsRoot: View {
         .onAppear {
             siteTags = SiteTagsStorage.load()
             currentLogo = BrandingStorage.loadLogo()
+        }
+    }
+
+    // MARK: - Section 0: 角色(v1.3 统一 settings 顶部)
+
+    private var roleSection: some View {
+        Section {
+            NavigationLink {
+                ProfileSettingsView()
+            } label: {
+                HStack(spacing: DesignTokens.Spacing.medium) {
+                    Image(systemName: UserProfileManager.shared.current.sfSymbol)
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(UserProfileManager.shared.current == .pm ? Color.orange : Color.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "我是 \(UserProfileManager.shared.current.displayName)", locale: locale))
+                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                        Text(LocalizedStringKey(UserProfileManager.shared.current.subtitle))
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            SectionHeader(String(localized: "角色", locale: locale))
+        } footer: {
+            SectionFooter(String(localized: "决定 PDF 默认模板和 AI 识别重点。可随时切换。", locale: locale))
         }
     }
 

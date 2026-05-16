@@ -67,40 +67,57 @@ struct ReportsView: View {
     }
 
     // MARK: - Main card(唯一入口:出巡检报告)
+    //
+    // PM:直接跳 PDFExportView,省掉 PDFHubView 这层中间页。
+    // Engineer:仍走 PDFHubView,因为他要在 Inspection Report 和 PDF 巡检日志 间选。
 
+    @ViewBuilder
     private var mainCard: some View {
-        NavigationLink(value: ReportDestination.pdfHub) {
-            HStack(spacing: 16) {
-                Image(systemName: "doc.text.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(Ink.accent)
-                    .frame(width: 56, height: 56)
-                    .background(Ink.card)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("出巡检报告")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(Ink.fg)
-                    Text("把这段时间的速记拼成 PDF 巡检日志,给上级/业主/法律存档")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Ink.fgDim)
-                        .lineLimit(2)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Ink.dim)
+        if UserProfileManager.shared.current == .pm {
+            NavigationLink {
+                PDFExportView()
+            } label: {
+                mainCardLabel
             }
-            .padding(20)
-            .background(Ink.bg)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(Ink.line, lineWidth: 1)
-            )
-            .padding(.horizontal, 24)
-            .padding(.top, 24)
+            .buttonStyle(.plain)
+        } else {
+            NavigationLink(value: ReportDestination.pdfHub) {
+                mainCardLabel
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    private var mainCardLabel: some View {
+        HStack(spacing: 16) {
+            Image(systemName: "doc.text.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(Ink.accent)
+                .frame(width: 56, height: 56)
+                .background(Ink.card)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            VStack(alignment: .leading, spacing: 4) {
+                Text("出巡检报告")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(Ink.fg)
+                Text("把这段时间的速记拼成 PDF 巡检日志,给上级/业主/法律存档")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Ink.fgDim)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14))
+                .foregroundStyle(Ink.dim)
+        }
+        .padding(20)
+        .background(Ink.bg)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(Ink.line, lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
     }
 
     private var footerHint: some View {

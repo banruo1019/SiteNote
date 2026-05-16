@@ -2,10 +2,12 @@
 //  SettingsView.swift
 //  SiteNote
 //
-//  设置首页 — 仅做角色路由。两种模式各自的实际首页:
-//    - Engineer → EngineerSettingsRoot
-//    - PM       → PMSettingsView
-//  下方文件还有若干共用子页(InputAISettingsView 等),两个 Profile 都能跳。
+//  v1.3:统一 Settings —— PM 和 Engineer 共用一个设置页。
+//  内容由 EngineerSettingsRoot 提供(名字保留为 legacy,实际作为统一设置 root)。
+//  顶部第 1 项是角色 picker,后续 sections 共用 + 内部按角色微调显示。
+//
+//  下方文件还有共用子页:InputAISettingsView / DataAboutSettingsView /
+//  SiteResourcesSettingsView 等。
 //
 
 import SwiftUI
@@ -15,14 +17,8 @@ import UserNotifications
 import PhotosUI
 
 struct SettingsView: View {
-    @State private var profileManager = UserProfileManager.shared
-
     var body: some View {
-        if profileManager.current == .engineer {
-            EngineerSettingsRoot()
-        } else {
-            PMSettingsView()
-        }
+        EngineerSettingsRoot()
     }
 }
 

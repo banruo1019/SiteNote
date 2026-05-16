@@ -23,6 +23,12 @@ struct EngineerScheduleView: View {
         sort: [SortDescriptor(\SiteVisitSchedule.scheduledDate)]
     ) private var allSchedules: [SiteVisitSchedule]
 
+    /// 所有未删除的巡检报告 — 当日列表用于展示当天 reportDate 的报告。
+    @Query(
+        filter: #Predicate<InspectionReport> { $0.deletedAt == nil },
+        sort: \InspectionReport.reportDate
+    ) private var allInspectionReports: [InspectionReport]
+
     @State private var currentMonth: Date = Date()
     @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var showEditor: Bool = false
@@ -47,6 +53,9 @@ struct EngineerScheduleView: View {
                 }
             }
             .navigationBarHidden(true)
+            .navigationDestination(for: SettingsDestination.self) { _ in
+                SettingsView()
+            }
             .sheet(isPresented: $showEditor, onDismiss: {
                 editingSchedule = nil
             }) {
@@ -67,6 +76,13 @@ struct EngineerScheduleView: View {
                 .tracking(-0.8)
                 .foregroundStyle(Ink.fg)
             Spacer()
+            NavigationLink(value: SettingsDestination()) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(Ink.fgDim)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
             Button {
                 editingSchedule = nil
                 showEditor = true
@@ -282,8 +298,17 @@ struct EngineerScheduleView: View {
         return allSchedules.contains { $0.scheduledDate >= start && $0.scheduledDate < end }
     }
 
+    private var reportsOnSelectedDate: [InspectionReport] {
+        let cal = Calendar.current
+        let dayStart = cal.startOfDay(for: selectedDate)
+        guard let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else { return [] }
+        return allInspectionReports
+            .filter { $0.reportDate >= dayStart && $0.reportDate < dayEnd }
+            .sorted { $0.reportDate < $1.reportDate }
+    }
+
     private var dayDetailSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .firstTextBaseline) {
                 Text(selectedDateLabel)
                     .font(.system(size: 11, weight: .semibold))
@@ -291,18 +316,56 @@ struct EngineerScheduleView: View {
                     .textCase(.uppercase)
                     .foregroundStyle(Ink.fgDim)
                 Spacer()
-                Text(String(localized: "\(schedulesOnSelectedDate.count) 项", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.dim)
-                    .monospacedDigit()
             }
 
-            if schedulesOnSelectedDate.isEmpty {
-                emptyDayState
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(schedulesOnSelectedDate) { s in
-                        scheduleRow(s)
+            // 当日巡检日程
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(String(localized: "当日巡检日程", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Ink.fg2)
+                    Spacer()
+                    Text(String(localized: "\(schedulesOnSelectedDate.count) 项", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.dim)
+                        .monospacedDigit()
+                }
+
+                if schedulesOnSelectedDate.isEmpty {
+                    emptyDayState
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(schedulesOnSelectedDate) { s in
+                            scheduleRow(s)
+                        }
+                    }
+                }
+            }
+
+            // 当日报告
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(String(localized: "当日报告", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Ink.fg2)
+                    Spacer()
+                    Text(String(localized: "\(reportsOnSelectedDate.count) 项", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.dim)
+                        .monospacedDigit()
+                }
+
+                if reportsOnSelectedDate.isEmpty {
+                    Text(String(localized: "当日无报告", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Ink.fgDim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 12)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(reportsOnSelectedDate) { r in
+                            reportRow(r)
+                        }
                     }
                 }
             }
@@ -310,6 +373,41 @@ struct EngineerScheduleView: View {
         .padding(.horizontal, 24)
         .padding(.top, 18)
         .padding(.bottom, 20)
+    }
+
+    private func reportRow(_ r: InspectionReport) -> some View {
+        NavigationLink {
+            InspectionFormView(report: r)
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(Ink.fg2)
+                    .frame(width: 22)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(r.reportNo.isEmpty ? String(localized: "(无编号)", locale: AppLanguageManager.currentLocale) : r.reportNo)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Ink.fg)
+                        .lineLimit(1)
+                    if !r.projectNo.isEmpty {
+                        Text(r.projectNo)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Ink.fgDim)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Ink.line).frame(height: 1)
+        }
     }
 
     private var selectedDateLabel: String {
@@ -320,32 +418,23 @@ struct EngineerScheduleView: View {
     }
 
     private var emptyDayState: some View {
-        VStack(spacing: 12) {
-            Text(String(localized: "今天没有安排", locale: AppLanguageManager.currentLocale))
-                .font(.system(size: 13))
-                .foregroundStyle(Ink.fgDim)
-            Button {
-                editingSchedule = nil
-                showEditor = true
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text(String(localized: "新建", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .foregroundStyle(Ink.fg)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Ink.line2, lineWidth: 1)
-                )
+        Button {
+            editingSchedule = nil
+            showEditor = true
+        } label: {
+            HStack(spacing: 8) {
+                Text(String(localized: "今天没有安排", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Ink.fgDim)
+                Spacer()
+                Text(String(localized: "+ 新建", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Ink.fg2)
             }
-            .buttonStyle(.plain)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
+        .buttonStyle(.plain)
     }
 
     private func scheduleRow(_ s: SiteVisitSchedule) -> some View {

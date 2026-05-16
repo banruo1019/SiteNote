@@ -2,52 +2,40 @@
 //  IndustrialTabBar.swift
 //  SiteNote
 //
-//  M1 Linear 风 Tab Bar。文字双行(中文 + English),激活靠字重+颜色。
-//  视觉居中:内容 padding 上下对称,不强行 `ignoresSafeArea(edges:.bottom)`,
-//  否则在 iPhone Pro Max 这种大底边安全区的机型上,文字会因为背景下沉而显得偏上。
-//  安全区交给父级的 `Ink.bg.ignoresSafeArea()` 托底,这里只管 tab 本身的视觉盒子。
+//  v1.3:PM 和 Engineer 统一 3 Tab —— 记 / 日历 / 报告。
+//  设置走齿轮入口,不占 Tab。
+//
+//  M1 Linear 风。文字双行(中文 + English),激活靠字重+颜色。
 //
 
 import SwiftUI
 
 enum AppTab: Int, CaseIterable, Hashable {
-    case record, reports, schedule, settings
+    case record, calendar, reports
 
     var zh: String {
         switch self {
         case .record: return "记"
+        case .calendar: return "日历"
         case .reports: return "报告"
-        case .schedule: return "日程"
-        case .settings: return "设置"
         }
     }
 
     var en: String {
         switch self {
         case .record: return "Record"
+        case .calendar: return "Calendar"
         case .reports: return "Reports"
-        case .schedule: return "Schedule"
-        case .settings: return "Settings"
         }
     }
 }
 
 struct IndustrialTabBar: View {
     @Binding var selection: AppTab
-    /// Engineer 角色 4 Tab 模式:记 / 报告 / 日程 / 设置。
-    /// PM 永远是 2 Tab(记/报告) —— v1.2 大减负后日志台账已下架。
-    var isEngineerMode: Bool = false
-
-    private var visibleTabs: [AppTab] {
-        if isEngineerMode {
-            return [.record, .reports, .schedule, .settings]
-        }
-        return [.record, .reports]
-    }
 
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(visibleTabs, id: \.self) { tab in
+            ForEach(AppTab.allCases, id: \.self) { tab in
                 tabButton(tab)
             }
         }
