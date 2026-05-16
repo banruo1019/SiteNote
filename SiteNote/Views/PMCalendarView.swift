@@ -18,10 +18,11 @@ import SwiftUI
 import SwiftData
 
 struct PMCalendarView: View {
-    /// 月视图打点 + 当日列表 + 即将到来段都基于这份。
-    /// 只读未完成、未删除的速记;由 SwiftData 按 dueDate 升序提供。
+    /// 月视图打点 + 当日列表都基于这份。
+    /// **包括已完成的 Note**(用户要求:当日完成的也显示)。
+    /// 不再过滤 isDone — 完成的也在 dueDate 当天显示,UI 用 ✓ 标记。
     @Query(
-        filter: #Predicate<Note> { $0.deletedAt == nil && $0.isDone == false },
+        filter: #Predicate<Note> { $0.deletedAt == nil },
         sort: \Note.dueDate
     ) private var pendingNotes: [Note]
 
@@ -41,8 +42,7 @@ struct PMCalendarView: View {
                             calendarGrid
                             divider
                             dayDetailSection
-                            divider
-                            upcomingSection
+                            // v1.3 用户决定:删"近期"段。日历就只看当日。
                         }
                     }
                 }
@@ -417,103 +417,7 @@ struct PMCalendarView: View {
         return f.string(from: date)
     }
 
-    // MARK: - 即将到来
-
-    /// 今天起未完成 Note,按 dueDate 升序前 5 条。
-    /// dueDate 已经在 Deadline.dueDate(from:) 里推算好;archive/inbox 推 100 年后,
-    /// 5 条阈值远小于这个量级,所以不会被它们污染。
-    private var upcomingNotes: [Note] {
-        let today = Calendar.current.startOfDay(for: Date())
-        return pendingNotes
-            .filter { $0.dueDate >= today }
-            .sorted { $0.dueDate < $1.dueDate }
-            .prefix(5)
-            .map { $0 }
-    }
-
-    private var upcomingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "即将到来", locale: AppLanguageManager.currentLocale))
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.5)
-                .textCase(.uppercase)
-                .foregroundStyle(Ink.fgDim)
-
-            if upcomingNotes.isEmpty {
-                Text(String(localized: "近期没有待办的速记", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Ink.fgDim)
-                    .padding(.vertical, 14)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(upcomingNotes) { note in
-                        upcomingRow(note)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
-        .padding(.bottom, 32)
-    }
-
-    private func upcomingRow(_ note: Note) -> some View {
-        NavigationLink(value: note) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(relativeDateLabel(note.dueDate))
-                        .font(.system(size: 12, weight: .semibold))
-                        .tracking(0.3)
-                        .textCase(.uppercase)
-                        .foregroundStyle(Ink.fg)
-                        .monospacedDigit()
-                    Text(timeLabel(note.dueDate))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.fgDim)
-                        .monospacedDigit()
-                }
-                .frame(width: 76, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(noteSummary(note))
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(note.isHazard ? Ink.red : Ink.fg)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    if let tag = note.siteTag, !tag.isEmpty {
-                        Text(tag)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Ink.fgDim)
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.dim)
-            }
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Ink.line).frame(height: 1)
-        }
-    }
-
-    /// "今天" / "明天" / "MMM d"
-    private func relativeDateLabel(_ date: Date) -> String {
-        let cal = Calendar.current
-        if cal.isDateInToday(date) {
-            return String(localized: "今天", locale: AppLanguageManager.currentLocale)
-        }
-        if cal.isDateInTomorrow(date) {
-            return String(localized: "明天", locale: AppLanguageManager.currentLocale)
-        }
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        f.setLocalizedDateFormatFromTemplate("MMMd")
-        return f.string(from: date)
-    }
+    // v1.3:删整段 "即将到来" — 用户只想看当日。
 
     // MARK: - Divider
 

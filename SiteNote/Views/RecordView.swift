@@ -30,13 +30,11 @@ struct RecordView: View {
 
     @State private var navPath = NavigationPath()
 
-    /// 每个工地大组的折叠状态(siteTag → expanded)。默认全部展开。
-    @State private var siteExpansion: [String: Bool] = [:]
-    /// 已归档项目段的折叠状态(默认折叠)。
-    @State private var archivedSectionExpanded: Bool = false
-
-    /// 数据源:UserDefaults 里归档的工地 tag set。@State 同步触发 view 刷新,
-    /// SiteResourcesSettingsView 切换后回到主屏会 reload。
+    /// 当前激活的 chip filter(单选)。
+    @State private var chipFilter: ChipFilter = .all
+    /// 当前排序方式。
+    @State private var sortMode: SortMode = .createdAt
+    /// 归档工地 set,SettingsView 改完返回时 task 重新拉。
     @State private var archivedSiteTags: Set<String> = SiteArchiveStorage.loadArchived()
 
     @State private var headerProvider = AppHeaderProvider.shared
@@ -44,74 +42,109 @@ struct RecordView: View {
 
     private let listVM = NoteListViewModel()
 
+    /// 顶部 chip 过滤条件。除了固定几条,还会动态生成每个工地的 chip。
+    enum ChipFilter: Hashable {
+        case all
+        case today
+        case hazard
+        case archived              // 已归档工地的 Note
+        case site(String)          // 单个工地
+    }
+
+    /// 排序方式。
+    enum SortMode: String, CaseIterable, Identifiable {
+        case createdAt = "创建时间"
+        case dueDate = "到期日期"
+        case site = "工地"
+        case tag = "标签"
+        var id: String { rawValue }
+        var displayName: String {
+            String(localized: String.LocalizationValue(rawValue), locale: AppLanguageManager.currentLocale)
+        }
+    }
+
     // MARK: - Derived data
 
-    /// 所有未删除的 Note(用作分组源)。
+    /// 所有未删除的 Note。
     private var liveNotes: [Note] {
         allNotes.filter { $0.deletedAt == nil }
     }
 
     /// 已知工地 tag 列表(从 Note + SiteTagsStorage 合并 + 去重)。
-    /// 保证用户配置的工地即使没 Note 也会显示(用户可以归档空工地)。
     private var allSiteTags: [String] {
         let fromNotes = Set(liveNotes.compactMap { $0.siteTag })
         let configured = Set(SiteTagsStorage.load())
-        let merged = fromNotes.union(configured)
-        return Array(merged).sorted()
+        return Array(fromNotes.union(configured)).sorted()
     }
 
-    /// 活跃(未归档)工地 + 这些工地的 Note。
-    private var activeSiteGroups: [(siteTag: String, notes: [Note])] {
-        allSiteTags
-            .filter { !archivedSiteTags.contains($0) }
-            .map { tag in
-                let notes = liveNotes.filter { $0.siteTag == tag }
-                return (siteTag: tag, notes: notes)
+    /// 应用 filter 后的 Note。
+    private var filteredNotes: [Note] {
+        let pool: [Note]
+        switch chipFilter {
+        case .all:
+            // 默认隐藏归档工地里的 Note
+            pool = liveNotes.filter { note in
+                guard let site = note.siteTag else { return true }
+                return !archivedSiteTags.contains(site)
             }
-    }
-
-    /// 无工地的 Note(siteTag == nil 或空)。**单独一组** 渲染在最上面。
-    private var orphanNotes: [Note] {
-        liveNotes.filter { ($0.siteTag ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
-    }
-
-    /// 已归档工地组 + 这些工地的 Note。
-    private var archivedSiteGroups: [(siteTag: String, notes: [Note])] {
-        allSiteTags
-            .filter { archivedSiteTags.contains($0) }
-            .map { tag in
-                let notes = liveNotes.filter { $0.siteTag == tag }
-                return (siteTag: tag, notes: notes)
+        case .today:
+            let cal = Calendar.current
+            pool = liveNotes.filter { cal.isDateInToday($0.dueDate) && !$0.isDone }
+        case .hazard:
+            pool = liveNotes.filter { $0.isHazard }
+        case .archived:
+            pool = liveNotes.filter { note in
+                guard let site = note.siteTag else { return false }
+                return archivedSiteTags.contains(site)
             }
+        case .site(let tag):
+            pool = liveNotes.filter { $0.siteTag == tag }
+        }
+        return applySort(pool)
     }
 
-    /// 一个工地内按 otherTags 分子组。
-    /// - 同时拥有多个 tag 的 Note 会在每个 tag 子组都出现一次(避免漏看)。
-    /// - 无 tag 的 Note 进 "未标分类" 子组。
-    private func subGroups(for notes: [Note]) -> [(tagName: String, color: Color?, notes: [Note])] {
-        let subTagsDef = SubTagsStorage.load()
-        let subTagColorByName = Dictionary(uniqueKeysWithValues: subTagsDef.map { ($0.name, $0.color) })
-
-        var byTag: [String: [Note]] = [:]
-        var untagged: [Note] = []
-        for note in notes {
-            if note.otherTags.isEmpty {
-                untagged.append(note)
-            } else {
-                for tag in note.otherTags {
-                    byTag[tag, default: []].append(note)
-                }
+    private func applySort(_ notes: [Note]) -> [Note] {
+        switch sortMode {
+        case .createdAt:
+            return notes.sorted { $0.createdAt > $1.createdAt }
+        case .dueDate:
+            return notes.sorted { $0.dueDate < $1.dueDate }
+        case .site:
+            return notes.sorted {
+                let a = $0.siteTag ?? ""
+                let b = $1.siteTag ?? ""
+                if a == b { return $0.createdAt > $1.createdAt }
+                return a < b
+            }
+        case .tag:
+            return notes.sorted {
+                let a = $0.otherTags.sorted().first ?? ""
+                let b = $1.otherTags.sorted().first ?? ""
+                if a == b { return $0.createdAt > $1.createdAt }
+                return a < b
             }
         }
-        var result: [(tagName: String, color: Color?, notes: [Note])] = byTag
-            .map { (tagName: $0.key, color: subTagColorByName[$0.key], notes: $0.value.sorted { $0.createdAt > $1.createdAt }) }
-            .sorted { $0.tagName < $1.tagName }
-        if !untagged.isEmpty {
-            result.append((tagName: String(localized: "未标分类", locale: AppLanguageManager.currentLocale),
-                           color: nil,
-                           notes: untagged.sorted { $0.createdAt > $1.createdAt }))
+    }
+
+    /// 各 chip 的计数(给数字徽章)。
+    private var chipCounts: [ChipFilter: Int] {
+        let cal = Calendar.current
+        var counts: [ChipFilter: Int] = [:]
+        // all = 非归档工地 + 无工地
+        counts[.all] = liveNotes.filter { note in
+            guard let s = note.siteTag else { return true }
+            return !archivedSiteTags.contains(s)
+        }.count
+        counts[.today] = liveNotes.filter { cal.isDateInToday($0.dueDate) && !$0.isDone }.count
+        counts[.hazard] = liveNotes.filter { $0.isHazard }.count
+        counts[.archived] = liveNotes.filter { note in
+            guard let s = note.siteTag else { return false }
+            return archivedSiteTags.contains(s)
+        }.count
+        for tag in allSiteTags where !archivedSiteTags.contains(tag) {
+            counts[.site(tag)] = liveNotes.filter { $0.siteTag == tag }.count
         }
-        return result
+        return counts
     }
 
     // MARK: - Body
@@ -241,183 +274,130 @@ struct RecordView: View {
 
     @ViewBuilder
     private var siteGroupedList: some View {
-        if liveNotes.isEmpty && activeSiteGroups.isEmpty {
-            emptyHint
-        } else {
-            List {
-                // 无工地的 Note(放在最顶)
-                if !orphanNotes.isEmpty {
-                    foldableSiteSection(
-                        siteTag: String(localized: "未指定工地", locale: AppLanguageManager.currentLocale),
-                        notes: orphanNotes
-                    )
-                }
-
-                // 活跃工地
-                ForEach(activeSiteGroups, id: \.siteTag) { group in
-                    if !group.notes.isEmpty {
-                        foldableSiteSection(siteTag: group.siteTag, notes: group.notes)
-                    }
-                }
-
-                // 已归档项目段(独立大 section,默认折叠)
-                if !archivedSiteGroups.isEmpty {
-                    archivedProjectsSection
-                }
-            }
-            .listStyle(.plain)
-            .industrialForm()
-            .environment(\.defaultMinListRowHeight, 0)
-        }
-    }
-
-    /// 单个工地的可折叠大组,内部按 otherTags 子组。
-    private func foldableSiteSection(siteTag: String, notes: [Note]) -> some View {
-        let expanded = Binding<Bool>(
-            get: { siteExpansion[siteTag] ?? true },
-            set: { siteExpansion[siteTag] = $0 }
-        )
-        let subgroups = subGroups(for: notes)
-
-        return Section {
-            if expanded.wrappedValue {
-                ForEach(subgroups, id: \.tagName) { sub in
-                    subGroupRows(sub: sub)
-                }
-            }
-        } header: {
-            siteHeader(siteTag: siteTag, count: notes.count, expanded: expanded)
-        }
-    }
-
-    /// 子组内的几行 Note rows(默认全部展示,不再折叠 — 一层折叠就够了)。
-    @ViewBuilder
-    private func subGroupRows(sub: (tagName: String, color: Color?, notes: [Note])) -> some View {
-        // 子组小 header
-        HStack(spacing: 8) {
-            if let c = sub.color {
-                Circle().fill(c).frame(width: 8, height: 8)
-            }
-            Text(sub.tagName)
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.3)
-                .textCase(.uppercase)
-                .foregroundStyle(Ink.fgDim)
-            Spacer()
-            Text("\(sub.notes.count)")
-                .font(.system(size: 11))
-                .foregroundStyle(Ink.dim)
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 12)
-        .padding(.bottom, 4)
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
-        .listRowBackground(Ink.bg)
-
-        ForEach(sub.notes) { note in
-            NavigationLink(value: note) {
-                NoteRow(note: note, urgency: listVM.urgency(for: note))
-            }
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(Ink.bg)
-            .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                Button {
-                    toggleDone(note)
-                } label: {
-                    Label(
-                        note.isDone ? "未完成" : "完成",
-                        systemImage: note.isDone ? "arrow.uturn.left" : "checkmark"
-                    )
-                }
-                .tint(Ink.fg)
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button(role: .destructive) {
-                    softDelete(note)
-                } label: {
-                    Label("删除", systemImage: "trash")
-                }
-                .tint(Ink.red)
+        VStack(spacing: 0) {
+            chipRow
+            sortBar
+            if filteredNotes.isEmpty {
+                emptyHint
+            } else {
+                flatList
             }
         }
     }
 
-    /// 工地大组的可点 header(folding affordance)。
-    private func siteHeader(siteTag: String, count: Int, expanded: Binding<Bool>) -> some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                expanded.wrappedValue.toggle()
+    /// 顶部 chip 行(水平滚动,单选)。
+    private var chipRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                chip(.all, label: String(localized: "全部", locale: AppLanguageManager.currentLocale))
+                chip(.today, label: String(localized: "今天", locale: AppLanguageManager.currentLocale))
+                chip(.hazard, label: String(localized: "隐患", locale: AppLanguageManager.currentLocale))
+                ForEach(allSiteTags.filter { !archivedSiteTags.contains($0) }, id: \.self) { tag in
+                    chip(.site(tag), label: tag)
+                }
+                if (chipCounts[.archived] ?? 0) > 0 {
+                    chip(.archived, label: String(localized: "已归档", locale: AppLanguageManager.currentLocale))
+                }
             }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "building.2.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Ink.fg)
-                Text(siteTag)
-                    .font(.system(size: 15, weight: .semibold))
-                    .tracking(-0.2)
-                    .foregroundStyle(Ink.fg)
-                Spacer()
-                Text("\(count)")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Ink.fgDim)
-                Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Ink.dim)
-            }
-            .contentShape(Rectangle())
             .padding(.horizontal, 24)
-            .padding(.top, 16)
-            .padding(.bottom, 8)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private func chip(_ kind: ChipFilter, label: String) -> some View {
+        let isOn = chipFilter == kind
+        let count = chipCounts[kind] ?? 0
+        return Button {
+            chipFilter = kind
+        } label: {
+            HStack(spacing: 5) {
+                Text(label)
+                    .font(.system(size: 12, weight: isOn ? .semibold : .medium))
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundStyle(isOn ? Ink.bg : Ink.fgDim)
+                }
+            }
+            .foregroundStyle(isOn ? Ink.bg : Ink.fg)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(isOn ? Ink.fg : Ink.card)
+            )
         }
         .buttonStyle(.plain)
-        .textCase(nil)
     }
 
-    /// 已归档项目段:折叠 + 内部仍按工地大组显示。
-    private var archivedProjectsSection: some View {
-        Section {
-            if archivedSectionExpanded {
-                ForEach(archivedSiteGroups, id: \.siteTag) { group in
-                    foldableSiteSection(siteTag: group.siteTag, notes: group.notes)
-                }
-            }
-        } header: {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    archivedSectionExpanded.toggle()
+    /// Sort 行:右侧 menu。
+    private var sortBar: some View {
+        HStack {
+            Text("\(filteredNotes.count) 条")
+                .font(.system(size: 11))
+                .foregroundStyle(Ink.fgDim)
+            Spacer()
+            Menu {
+                ForEach(SortMode.allCases) { mode in
+                    Button {
+                        sortMode = mode
+                    } label: {
+                        if sortMode == mode {
+                            Label(mode.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(mode.displayName)
+                        }
+                    }
                 }
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "archivebox.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Ink.fgDim)
-                    Text(String(localized: "已归档项目", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 13, weight: .semibold))
-                        .tracking(-0.2)
-                        .foregroundStyle(Ink.fgDim)
-                    Spacer()
-                    Text("\(archivedSiteGroups.count)")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.dim)
-                    Image(systemName: archivedSectionExpanded ? "chevron.up" : "chevron.down")
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.arrow.down")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Ink.dim)
+                    Text(sortMode.displayName)
+                        .font(.system(size: 11, weight: .medium))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
                 }
-                .contentShape(Rectangle())
-                .padding(.horizontal, 24)
-                .padding(.top, 24)
-                .padding(.bottom, 8)
-                .overlay(alignment: .top) {
-                    Rectangle().fill(Ink.line).frame(height: 1)
-                        .padding(.horizontal, 24)
+                .foregroundStyle(Ink.fgDim)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 8)
+    }
+
+    /// Flat 列表(Notion 风)。
+    private var flatList: some View {
+        List {
+            ForEach(filteredNotes) { note in
+                NavigationLink(value: note) {
+                    NoteRow(note: note, urgency: listVM.urgency(for: note))
+                }
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Ink.bg)
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button {
+                        toggleDone(note)
+                    } label: {
+                        Label(
+                            note.isDone ? "未完成" : "完成",
+                            systemImage: note.isDone ? "arrow.uturn.left" : "checkmark"
+                        )
+                    }
+                    .tint(Ink.fg)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        softDelete(note)
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
+                    .tint(Ink.red)
                 }
             }
-            .buttonStyle(.plain)
-            .textCase(nil)
         }
+        .listStyle(.plain)
+        .industrialForm()
+        .environment(\.defaultMinListRowHeight, 0)
     }
 
     /// 空态
