@@ -6,22 +6,17 @@
 //
 //  显示:
 //    - 引擎名(OpenAI / Apple / 本地不可用)
-//    - 今日 LogEntry 抽出条数
 //    - 待确认的 NoteClassificationCard 数
 //
 //  Tap → 进 AISettingsDiagnostic(暂时跳到 InputAISettingsView)。
 //
-//  挂在每个 tab 的标题下方。挂法:用 modifier 包一下根 ZStack 即可,
-//  不侵入各 tab 的现有 layout。
+//  v1.2 大减负:删"今日 LogEntry 抽出条数"显示(LogEntry UI 已下架)。
 //
 
 import SwiftUI
 import SwiftData
 
 struct AIStatusBar: View {
-    @Query(filter: #Predicate<LogEntry> { $0.deletedAt == nil })
-    private var allEntries: [LogEntry]
-
     @Query(
         filter: #Predicate<Note> {
             $0.deletedAt == nil
@@ -33,11 +28,6 @@ struct AIStatusBar: View {
 
     @Environment(\.modelContext) private var modelContext
     @State private var failureTracker = AIFailureTracker.shared
-
-    private var todayEntryCount: Int {
-        let dayStart = Calendar.current.startOfDay(for: Date())
-        return allEntries.filter { $0.createdAt >= dayStart }.count
-    }
 
     private var pendingCount: Int { pendingClassifyNotes.count }
 
@@ -72,23 +62,16 @@ struct AIStatusBar: View {
             Text(engineLabel)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(engineColor)
-            if AIService.isLanguageModelAvailable {
+            if AIService.isLanguageModelAvailable, pendingCount > 0 {
                 Text("·")
                     .font(.system(size: 11))
                     .foregroundStyle(Ink.dim)
-                Text("今日 \(todayEntryCount) 条")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.fgDim)
-                    .monospacedDigit()
-                if pendingCount > 0 {
-                    HStack(spacing: 3) {
-                        Circle().fill(Ink.red).frame(width: 5, height: 5)
-                        Text("\(pendingCount) 待确认")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Ink.red)
-                            .monospacedDigit()
-                    }
-                    .padding(.leading, 2)
+                HStack(spacing: 3) {
+                    Circle().fill(Ink.red).frame(width: 5, height: 5)
+                    Text("\(pendingCount) 待确认")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Ink.red)
+                        .monospacedDigit()
                 }
             }
             Spacer()

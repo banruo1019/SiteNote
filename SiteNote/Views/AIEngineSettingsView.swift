@@ -115,7 +115,6 @@ struct AIAdvancedSettingsView: View {
     @AppStorage("settings.openAIEmbeddingModel") private var embeddingModel: String = "text-embedding-3-small"
     @AppStorage(SettingsKeys.aiPolishEnabled) private var aiPolishEnabled: Bool = true
     @AppStorage(SettingsKeys.aiOmniClassifyEnabled) private var aiOmniClassifyEnabled: Bool = true
-    @AppStorage(SettingsKeys.aiLogExtractEnabled) private var aiLogExtractEnabled: Bool = true
 
     @State private var apiKeyInput: String = ""
     @State private var hasKey: Bool = false
@@ -188,12 +187,10 @@ struct AIAdvancedSettingsView: View {
                 .font(.system(size: DesignTokens.FontSize.body))
             Toggle("自动推断分类(工地/分类标签)", isOn: $aiOmniClassifyEnabled)
                 .font(.system(size: DesignTokens.FontSize.body))
-            Toggle("自动抽取日志项", isOn: $aiLogExtractEnabled)
-                .font(.system(size: DesignTokens.FontSize.body))
         } header: {
             Text("功能微调")
         } footer: {
-            Text("三项默认全开。关闭后对应那步 AI 不跑。")
+            Text("两项默认全开。关闭后对应那步 AI 不跑。")
                 .font(.system(size: DesignTokens.FontSize.body))
         }
     }

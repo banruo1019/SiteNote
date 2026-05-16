@@ -325,10 +325,9 @@ final class AIService {
         return parts.dropFirst().joined(separator: ":").trimmingCharacters(in: .whitespaces)
     }
 
-    // MARK: - 通用文本路由(供 NarrativeService 使用)
+    // MARK: - 通用文本路由(polishTranscription / classifyNote 内部用)
 
-    /// 给定 prompt,按引擎设置调用 OpenAI 或本地。`fallbackToRaw` 提供降级文本(完全失败时返回它)。
-    /// 需要外部严格失败时应显式调 `runTextStrict`。
+    /// 给定 prompt,按引擎设置调用 OpenAI 或本地。`fallbackToRaw` 完全失败时返回。
     func runText(prompt: String, fallbackToRaw: String) async throws -> String {
         let engine = Self.currentEngine
 
@@ -362,7 +361,7 @@ final class AIService {
         return fallbackToRaw
     }
 
-    /// 严格模式:任一引擎都不可用时抛错(用于必需 AI 的功能,如叙事/claim letter)。
+    /// 严格模式:任一引擎都不可用时抛错。
     func runTextStrict(prompt: String) async throws -> String {
         let engine = Self.currentEngine
 

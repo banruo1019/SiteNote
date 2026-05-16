@@ -99,7 +99,7 @@ struct RecordView: View {
     }
 
     /// 待分类:inbox + **非隐患** + **非施工日记**。
-    /// 施工日记默认 deadline=.inbox 但它不是"待分类",所以这里滤掉——它在 LogTabView 纵览的"待分类"段里显示。
+    /// 施工日记默认 deadline=.inbox 但它不是"待分类",滤掉。
     private var inboxNotes: [Note] {
         sections.inbox.filter { !$0.isHazard && !$0.isDiaryRecord }
     }
@@ -286,7 +286,7 @@ struct RecordView: View {
     }
 
     /// "今天"大标题 + 齿轮 + 下方 subtitle(日期 · 天气 · 位置)。
-    /// 顶部 padding 20 / bottom 16,和 LogTabView、ReportsView 的标题行对齐。
+    /// 顶部 padding 20 / bottom 16,和 ReportsView 的标题行对齐。
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
@@ -358,7 +358,7 @@ struct RecordView: View {
     }
 
     /// 非 PM 用的展示型 stat cell:纯只读,不可点(v1.2 大减负 LogTab 下架后,
-    /// 原"点击跳日志纵览"目标消失,改成纯数字展示)。
+    /// 原"点击跳日志纵览"目标消失,改成纯数字展示)。  // v1.2 大减负
     private func readonlyStatCell(
         count: Int,
         label: String,

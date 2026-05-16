@@ -161,11 +161,9 @@ final class Note {
     /// 用户是否处理过这条 Note 的 AI 建议(确认或明确忽略)。false 且 classificationJSON 非空 = 待确认。
     var classificationConfirmed: Bool = false
 
-    /// 这条 Note 是否被视作"施工日记"条目。
-    /// - AI 成功抽出 ≥1 条 LogEntry 时,由 `LogEntryIngestor` 自动置 true。
-    /// - true 的 note **不进提醒事项列表**(RecordView 统计、LogTabView 纵览的"要盯/今天"分组、inbox 都滤掉),
-    ///   因为"水工来了 4 个"本身不是 todo,是工地日志记录。
-    /// - 仍然在详情页可查、LogTabView 纵览的"待分类"段(含施工日记)、台账模式的"速记"子段里显示。
+    /// 这条 Note 是否被视作"施工日记"条目(legacy 字段,v1.2 大减负后 UI 不再使用)。
+    /// - true 的 note **不进提醒事项列表**(RecordView 主屏分组都滤掉)。
+    /// - 仍然在详情页可查,数据字段保留兼容历史。
     /// - 用户手动把这标签去掉(详情页)就恢复到普通 note。
     var isDiaryRecord: Bool = false
 

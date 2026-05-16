@@ -200,7 +200,7 @@ enum BackupService {
         "settings.siteCentroids.v1",
         "settings.jargonCustomTerms",
         "settings.jargonShortcuts",
-        // Obsidian 导出路径(bookmark 是 Data,导出时会被 isValidJSONObject 过滤掉,无害)
+        // (Obsidian 已下架,这两个 key 留作 legacy 兼容,旧用户备份能恢复)
         "settings.obsidian.exportFolderPath",
         // 引导
         "settings.onboarding.dismissed.v1",

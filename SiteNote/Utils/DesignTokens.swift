@@ -59,7 +59,7 @@ enum Ink {
     /// 深色变种(保留以防代码引用)。
     static let accentDeep = Color(hex: 0x111113)
 
-    /// **点睛蓝** — 只用在 ≤12px 的小点(mic 右上角、sparkline 终点等)。
+    /// **点睛蓝** — 只用在 ≤12px 的小点(mic 右上角等)。
     /// 严禁用作按钮或大面积填充。
     static let accentBlue = Color(hex: 0x1F6FEB)
 }
