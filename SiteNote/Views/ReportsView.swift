@@ -128,14 +128,15 @@ enum ReportDestination: Hashable {
 }
 
 // MARK: - 子菜单:出 PDF
+//
+// v1.2 大减负:删 WeeklySummary / EOT 索赔 入口,只留 2 个 PDF 模板。
+// PM 默认看到"PDF 巡检日志",Engineer 默认看到"Inspection Report"。
 
-/// P0-4 合并后:把 PDF 巡检日志 / 本周报告 / EOT 索赔 三个 PDF 导出集中在一个视图。
 struct PDFHubView: View {
     @State private var profile = UserProfileManager.shared
 
     var body: some View {
         List {
-            // 按当前 profile 高亮专属 PDF
             Section {
                 if profile.current == .engineer {
                     NavigationLink {
@@ -147,22 +148,11 @@ struct PDFHubView: View {
                 NavigationLink {
                     PDFExportView()
                 } label: {
-                    pdfRow(icon: "doc.text", title: String(localized: "PDF 巡检日志", locale: AppLanguageManager.currentLocale), sub: String(localized: "按日期或工地导出(通用)", locale: AppLanguageManager.currentLocale))
-                }
-                NavigationLink {
-                    WeeklySummaryView()
-                } label: {
-                    pdfRow(icon: "chart.bar", title: String(localized: "本周报告", locale: AppLanguageManager.currentLocale), sub: String(localized: "可复制的周总结文本", locale: AppLanguageManager.currentLocale))
-                }
-                NavigationLink {
-                    EOTReportView()
-                } label: {
-                    pdfRow(icon: "cloud.rain", title: String(localized: "EOT 工期延误", locale: AppLanguageManager.currentLocale), sub: String(localized: "基于天气的索赔 · AI", locale: AppLanguageManager.currentLocale))
+                    pdfRow(icon: "doc.text", title: String(localized: "PDF 巡检日志", locale: AppLanguageManager.currentLocale), sub: String(localized: "按日期或工地导出", locale: AppLanguageManager.currentLocale))
                 }
             }
 
-            // 其他模板:只有 PM 看得到 Inspection 这个非主模板入口。
-            // Engineer 的主模板已经在第一段顶部出现,无需重复。
+            // PM 视角:Inspection Report SVR 作为可选模板,放第二段不突出。
             if profile.current == .pm {
                 Section {
                     NavigationLink {

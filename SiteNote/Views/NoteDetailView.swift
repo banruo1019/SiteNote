@@ -42,7 +42,6 @@ struct NoteDetailView: View {
 
     @State var sharePDFURL: URL?
     @State var isGeneratingShare: Bool = false
-    @State var obsidianMessage: String?
     @State private var showsRescheduleDialog: Bool = false
     @State var fullscreenPhoto: FullscreenPhoto?
     @State var showsOriginalTranscription: Bool = false
@@ -468,12 +467,12 @@ struct NoteDetailView: View {
     /// - 第 3 排:标记隐患 + 删除(描边 ghost,警示/危险)
     ///
     /// Engineer 视角下:隐藏 完成 / 改期 / 指派 / 标隐患 这些 todo 性质的按钮,
-    /// 只保留 分享 + 删除 + 转换模式 + Obsidian 导出。详情页定位为"查看/编辑"。
+    /// 只保留 分享 + 删除 + 转换模式。详情页定位为"查看/编辑"。
     @ViewBuilder
     private var actionButtonGroup: some View {
         if isDiary || isEngineerProfile {
             // 日志 / Engineer:都不需要 todo 类的(完成/改期/指派/标隐患)按钮。
-            // Engineer 也不要"转为施工日志" / Obsidian 导出 —— 工程师工作流以 InspectionReport 为出口。
+            // Engineer 不要"转为施工日志" —— 工程师工作流以 InspectionReport 为出口。
             VStack(spacing: DesignTokens.Spacing.small) {
                 HStack(spacing: DesignTokens.Spacing.small) {
                     tonalActionButton(
@@ -561,46 +560,6 @@ struct NoteDetailView: View {
                 )
             }
             .buttonStyle(.plain)
-
-            obsidianExportButton
-        }
-    }
-
-    /// 一键导出当前 note 到 Obsidian vault（需先在设置里配置文件夹）。
-    private var obsidianExportButton: some View {
-        Button {
-            exportThisNoteToObsidian()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "square.and.arrow.up.on.square")
-                Text("导出到 Obsidian")
-            }
-            .font(.system(size: DesignTokens.FontSize.body, weight: .medium))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 36)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-        .alert("Obsidian 导出", isPresented: Binding(
-            get: { obsidianMessage != nil },
-            set: { if !$0 { obsidianMessage = nil } }
-        )) {
-            Button("知道了") { obsidianMessage = nil }
-        } message: {
-            Text(obsidianMessage ?? "")
-        }
-    }
-
-    private func exportThisNoteToObsidian() {
-        do {
-            try ObsidianExportService.exportSingleNote(note)
-            obsidianMessage = "✓ 已导出。Mac 上的 vault 几秒后通过 iCloud 同步可见。"
-        } catch {
-            obsidianMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 

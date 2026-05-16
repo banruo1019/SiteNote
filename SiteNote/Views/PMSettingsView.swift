@@ -64,7 +64,7 @@ struct PMSettingsView: View {
                     .font(.system(size: 12))
             }
 
-            // 常用 — 日常会反复打开:提醒时间、导出报告、清数据
+            // 常用 — 日常会反复打开:提醒时间、清数据
             Section("常用") {
                 NavigationLink {
                     RemindersSettingsView()
@@ -77,13 +77,13 @@ struct PMSettingsView: View {
                     )
                 }
                 NavigationLink {
-                    ReportsExportSettingsView()
+                    SavedReportsView()
                 } label: {
                     settingsRow(
-                        icon: "doc.text",
-                        color: .purple,
-                        title: "报告与导出",
-                        subtitle: "周报、EOT、PDF、ZIP"
+                        icon: "folder",
+                        color: .blue,
+                        title: "我的报告",
+                        subtitle: "已导出 PDF + iCloud 同步状态"
                     )
                 }
                 NavigationLink {
@@ -98,8 +98,8 @@ struct PMSettingsView: View {
                 }
             }
 
-            // 工地资源 — 配置类:工地、平面图、模板、条款
-            Section("工地资源") {
+            // 高级 — 工地资源 / Logo / 数据导出 / 模板 (重度配置类)
+            Section("高级") {
                 NavigationLink {
                     SiteResourcesSettingsView()
                 } label: {
