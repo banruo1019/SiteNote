@@ -36,6 +36,7 @@ struct EngineerSettingsRoot: View {
     // MARK: - 语言
     @State private var languageManager = AppLanguageManager.shared
     @State private var showLanguageRestartHint = false
+    @State private var showICloudRestartHint = false
 
     // MARK: - 数据导出 / 反馈
     @State private var backupShareURL: URL?
@@ -108,6 +109,14 @@ struct EngineerSettingsRoot: View {
             Button(String(localized: "知道了", locale: locale), role: .cancel) { }
         } message: {
             Text(String(localized: "界面文字会立刻更新;少量错误信息和 PDF 文案需要重启 App 才完全切换。", locale: locale))
+        }
+        .alert(
+            String(localized: "iCloud 同步设置已更新", locale: locale),
+            isPresented: $showICloudRestartHint
+        ) {
+            Button(String(localized: "知道了", locale: locale), role: .cancel) { }
+        } message: {
+            Text(String(localized: "请完全退出 App(从后台划掉)再打开,新设置才会生效。本地数据已保留,不会丢失。", locale: locale))
         }
         .onAppear {
             siteTags = SiteTagsStorage.load()
@@ -367,6 +376,28 @@ struct EngineerSettingsRoot: View {
 
     private var dataAndAboutSection: some View {
         Section {
+            // iCloud 同步开关。首次开启需 Apple ID + iCloud 容器配置就位。
+            // 开关切换后**重启 App** 才完全生效(SwiftData 不支持 hot-swap ModelConfiguration)。
+            Toggle(isOn: Binding(
+                get: { ICloudSyncConfig.shared.isEnabled },
+                set: { newValue in
+                    ICloudSyncConfig.shared.isEnabled = newValue
+                    showICloudRestartHint = true
+                }
+            )) {
+                HStack {
+                    Image(systemName: "icloud")
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "iCloud 同步", locale: locale))
+                            .font(.system(size: DesignTokens.FontSize.body))
+                        Text(String(localized: "跨设备同步 + 团队协作的前置条件,重启 App 生效", locale: locale))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                }
+            }
+
             Button {
                 exportBackup()
             } label: {

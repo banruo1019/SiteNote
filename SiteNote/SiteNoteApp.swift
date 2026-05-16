@@ -80,14 +80,30 @@ private struct RootContainerView: View {
         BackupService.migrateLegacyDirectories()
         CrashReporter.migrateLegacyDirectory()
 
+        // Schema 含 Team / TeamMember(CloudKit Sharing 用)。即便用户没开 iCloud sync,
+        // 本地也能用 Team(单机 mock 模式)。打开 sync 后整个 schema 自动跟随 cloudKitDatabase 配置同步。
         let schema = Schema([
             Note.self,
             LogEntry.self,
             ShareLog.self,
             InspectionReport.self,
             SiteVisitSchedule.self,
+            Team.self,
+            TeamMember.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+
+        // ⚠️ iCloud sync 由 ICloudSyncConfig.shared.isEnabled feature flag 控制(默认 false)。
+        // - false → 本地 only ModelConfiguration(等同 v1.1 行为,零变化)
+        // - true  → CloudKit private DB,SwiftData 自动 sync 到 iCloud
+        // 用户在 设置 → 数据 → 启用 iCloud 同步 toggle 切换(后续 UI 添加)。
+        // 切换后需要重启 App 生效(SwiftData 当前不支持 hot-swap configuration)。
+        let modelConfiguration: ModelConfiguration
+        if ICloudSyncConfig.shared.isEnabled {
+            modelConfiguration = ICloudSyncConfig.cloudKitConfiguration(schema: schema)
+        } else {
+            modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        }
+
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
             // B2: 启动时清理孤儿 .m4a。录音中被杀的进程会留下永久不被引用的音频文件,
@@ -95,9 +111,20 @@ private struct RootContainerView: View {
             VoiceCaptureService.cleanupOrphanAudio(modelContext: container.mainContext)
             // E3.1:启动时跑垃圾桶 GC,把过保留期(30 天)的软删 note 永久清掉。
             TrashView.runGarbageCollection(modelContext: container.mainContext)
+
+            // CloudKit 启用时,异步缓存当前 user record(团队功能用 currentUserID 区分谁创建谁分配)。
+            // 失败不阻塞(可能用户没登 iCloud / 没网)。
+            if ICloudSyncConfig.shared.isEnabled {
+                Task.detached {
+                    try? await ICloudSyncConfig.shared.fetchAndCacheUserRecord()
+                }
+            }
+
             state = .ready(container)
         } catch {
+            #if DEBUG
             print("[SiteNote] ModelContainer 创建失败: \(error.localizedDescription)")
+            #endif
             state = .failed(error)
         }
     }
