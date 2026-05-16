@@ -10,9 +10,22 @@
 		E0BDAAD02F96521D002B5C5B /* SiteNote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SiteNote.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E0BDAAE12F96521D002B5C5B /* Exceptions for "SiteNote" folder in "SiteNote" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E0BDAACF2F96521D002B5C5B /* SiteNote */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E0BDAAD22F96521D002B5C5B /* SiteNote */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E0BDAAE12F96521D002B5C5B /* Exceptions for "SiteNote" folder in "SiteNote" target */,
+			);
 			path = SiteNote;
 			sourceTree = "<group>";
 		};
@@ -255,20 +268,8 @@
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 45FG6W4U65;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "SiteNote 用相机拍工地现场照片附在速记里，照片只存在你的手机上。";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "SiteNote 用位置在录音时关联当前工地，并发送坐标到 Open-Meteo 查询天气；不做后台追踪。";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SiteNote 用麦克风录下你的工地速记，录音文件只存在你的手机上。";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "SiteNote 把巡检照片保存到你的相册以便分享。";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SiteNote 把语音转成文字方便检索和导出，转写在设备本地完成。";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIFileSharingEnabled = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SiteNote/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -296,20 +297,8 @@
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 45FG6W4U65;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "SiteNote 用相机拍工地现场照片附在速记里，照片只存在你的手机上。";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "SiteNote 用位置在录音时关联当前工地，并发送坐标到 Open-Meteo 查询天气；不做后台追踪。";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SiteNote 用麦克风录下你的工地速记，录音文件只存在你的手机上。";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "SiteNote 把巡检照片保存到你的相册以便分享。";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SiteNote 把语音转成文字方便检索和导出，转写在设备本地完成。";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIFileSharingEnabled = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SiteNote/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
