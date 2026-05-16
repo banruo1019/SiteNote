@@ -38,7 +38,9 @@ struct NoteDetailView: View {
     var isEngineerProfile: Bool { profileManager.current == .engineer }
 
     /// 是否日志模式:决定哪些 section 显示 / 隐藏 + 标题样式。
-    private var isDiary: Bool { note.isDiaryRecord }
+    // v1.2 大减负:日志模式整体下架,isDiary 永远 false。
+    // note.isDiaryRecord 字段保留(SwiftData schema 兼容),但不再有任何切换 UI。
+    private var isDiary: Bool { false }
 
     @State var sharePDFURL: URL?
     @State var isGeneratingShare: Bool = false
@@ -75,7 +77,6 @@ struct NoteDetailView: View {
 
     // 删除确认
     @State private var showsDeleteConfirm: Bool = false
-    @State private var showsConvertConfirm: Bool = false
 
     var body: some View {
         // 防御性 guard:note 已被硬删 / 已脱离 context 时立即 dismiss,
@@ -96,28 +97,26 @@ struct NoteDetailView: View {
     private var mainBody: some View {
         ScrollView {
             VStack(spacing: DesignTokens.Spacing.medium) {
-                titleBlock            // 1. 标题(diary 模式带"施工日记" badge)
+                titleBlock            // 1. 标题
                 if !isEngineerProfile {
-                    NoteClassificationCard(note: note) // 1.4 AI 分类建议(diary 已自动裁剪只剩 site+subTags)
+                    NoteClassificationCard(note: note) // 1.4 AI 分类建议
                 }
                 tagsRow               // 1.5 工地 + 分类
                 photosBlock           // 3. 照片
                 addPhotoRow           // 4. 加照片
-                if !isDiary && !isEngineerProfile {
-                    datesRow          // 5. 到期时间(Engineer / 日志 都不显示——没有 deadline 概念)
+                if !isEngineerProfile {
+                    datesRow          // 5. 到期时间(Engineer 不显示——没有 deadline 概念)
                 }
                 audioDisclosure       // 6. 录音
-                if !isDiary {
-                    floorPlanDisclosure   // 7. 平面图(只普通 note,日志不需要;Engineer 保留——核心功能)
-                }
-                otherMetaDisclosure   // 9. 位置/天气/分享(两种都有)
-                actionButtonGroup     // 10. 操作按钮(diary 只显示 删除)
+                floorPlanDisclosure   // 7. 平面图
+                otherMetaDisclosure   // 9. 位置/天气/分享
+                actionButtonGroup     // 10. 操作按钮
             }
             .padding()
         }
         .scrollContentBackground(.hidden)
         .background(Ink.bg.ignoresSafeArea())
-        .navigationTitle(isDiary ? "日志" : "详情")
+        .navigationTitle("详情")
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             // 用户离开详情页 = 可能刚改过 transcription / siteTag / otherTags / 模板等。
@@ -237,17 +236,6 @@ struct NoteDetailView: View {
         } message: {
             Text("会放到垃圾桶,之后可以在「设置 → 数据与关于 → 垃圾桶」恢复或永久删除。")
         }
-        .alert(
-            isDiary ? "转为普通记录?" : "转为施工日志?",
-            isPresented: $showsConvertConfirm
-        ) {
-            Button(isDiary ? "转为记录" : "转为日志") { performModeConvert() }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text(isDiary
-                 ? "到期会改为「待分类」。"
-                 : "会归档为只记录(不推送提醒)。")
-        }
         .alert("加照片", isPresented: $showsPhotoSourceDialog) {
             Button("📸 拍照") { showsCamera = true }
             Button("🖼 从相册选") { showsLibraryPicker = true }
@@ -316,16 +304,8 @@ struct NoteDetailView: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
             HStack {
-                if isDiary {
-                    HStack(spacing: 4) {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 9, weight: .bold))
-                        Text("施工日志")
-                            .font(.system(size: 10, weight: .semibold))
-                            .tracking(0.5)
-                            .textCase(.uppercase)
-                    }
-                    .foregroundStyle(Ink.accentBlue)
+                if false {
+                    EmptyView()
                 } else {
                     Text("内容")
                         .font(.system(size: 12, weight: .semibold))
@@ -467,12 +447,10 @@ struct NoteDetailView: View {
     /// - 第 3 排:标记隐患 + 删除(描边 ghost,警示/危险)
     ///
     /// Engineer 视角下:隐藏 完成 / 改期 / 指派 / 标隐患 这些 todo 性质的按钮,
-    /// 只保留 分享 + 删除 + 转换模式。详情页定位为"查看/编辑"。
+    /// 只保留 分享 + 删除。详情页定位为"查看/编辑"。
     @ViewBuilder
     private var actionButtonGroup: some View {
-        if isDiary || isEngineerProfile {
-            // 日志 / Engineer:都不需要 todo 类的(完成/改期/指派/标隐患)按钮。
-            // Engineer 不要"转为施工日志" —— 工程师工作流以 InspectionReport 为出口。
+        if isEngineerProfile {
             VStack(spacing: DesignTokens.Spacing.small) {
                 HStack(spacing: DesignTokens.Spacing.small) {
                     tonalActionButton(
@@ -487,9 +465,6 @@ struct NoteDetailView: View {
                         title: "删除",
                         tint: Ink.red
                     ) { showsDeleteConfirm = true }
-                }
-                if !isEngineerProfile {
-                    convertModeButton
                 }
             }
         } else {
@@ -535,49 +510,11 @@ struct NoteDetailView: View {
                         tint: Ink.red
                     ) { showsDeleteConfirm = true }
                 }
-                convertModeButton
             }
         }
     }
 
-    /// 记录 ↔ 施工日志 切换(录错模式时修正)。
-    private var convertModeButton: some View {
-        VStack(spacing: DesignTokens.Spacing.small) {
-            Button {
-                showsConvertConfirm = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text(isDiary ? "转为普通记录" : "转为施工日志")
-                }
-                .font(.system(size: DesignTokens.FontSize.body, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .frame(height: 36)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    /// 执行模式切换。diary↔note:切 deadline + 重排推送。
-    private func performModeConvert() {
-        if isDiary {
-            note.isDiaryRecord = false
-            note.deadline = .inbox  // 回到待分类,让用户重选到期
-            note.dueDate = Deadline.inbox.dueDate(from: note.createdAt)
-        } else {
-            // 记录 → 日志:归档不推送。
-            note.isDiaryRecord = true
-            note.deadline = .archive
-            note.dueDate = Deadline.archive.dueDate(from: note.createdAt)
-        }
-        // 触发重排:isDiaryRecord 变了之后,schedule 会自动决定排或不排(guard 把日志短路)。
-        NotificationService.shared.schedule(for: note)
-    }
+    // v1.2 大减负:convertModeButton / performModeConvert 已删 —— 日志模式整体下架。
 
     private var doneButton: some View {
         Button {

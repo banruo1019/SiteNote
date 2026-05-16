@@ -161,10 +161,9 @@ final class Note {
     /// 用户是否处理过这条 Note 的 AI 建议(确认或明确忽略)。false 且 classificationJSON 非空 = 待确认。
     var classificationConfirmed: Bool = false
 
-    /// 这条 Note 是否被视作"施工日记"条目(legacy 字段,v1.2 大减负后 UI 不再使用)。
-    /// - true 的 note **不进提醒事项列表**(RecordView 主屏分组都滤掉)。
-    /// - 仍然在详情页可查,数据字段保留兼容历史。
-    /// - 用户手动把这标签去掉(详情页)就恢复到普通 note。
+    /// **[Deprecated v1.2]** legacy 字段,字段保留仅为 SwiftData schema 兼容
+    /// (删字段会让老用户 ModelContainer 初始化失败)。永远保持 false,
+    /// 所有调用方已清掉。
     var isDiaryRecord: Bool = false
 
     /// 到期选择。映射到 `deadlineRaw` 存储。非法值降级到 `.threeDays`。

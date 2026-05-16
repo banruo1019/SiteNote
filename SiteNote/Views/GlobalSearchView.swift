@@ -171,11 +171,6 @@ struct GlobalSearchView: View {
         NavigationLink(value: note) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    if note.isDiaryRecord {
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(Ink.accentBlue)
-                    }
                     if note.isHazard {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 10))

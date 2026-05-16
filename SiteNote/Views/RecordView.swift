@@ -75,13 +75,13 @@ struct RecordView: View {
     }
 
     /// 隐患:pending 或 inbox 里 isHazard=true 的(未完成)。
-    /// 施工日记如果 AI 判定了隐患,也该进这组——安全信号永远要看见。
+    /// 隐患条目永远在这组,不受其他过滤影响。
     private var hazardNotes: [Note] {
         (sections.pending + sections.inbox).filter { $0.isHazard }
     }
 
     /// 逾期:pending + 已过期 + **非隐患**。
-    /// 施工日记如果用户确认了 AI 的 deadline(混合 note,如"水工来了今天下午验收"),仍然显示——真的 urgency 不过滤。
+    /// urgency 永远显示。
     private var overdueNotes: [Note] {
         let now = Date()
         return sections.pending.filter { $0.dueDate < now && !$0.isHazard }
@@ -98,10 +98,9 @@ struct RecordView: View {
         }
     }
 
-    /// 待分类:inbox + **非隐患** + **非施工日记**。
-    /// 施工日记默认 deadline=.inbox 但它不是"待分类",滤掉。
+    /// 待分类:inbox + **非隐患**。
     private var inboxNotes: [Note] {
-        sections.inbox.filter { !$0.isHazard && !$0.isDiaryRecord }
+        sections.inbox.filter { !$0.isHazard }
     }
 
     /// 已完成 / 已归档(PM 与 Engineer 共用 logic)。
@@ -721,7 +720,6 @@ struct RecordView: View {
         UndoToast(
             message: viewModel.lastSave?.summary ?? "",
             secondsRemaining: viewModel.undoSecondsRemaining,
-            onSaveAsDiary: { viewModel.convertLastSaveToDiary() },
             onDetail: {
                 if let note = viewModel.fetchLastSavedNote() {
                     navPath.append(note)

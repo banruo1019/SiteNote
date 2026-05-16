@@ -2,15 +2,11 @@
 //  UndoToast.swift
 //  SiteNote
 //
-//  录音保存后的浮窗。重设计原则:**只放命令,不放属性**——
-//  - 命令(改 note 的类型/状态/存在):存为日记 / 进详情 / 撤销 → 留在 toast
-//  - 属性(note 的字段:isHazard / deadline / siteTag / subTags 等)→ 进详情页改
+//  录音保存后的浮窗。v1.2 大减负后简化:
+//  - Row 1: ✓ 摘要(左) + 倒计时 + 撤销按钮(右上)
+//  - Row 2: [✎ 进详情]  —— 唯一命令(进详情设置 deadline / 改信息)
 //
-//  布局:
-//  - Row 1: ✓ 摘要(左) + 倒计时小字(右上) + 撤销按钮(右上)
-//  - Row 2: [📓 存为日记] [✎ 进详情]  —— 两个明确的命令
-//
-//  默认沉默最舒服:5s 不动 = 自动消失,note 留在 Inbox(默认),之后在「日志 → 待分类」段慢慢分。
+//  默认沉默最舒服:5s 不动 = 自动消失,note 留在 Inbox(默认)。
 //
 
 import SwiftUI
@@ -19,14 +15,13 @@ struct UndoToast: View {
     let message: String
     let secondsRemaining: Int
 
-    let onSaveAsDiary: () -> Void
     let onDetail: () -> Void
     let onUndo: () -> Void
 
     var body: some View {
         VStack(spacing: 12) {
             summaryRow
-            commandsRow
+            detailButton
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
@@ -79,43 +74,18 @@ struct UndoToast: View {
         .accessibilityLabel("撤销刚才的录音,\(secondsRemaining) 秒后自动消失")
     }
 
-    private var commandsRow: some View {
-        HStack(spacing: 8) {
-            commandButton(
-                icon: "book.fill",
-                label: "存为日记",
-                foreground: .white,
-                background: Ink.accentBlue,
-                action: onSaveAsDiary
-            )
-            commandButton(
-                icon: "pencil",
-                label: "进详情",
-                foreground: Ink.fg,
-                background: Ink.card,
-                action: onDetail
-            )
-        }
-    }
-
-    private func commandButton(
-        icon: String,
-        label: String,
-        foreground: Color,
-        background: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
+    private var detailButton: some View {
+        Button(action: onDetail) {
             HStack(spacing: 6) {
-                Image(systemName: icon)
+                Image(systemName: "pencil")
                     .font(.system(size: 14, weight: .regular))
-                Text(label)
+                Text("进详情")
                     .font(.system(size: 15, weight: .semibold))
             }
-            .foregroundStyle(foreground)
+            .foregroundStyle(Ink.fg)
             .frame(maxWidth: .infinity)
             .frame(height: 50)
-            .background(background)
+            .background(Ink.card)
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)

@@ -169,15 +169,10 @@ final class HomeViewModel {
 
     /// 松开录音:立即保存(含已暂存照片)。不再弹 DeadlineSheet。
     ///
-    /// - Parameter asDiary: 日志模式。true 时:
-    ///   - 强制 `deadline = .archive`,永不提醒
-    ///   - 保存后 `isDiaryRecord = true`(在 commitDirectly 里设)
-    ///   - 跳过中文日期猜测和 omni-classify AI 链,只跑 polish
-    ///
     /// **延迟优化**:松手后立即 commit(用 partial + 缓存的上次位置),
     /// 真定位/天气/双语回退/AI polish 全部走后台 Task 补齐。
     /// 用户看到 undo toast 几乎无延迟。
-    func stopAndSave(asDiary: Bool = false) async {
+    func stopAndSave() async {
         // B5:进入门闸,等 commitDirectly 启完 AI Task 后才放下一轮 startRecording。
         isProcessingStop = true
         defer { isProcessingStop = false }
@@ -220,14 +215,9 @@ final class HomeViewModel {
         // 用上次成功的位置做占位(瞬时,不等网络)。真定位/天气在后台补。
         let cachedLoc = LocationService.lastSuccessfulLocation()
 
-        // 日志模式直接归档,不猜日期;普通模式走中文日期解析。
-        let deadline: Deadline
-        if asDiary {
-            deadline = .archive
-        } else {
-            let suggested = ChineseDateParser.parseDeadline(from: initialTranscription)
-            deadline = suggested ?? .inbox
-        }
+        // 中文日期解析,猜不出则 inbox 待分类。
+        let suggested = ChineseDateParser.parseDeadline(from: initialTranscription)
+        let deadline: Deadline = suggested ?? .inbox
 
         let photos = stagedPhotos
         stagedPhotos = []
@@ -248,8 +238,7 @@ final class HomeViewModel {
             contractClauseRef: nil,
             floorPlanRef: nil,
             floorPlanX: nil,
-            floorPlanY: nil,
-            asDiary: asDiary
+            floorPlanY: nil
         )
 
         // 后台补齐:双语回退转写 / 实时 GPS / 天气。
@@ -503,25 +492,7 @@ final class HomeViewModel {
         dismissUndoToast()
     }
 
-    /// UndoToast 上用户点 📓 存为日记后调用:标 isDiaryRecord + 归档 + 取消推送,关 toast。
-    func convertLastSaveToDiary() {
-        guard let snapshot = lastSave, let ctx = modelContext else { return }
-        let id = snapshot.noteID
-
-        // B3:用户已明示要存为日记 → omni-classify 跑出来的 deadline/template 建议没意义,
-        // 取消 enrich Task 避免它们覆写用户决定。polish 不冲突,但取消保持简单一致。
-        cancelEnrichTasks(for: id)
-
-        let descriptor = FetchDescriptor<Note>(predicate: #Predicate<Note> { $0.id == id })
-        if let note = try? ctx.fetch(descriptor).first {
-            note.isDiaryRecord = true
-            note.deadline = .archive
-            note.dueDate = Deadline.archive.dueDate(from: note.createdAt)
-            try? ctx.save() // B6:用户主动操作的字段必须立即落盘。
-            NotificationService.shared.cancel(for: note)
-        }
-        dismissUndoToast()
-    }
+    // v1.2 大减负:convertLastSaveToDiary() 已删 —— 日志模式整体下架。
 
     /// 用户点 toast 顶行时调用:返回当前已保存的 note,让 RecordView 跳详情页。
     /// 注意:不再删除 note,不再弹 DeadlineSheet。详情页里用户自己改。
@@ -556,8 +527,7 @@ final class HomeViewModel {
         contractClauseRef: String?,
         floorPlanRef: String? = nil,
         floorPlanX: Double? = nil,
-        floorPlanY: Double? = nil,
-        asDiary: Bool = false
+        floorPlanY: Double? = nil
     ) {
         let photoPaths = PhotoStorage.save(photos)
 
@@ -583,11 +553,6 @@ final class HomeViewModel {
             floorPlanX: floorPlanX,
             floorPlanY: floorPlanY
         )
-        // 日志模式:提前在 commit 时就标 isDiaryRecord。
-        // 这样 Note 一落库就被 RecordView 的提醒过滤识别为"非提醒"。
-        if asDiary {
-            note.isDiaryRecord = true
-        }
         modelContext?.insert(note)
         // B6:insert 后立刻显式落盘。autosave 也会落,但同 task 的 polish 一秒后回来
         // 改这条 note,在 autosave 触发前 app 被挂起 → polish 改动丢失。显式 save 缩短脏窗口。

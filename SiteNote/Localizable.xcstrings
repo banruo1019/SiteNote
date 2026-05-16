@@ -134,7 +134,6 @@
         }
       }
     },
-    "—": {},
     "—— 由 SiteNote 自动生成": {
       "extractionState": "manual",
       "localizations": {
@@ -467,17 +466,7 @@
         }
       }
     },
-    "**最后手段** · 会清空所有速记/LogEntry。建议先导诊断包再做。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "**Last resort** · clears all notes / log entries. Export the diagnostic package first."
-          }
-        }
-      }
-    },
+    "**最后手段** · 会清空所有速记。建议先导诊断包再做。": {},
     "\\(draft.photos.count) 张": {
       "extractionState": "manual",
       "localizations": {
@@ -500,6 +489,7 @@
         }
       }
     },
+    "%@\n本地 + iCloud 镜像都会删除,无法恢复。": {},
     "%@  至  %@": {
       "extractionState": "manual",
       "localizations": {
@@ -616,16 +606,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ has no floor plans yet"
-          }
-        }
-      }
-    },
-    "%@–%@": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$@–%2$@"
           }
         }
       }
@@ -904,6 +884,7 @@
       }
     },
     "%llds": {},
+    "•": {},
     "• %@ %lld 人": {
       "extractionState": "manual",
       "localizations": {
@@ -1057,7 +1038,6 @@
         }
       }
     },
-    "×%lld": {},
     "|": {},
     "⏱ 开启中": {
       "extractionState": "manual",
@@ -1191,7 +1171,6 @@
         }
       }
     },
-    "👥": {},
     "👥 指派给:": {
       "extractionState": "manual",
       "localizations": {
@@ -1258,7 +1237,6 @@
         }
       }
     },
-    "🚜": {},
     "🚨": {},
     "🚨 SiteNote 隐患待处理": {
       "extractionState": "manual",
@@ -1282,7 +1260,6 @@
         }
       }
     },
-    "🚫": {},
     "1 天": {
       "localizations": {
         "en": {
@@ -1733,17 +1710,6 @@
         }
       }
     },
-    "AI 识别为施工日志?": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mark as site diary?"
-          }
-        }
-      }
-    },
     "AI 语义搜索": {
       "extractionState": "manual",
       "localizations": {
@@ -2055,8 +2021,12 @@
         }
       }
     },
+    "iCloud Files 同步已启用,归档自动出现在 Files App → iCloud Drive → SiteNote": {},
+    "iCloud Files 同步未启用(Xcode capability 缺失 / 未登 iCloud)。报告只存本地。": {},
     "iCloud 同步": {},
     "iCloud 同步设置已更新": {},
+    "iCloud 未就绪": {},
+    "iCloud 未登录或不可用。请在 设置 → Apple ID 登录后重试。": {},
     "iCloud 邮箱": {},
     "Inspection PDF 末页打印的 “This inspection does not include …” 段落。空则用 QDE 那套标准 5 条。": {
       "localizations": {
@@ -2394,6 +2364,7 @@
       }
     },
     "PDF 用于交业主或法律存档。ZIP 含速记数据 + 录音 + 照片 + 设置,**目前仅供发给开发者排查问题或本地归档**(暂不支持自助导回 SiteNote)。换机请用 iCloud 备份恢复 iPhone 整机或重装 App 后重新同步。": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2995,6 +2966,7 @@
         }
       }
     },
+    "两项默认全开。关闭后对应那步 AI 不跑。": {},
     "两项默认全开。关闭后对应那步 AI 不跑(总开关也要在,这是细分控制)。": {
       "extractionState": "manual",
       "localizations": {
@@ -3084,6 +3056,7 @@
       }
     },
     "之前的所有记录都还在": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3093,6 +3066,7 @@
         }
       }
     },
+    "也会同步到 Files App → iCloud Drive → SiteNote": {},
     "事件": {
       "extractionState": "manual",
       "localizations": {
@@ -3115,6 +3089,7 @@
         }
       }
     },
+    "云端操作失败:%@": {},
     "五": {
       "extractionState": "manual",
       "localizations": {
@@ -3363,17 +3338,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Audio and photo files are also deleted. This cannot be undone."
-          }
-        }
-      }
-    },
-    "会归档为只记录(不推送提醒)。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "It will be archived as record-only (no reminders)."
           }
         }
       }
@@ -3918,6 +3882,7 @@
       }
     },
     "关闭提示": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -3927,6 +3892,7 @@
         }
       }
     },
+    "其他": {},
     "其他模板": {
       "extractionState": "manual",
       "localizations": {
@@ -3993,6 +3959,7 @@
       }
     },
     "写入失败：%@": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -4068,6 +4035,7 @@
         }
       }
     },
+    "出巡检报告": {},
     "出错了": {
       "extractionState": "manual",
       "localizations": {
@@ -4312,7 +4280,10 @@
         }
       }
     },
+    "创建分享失败:%@": {},
+    "创建后会立刻弹出系统邀请页,可通过 Mail / Messages 发链接邀请成员。需要你和成员都登录 iCloud。": {},
     "创建团队": {},
+    "创建团队 zone 失败:%@": {},
     "删于 %@": {
       "extractionState": "manual",
       "localizations": {
@@ -4368,6 +4339,7 @@
         }
       }
     },
+    "删除这份报告?": {},
     "删除这张照片": {
       "extractionState": "manual",
       "localizations": {
@@ -4678,6 +4650,7 @@
       }
     },
     "只导出最近 7 天": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -4882,6 +4855,7 @@
     "团队 Owner 可把工地分配给具体成员;未分配则团队公用。Phase 0 用 mock 数据,Phase 2 接通真实团队成员。": {},
     "团队全部": {},
     "团队名称": {},
+    "团队邀请": {},
     "图片宽高比过于极端,建议使用接近方形的 logo。": {
       "extractionState": "manual",
       "localizations": {
@@ -5333,17 +5307,6 @@
         }
       }
     },
-    "存为日记": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Save as Diary"
-          }
-        }
-      }
-    },
     "存这个": {
       "extractionState": "manual",
       "localizations": {
@@ -5509,6 +5472,7 @@
         }
       }
     },
+    "导出 PDF 巡检日志 / SVR 巡检报告 后,会自动出现在这里。": {},
     "导出 PDF(待 I5 实现)": {
       "extractionState": "manual",
       "localizations": {
@@ -5575,6 +5539,7 @@
       }
     },
     "导出文件夹": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -5617,6 +5582,7 @@
         }
       }
     },
+    "导出过的 PDF 巡检日志 / SVR 报告": {},
     "尚未添加工地。可到 Settings → 工地预设 添加。": {
       "extractionState": "manual",
       "localizations": {
@@ -6067,6 +6033,7 @@
       }
     },
     "已切换到 %@ 模式": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6098,6 +6065,7 @@
         }
       }
     },
+    "已加入团队": {},
     "已取消": {
       "extractionState": "manual",
       "localizations": {
@@ -6142,6 +6110,8 @@
         }
       }
     },
+    "已导出 PDF + iCloud 同步状态": {},
+    "已归档": {},
     "已恢复默认 5 条。": {
       "extractionState": "manual",
       "localizations": {
@@ -7033,8 +7003,10 @@
         }
       }
     },
+    "想要的格式不在这里?进设置 → 高级 → 数据导出": {},
     "成员": {},
     "成员信息": {},
+    "我(Owner)": {},
     "我们刻意不做": {
       "extractionState": "manual",
       "localizations": {
@@ -7212,6 +7184,7 @@
       }
     },
     "打开日志": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7318,6 +7291,7 @@
         }
       }
     },
+    "把这段时间的速记拼成 PDF 巡检日志,给上级/业主/法律存档": {},
     "报告": {
       "extractionState": "manual",
       "localizations": {
@@ -7351,6 +7325,7 @@
         }
       }
     },
+    "拉取分享失败:%@": {},
     "拍照": {
       "extractionState": "manual",
       "localizations": {
@@ -7461,6 +7436,7 @@
         }
       }
     },
+    "按日期或工地导出": {},
     "按日期或工地导出(通用)": {
       "extractionState": "manual",
       "localizations": {
@@ -7494,6 +7470,7 @@
         }
       }
     },
+    "接受邀请失败:%@": {},
     "推送内容显示原文": {
       "extractionState": "manual",
       "localizations": {
@@ -7626,6 +7603,7 @@
         }
       }
     },
+    "搜速记内容 / 工地 / 地点": {},
     "搜速记内容 / 工地 / 工种 / 设备": {
       "extractionState": "manual",
       "localizations": {
@@ -7637,6 +7615,7 @@
         }
       }
     },
+    "搜速记内容、工地名、地点...": {},
     "搜速记内容、工地名、工种...": {
       "extractionState": "manual",
       "localizations": {
@@ -7692,6 +7671,7 @@
         }
       }
     },
+    "操作失败": {},
     "支持图片和 PDF。PDF 会让你选其中一页作为楼层图。必须先建工地才能上传。": {
       "extractionState": "manual",
       "localizations": {
@@ -7779,6 +7759,7 @@
       }
     },
     "数据导出": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7833,6 +7814,7 @@
       }
     },
     "文件夹无法访问：%@": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8062,17 +8044,6 @@
         }
       }
     },
-    "施工日志": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Site Diary"
-          }
-        }
-      }
-    },
     "无": {
       "extractionState": "manual",
       "localizations": {
@@ -8150,6 +8121,7 @@
         }
       }
     },
+    "无法获取 iCloud 用户身份(请检查 iCloud 登录):%@": {},
     "无法访问 App 的内部数据目录。": {
       "extractionState": "manual",
       "localizations": {
@@ -9014,17 +8986,6 @@
         }
       }
     },
-    "标为施工日志": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mark as Site Diary"
-          }
-        }
-      }
-    },
     "标注": {
       "extractionState": "manual",
       "localizations": {
@@ -9455,6 +9416,7 @@
       }
     },
     "没有可导出的速记。": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -9592,6 +9554,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add main photo"
+          }
+        }
+      }
+    },
+    "添加后会再次弹出系统邀请页,你可以把链接通过 Messages/Mail 发给该成员(系统会自动 lookup 对应 iCloud 账户)。当前 %lld / %lld 成员。": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "添加后会再次弹出系统邀请页,你可以把链接通过 Messages/Mail 发给该成员(系统会自动 lookup 对应 iCloud 账户)。当前 %1$lld / %2$lld 成员。"
           }
         }
       }
@@ -9838,6 +9810,7 @@
         }
       }
     },
+    "点开任一报告分享或另存。左滑删除会同时清掉本地 + iCloud 镜像。": {},
     "然后再选具体楼层": {
       "extractionState": "manual",
       "localizations": {
@@ -10091,17 +10064,6 @@
         }
       }
     },
-    "用 AI 生成施工日志": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Generate Site Diary with AI"
-          }
-        }
-      }
-    },
     "用户自定义,空则用默认 5 条": {
       "extractionState": "manual",
       "localizations": {
@@ -10305,7 +10267,7 @@
     },
     "第一版免费;最大 10 人;member 默认可看团队全部;离队数据归公司。": {},
     "第一版免费;创建团队后可邀请最多 9 个成员协作。": {},
-    "第一版免费。创建后可邀请最多 9 个成员(共 10 人,含你自己)。": {},
+    "第一版免费。创建后可邀请最多 9 个成员(共 10 人,含你自己)。通过 iCloud 邀请,需要双方都登录 iCloud。": {},
     "筛选": {
       "extractionState": "manual",
       "localizations": {
@@ -10679,6 +10641,7 @@
         }
       }
     },
+    "自动推断分类(工地/分类标签)": {},
     "自动推断标签": {
       "extractionState": "manual",
       "localizations": {
@@ -10799,7 +10762,10 @@
         }
       }
     },
+    "解散": {},
+    "解散后所有成员将失去访问。云端数据(team zone)一并删除。无法恢复。": {},
     "解散团队": {},
+    "解散团队?": {},
     "解析地址失败:%@": {
       "extractionState": "manual",
       "localizations": {
@@ -11271,72 +11237,6 @@
         }
       }
     },
-    "转为施工日志": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Convert to Site Diary"
-          }
-        }
-      }
-    },
-    "转为施工日志?": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Convert to site diary?"
-          }
-        }
-      }
-    },
-    "转为日志": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Convert to Diary"
-          }
-        }
-      }
-    },
-    "转为普通记录": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Convert to Regular Note"
-          }
-        }
-      }
-    },
-    "转为普通记录?": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Convert to regular note?"
-          }
-        }
-      }
-    },
-    "转为记录": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Convert to Note"
-          }
-        }
-      }
-    },
     "转写": {
       "extractionState": "manual",
       "localizations": {
@@ -11601,6 +11501,7 @@
         }
       }
     },
+    "还没有归档的报告": {},
     "还没有快捷词。": {
       "extractionState": "manual",
       "localizations": {
@@ -12023,16 +11924,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "\"Quick Complete\" Button in Notifications"
-          }
-        }
-      }
-    },
-    "通过 iCloud 邀请。对方需用同一 Apple ID 登录 SiteNote 接受邀请。当前 %lld / %lld 成员。": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "通过 iCloud 邀请。对方需用同一 Apple ID 登录 SiteNote 接受邀请。当前 %1$lld / %2$lld 成员。"
           }
         }
       }
@@ -12521,17 +12412,6 @@
         }
       }
     },
-    "项目经理 · 每日施工日志 PDF": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Project manager · daily site diary PDF"
-          }
-        }
-      }
-    },
     "项目编号(如 25159)": {
       "extractionState": "manual",
       "localizations": {
@@ -12596,6 +12476,7 @@
         }
       }
     },
+    "高级": {},
     "高级配置": {
       "extractionState": "manual",
       "localizations": {

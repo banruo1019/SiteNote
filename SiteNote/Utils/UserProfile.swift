@@ -5,8 +5,7 @@
 //  用户角色 Profile (PM / Engineer)。
 //  内核一致(speech → AI → SwiftData → PDF),按 Profile 切换的是:
 //    - 主屏分组(RecordView 显示哪些 sections)
-//    - AI prompt 重点(LogEntry 抽取关注什么)
-//    - 默认 PDF 模板(施工日志 / 巡检报告)
+//    - 默认 PDF 模板(巡检报告)
 //    - Settings 显示哪些复杂功能
 //
 //  Profile 可在 Settings 随时切换,所有 UI 通过 @Observable 自动更新。
@@ -42,7 +41,7 @@ enum ProfileKind: String, Codable, CaseIterable, Identifiable {
     var description: String {
         switch self {
         case .pm:
-            return String(localized: "管工地全流程:人员/机械到场、隐患追踪、施工日志、EOT 索赔。", locale: AppLanguageManager.currentLocale)
+            return String(localized: "项目经理快速记录 + 出 PDF 巡检日志。", locale: AppLanguageManager.currentLocale)
         case .engineer:
             return String(localized: "做巡检/检验:专注问题与合规,导出标准 inspection report,可附图纸。", locale: AppLanguageManager.currentLocale)
         }
