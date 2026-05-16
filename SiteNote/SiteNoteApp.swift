@@ -163,7 +163,10 @@ private struct RootContainerView: View {
         //
         // ⚠️ 之前尝试过拆 2 个 Configuration(core/team_local),但 SwiftData
         // MigrationPlan 跨 configuration 工作不稳,ModelContainer 创建失败。
-        let schema = Schema(SiteNoteSchemaV2.models)
+        //
+        // Schema 用 `versionedSchema:` 形式构造,让 SwiftData 把 V2 版本元数据
+        // 写进 store —— 否则 MigrationPlan 找不到目标版本,init 会抛错。
+        let schema = Schema(versionedSchema: SiteNoteSchemaV2.self)
 
         let modelConfiguration: ModelConfiguration
         if ICloudSyncConfig.shared.isEnabled {
