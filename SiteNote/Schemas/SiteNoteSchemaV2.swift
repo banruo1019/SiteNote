@@ -23,13 +23,28 @@ enum SiteNoteSchemaV2: VersionedSchema {
         Schema.Version(2, 0, 0)
     }
 
+    /// 所有 model(给主 Schema 用)。
     static var models: [any PersistentModel.Type] {
+        coreModels + teamModels
+    }
+
+    /// 核心业务 model — 可以走 SwiftData CloudKit private DB auto-sync。
+    /// Note / LogEntry 等同 Apple ID 多设备自动同步。
+    static var coreModels: [any PersistentModel.Type] {
         [
             Note.self,
             LogEntry.self,
             ShareLog.self,
             InspectionReport.self,
             SiteVisitSchedule.self,
+        ]
+    }
+
+    /// 团队 model — **不**走 SwiftData CloudKit auto-sync(SwiftData 没公开 CKShare API)。
+    /// 改由 TeamCloudKitService 用 raw CKDatabase + custom zone + CKShare 跨用户共享。
+    /// 本地 SwiftData 只作缓存。
+    static var teamModels: [any PersistentModel.Type] {
+        [
             Team.self,
             TeamMember.self,
         ]

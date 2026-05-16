@@ -112,27 +112,43 @@ private struct RootContainerView: View {
         // migration:加 InspectionReport / SiteVisitSchedule / Team / TeamMember
         // 4 张空表,旧 3 张数据保留。
         //
-        // **历史教训**:之前直接把 Team @Relationship 双向引用塞进 Schema 导致
-        // v1.0 升级时 SwiftDataError 1。这次:Team / TeamMember 改用 teamID UUID
-        // 软引用(见 Team.swift)+ 走显式 MigrationPlan,确保升级路径稳。
+        // **架构**:Schema 拆 2 个 Configuration:
+        //   1. coreConfig:Note/LogEntry/ShareLog/InspectionReport/SiteVisitSchedule
+        //      → 走 SwiftData CloudKit private DB auto-sync(同 Apple ID 多设备)
+        //   2. teamConfig:Team/TeamMember
+        //      → 本地 only,SwiftData 不 sync。改由 TeamCloudKitService 用 raw
+        //        CloudKit + CKShare + custom zone 跨用户共享。
+        //
+        // SwiftData iOS 17/18 没公开 CKShare API,Team 不能走 auto-sync,
+        // 否则 record 进默认 zone(无法 share)。
         let schema = Schema(SiteNoteSchemaV2.models)
+        let coreSchema = Schema(SiteNoteSchemaV2.coreModels)
+        let teamSchema = Schema(SiteNoteSchemaV2.teamModels)
 
-        // ⚠️ iCloud sync 由 ICloudSyncConfig.shared.isEnabled feature flag 控制(默认 false)。
-        // - false → 本地 only ModelConfiguration
-        // - true  → CloudKit private DB,SwiftData 自动 sync 到 iCloud
-        // 切换后需要重启 App 生效(SwiftData 不支持 hot-swap configuration)。
-        let modelConfiguration: ModelConfiguration
+        let coreConfiguration: ModelConfiguration
         if ICloudSyncConfig.shared.isEnabled {
-            modelConfiguration = ICloudSyncConfig.cloudKitConfiguration(schema: schema)
+            coreConfiguration = ICloudSyncConfig.cloudKitConfiguration(schema: coreSchema)
         } else {
-            modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            coreConfiguration = ModelConfiguration(
+                "core",
+                schema: coreSchema,
+                isStoredInMemoryOnly: false
+            )
         }
+
+        // Team configuration:永远本地 only(team_local.sqlite 文件名隔离)。
+        // 跨用户共享通过 TeamCloudKitService 走 raw CloudKit。
+        let teamConfiguration = ModelConfiguration(
+            "team_local",
+            schema: teamSchema,
+            isStoredInMemoryOnly: false
+        )
 
         do {
             let container = try ModelContainer(
                 for: schema,
                 migrationPlan: SiteNoteMigrationPlan.self,
-                configurations: [modelConfiguration]
+                configurations: [coreConfiguration, teamConfiguration]
             )
             // B2: 启动时清理孤儿 .m4a。录音中被杀的进程会留下永久不被引用的音频文件,
             // 长期累积可能占满磁盘。同步执行,失败不阻塞。
