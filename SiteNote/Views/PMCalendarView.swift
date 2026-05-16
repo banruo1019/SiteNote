@@ -28,6 +28,23 @@ struct PMCalendarView: View {
 
     @State private var currentMonth: Date = Date()
     @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
+    /// 工地过滤器:nil = 全部工地。用户在顶部 menu 切换。
+    @State private var siteFilter: String? = nil
+
+    /// 应用工地 filter 后的 Note 池(月视图打点 + 当日列表都基于这份)。
+    private var notesForCalendar: [Note] {
+        if let site = siteFilter {
+            return pendingNotes.filter { $0.siteTag == site }
+        }
+        return Array(pendingNotes)
+    }
+
+    /// 已知工地 tag(从 Note + SiteTagsStorage 合并),给顶部 picker 用。
+    private var allSiteTags: [String] {
+        let fromNotes = Set(pendingNotes.compactMap { $0.siteTag })
+        let configured = Set(SiteTagsStorage.load())
+        return Array(fromNotes.union(configured)).sorted()
+    }
 
     var body: some View {
         NavigationStack {
@@ -66,6 +83,7 @@ struct PMCalendarView: View {
                 .tracking(-0.8)
                 .foregroundStyle(Ink.fg)
             Spacer()
+            siteFilterMenu
             NavigationLink(value: SettingsDestination()) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 17, weight: .regular))
@@ -77,6 +95,52 @@ struct PMCalendarView: View {
         .padding(.horizontal, 24)
         .padding(.top, 20)
         .padding(.bottom, 12)
+    }
+
+    /// 工地过滤 menu。默认显示"全部工地",用户可切换看单工地。
+    private var siteFilterMenu: some View {
+        Menu {
+            Button {
+                siteFilter = nil
+            } label: {
+                if siteFilter == nil {
+                    Label(
+                        String(localized: "全部工地", locale: AppLanguageManager.currentLocale),
+                        systemImage: "checkmark"
+                    )
+                } else {
+                    Text(String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
+                }
+            }
+            Divider()
+            ForEach(allSiteTags, id: \.self) { tag in
+                Button {
+                    siteFilter = tag
+                } label: {
+                    if siteFilter == tag {
+                        Label(tag, systemImage: "checkmark")
+                    } else {
+                        Text(tag)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "building.2")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(siteFilter ?? String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(Ink.fg)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(Ink.card)
+            )
+        }
     }
 
     // MARK: - Header hint
@@ -211,7 +275,7 @@ struct PMCalendarView: View {
         let cal = Calendar.current
         guard let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: currentMonth)),
               let monthEnd = cal.date(byAdding: .month, value: 1, to: monthStart) else { return false }
-        return pendingNotes.contains { $0.dueDate >= monthStart && $0.dueDate < monthEnd }
+        return notesForCalendar.contains { $0.dueDate >= monthStart && $0.dueDate < monthEnd }
     }
 
     @ViewBuilder
@@ -284,7 +348,7 @@ struct PMCalendarView: View {
     ///     直接按 dueDate 在同一天匹配即可,不需要再判断 deadline 档位。
     private func notes(on date: Date) -> [Note] {
         let cal = Calendar.current
-        return pendingNotes
+        return notesForCalendar
             .filter { cal.isDate($0.dueDate, inSameDayAs: date) }
             .sorted { $0.dueDate < $1.dueDate }
     }

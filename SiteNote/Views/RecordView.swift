@@ -30,38 +30,15 @@ struct RecordView: View {
 
     @State private var navPath = NavigationPath()
 
-    /// 当前激活的 chip filter(单选)。
-    @State private var chipFilter: ChipFilter = .all
-    /// 当前排序方式。
-    @State private var sortMode: SortMode = .createdAt
-    /// 归档工地 set,SettingsView 改完返回时 task 重新拉。
+    /// 顶部 Search 文本(常驻)。空 = 显示全部。
+    @State private var searchText: String = ""
+    /// 归档工地 set,影响默认列表是否包含其下的 Note。
     @State private var archivedSiteTags: Set<String> = SiteArchiveStorage.loadArchived()
 
     @State private var headerProvider = AppHeaderProvider.shared
     @State private var profileManager = UserProfileManager.shared
 
     private let listVM = NoteListViewModel()
-
-    /// 顶部 chip 过滤条件。除了固定几条,还会动态生成每个工地的 chip。
-    enum ChipFilter: Hashable {
-        case all
-        case today
-        case hazard
-        case archived              // 已归档工地的 Note
-        case site(String)          // 单个工地
-    }
-
-    /// 排序方式。
-    enum SortMode: String, CaseIterable, Identifiable {
-        case createdAt = "创建时间"
-        case dueDate = "到期日期"
-        case site = "工地"
-        case tag = "标签"
-        var id: String { rawValue }
-        var displayName: String {
-            String(localized: String.LocalizationValue(rawValue), locale: AppLanguageManager.currentLocale)
-        }
-    }
 
     // MARK: - Derived data
 
@@ -70,81 +47,29 @@ struct RecordView: View {
         allNotes.filter { $0.deletedAt == nil }
     }
 
-    /// 已知工地 tag 列表(从 Note + SiteTagsStorage 合并 + 去重)。
-    private var allSiteTags: [String] {
-        let fromNotes = Set(liveNotes.compactMap { $0.siteTag })
-        let configured = Set(SiteTagsStorage.load())
-        return Array(fromNotes.union(configured)).sorted()
-    }
-
-    /// 应用 filter 后的 Note。
-    private var filteredNotes: [Note] {
-        let pool: [Note]
-        switch chipFilter {
-        case .all:
-            // 默认隐藏归档工地里的 Note
-            pool = liveNotes.filter { note in
-                guard let site = note.siteTag else { return true }
-                return !archivedSiteTags.contains(site)
+    /// 主屏显示用 list:
+    /// - 默认隐藏归档工地里的 Note(避免长列表里都是已交付项目)
+    /// - search 非空时跨归档全文搜
+    /// - 永远按 createdAt 倒序(极简风格,无 sort 切换)
+    private var displayedNotes: [Note] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let base: [Note]
+        if query.isEmpty {
+            // 隐藏归档工地的 Note
+            base = liveNotes.filter { note in
+                guard let s = note.siteTag else { return true }
+                return !archivedSiteTags.contains(s)
             }
-        case .today:
-            let cal = Calendar.current
-            pool = liveNotes.filter { cal.isDateInToday($0.dueDate) && !$0.isDone }
-        case .hazard:
-            pool = liveNotes.filter { $0.isHazard }
-        case .archived:
-            pool = liveNotes.filter { note in
-                guard let site = note.siteTag else { return false }
-                return archivedSiteTags.contains(site)
-            }
-        case .site(let tag):
-            pool = liveNotes.filter { $0.siteTag == tag }
-        }
-        return applySort(pool)
-    }
-
-    private func applySort(_ notes: [Note]) -> [Note] {
-        switch sortMode {
-        case .createdAt:
-            return notes.sorted { $0.createdAt > $1.createdAt }
-        case .dueDate:
-            return notes.sorted { $0.dueDate < $1.dueDate }
-        case .site:
-            return notes.sorted {
-                let a = $0.siteTag ?? ""
-                let b = $1.siteTag ?? ""
-                if a == b { return $0.createdAt > $1.createdAt }
-                return a < b
-            }
-        case .tag:
-            return notes.sorted {
-                let a = $0.otherTags.sorted().first ?? ""
-                let b = $1.otherTags.sorted().first ?? ""
-                if a == b { return $0.createdAt > $1.createdAt }
-                return a < b
+        } else {
+            // search 跨全集,包括归档
+            base = liveNotes.filter { note in
+                if note.transcription.lowercased().contains(query) { return true }
+                if let s = note.siteTag, s.lowercased().contains(query) { return true }
+                if note.otherTags.contains(where: { $0.lowercased().contains(query) }) { return true }
+                return false
             }
         }
-    }
-
-    /// 各 chip 的计数(给数字徽章)。
-    private var chipCounts: [ChipFilter: Int] {
-        let cal = Calendar.current
-        var counts: [ChipFilter: Int] = [:]
-        // all = 非归档工地 + 无工地
-        counts[.all] = liveNotes.filter { note in
-            guard let s = note.siteTag else { return true }
-            return !archivedSiteTags.contains(s)
-        }.count
-        counts[.today] = liveNotes.filter { cal.isDateInToday($0.dueDate) && !$0.isDone }.count
-        counts[.hazard] = liveNotes.filter { $0.isHazard }.count
-        counts[.archived] = liveNotes.filter { note in
-            guard let s = note.siteTag else { return false }
-            return archivedSiteTags.contains(s)
-        }.count
-        for tag in allSiteTags where !archivedSiteTags.contains(tag) {
-            counts[.site(tag)] = liveNotes.filter { $0.siteTag == tag }.count
-        }
-        return counts
+        return base.sorted { $0.createdAt > $1.createdAt }
     }
 
     // MARK: - Body
@@ -272,104 +197,59 @@ struct RecordView: View {
         .padding(.bottom, 16)
     }
 
+    /// 极简风:Search bar 常驻顶部 + 纯时间线列表。
     @ViewBuilder
     private var siteGroupedList: some View {
         VStack(spacing: 0) {
-            chipRow
-            sortBar
-            if filteredNotes.isEmpty {
+            searchBar
+            if displayedNotes.isEmpty {
                 emptyHint
             } else {
-                flatList
+                timelineList
             }
         }
     }
 
-    /// 顶部 chip 行(水平滚动,单选)。
-    private var chipRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                chip(.all, label: String(localized: "全部", locale: AppLanguageManager.currentLocale))
-                chip(.today, label: String(localized: "今天", locale: AppLanguageManager.currentLocale))
-                chip(.hazard, label: String(localized: "隐患", locale: AppLanguageManager.currentLocale))
-                ForEach(allSiteTags.filter { !archivedSiteTags.contains($0) }, id: \.self) { tag in
-                    chip(.site(tag), label: tag)
-                }
-                if (chipCounts[.archived] ?? 0) > 0 {
-                    chip(.archived, label: String(localized: "已归档", locale: AppLanguageManager.currentLocale))
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 12)
-        }
-    }
-
-    private func chip(_ kind: ChipFilter, label: String) -> some View {
-        let isOn = chipFilter == kind
-        let count = chipCounts[kind] ?? 0
-        return Button {
-            chipFilter = kind
-        } label: {
-            HStack(spacing: 5) {
-                Text(label)
-                    .font(.system(size: 12, weight: isOn ? .semibold : .medium))
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(isOn ? Ink.bg : Ink.fgDim)
-                }
-            }
-            .foregroundStyle(isOn ? Ink.bg : Ink.fg)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule().fill(isOn ? Ink.fg : Ink.card)
+    /// 顶部常驻 Search bar。
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14))
+                .foregroundStyle(Ink.fgDim)
+            TextField(
+                String(localized: "搜索记录", locale: AppLanguageManager.currentLocale),
+                text: $searchText
             )
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// Sort 行:右侧 menu。
-    private var sortBar: some View {
-        HStack {
-            Text("\(filteredNotes.count) 条")
-                .font(.system(size: 11))
-                .foregroundStyle(Ink.fgDim)
-            Spacer()
-            Menu {
-                ForEach(SortMode.allCases) { mode in
-                    Button {
-                        sortMode = mode
-                    } label: {
-                        if sortMode == mode {
-                            Label(mode.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(mode.displayName)
-                        }
-                    }
+            .font(.system(size: 14))
+            .foregroundStyle(Ink.fg)
+            .tint(Ink.fg)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Ink.fgDim)
                 }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .font(.system(size: 10, weight: .semibold))
-                    Text(sortMode.displayName)
-                        .font(.system(size: 11, weight: .medium))
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                .foregroundStyle(Ink.fgDim)
+                .buttonStyle(.plain)
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Ink.card)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(.horizontal, 24)
-        .padding(.bottom, 8)
+        .padding(.bottom, 16)
     }
 
-    /// Flat 列表(Notion 风)。
-    private var flatList: some View {
+    /// 纯时间线列表(无分组无 chip)。每行:左侧 HH:MM + 右侧主+副信息。
+    private var timelineList: some View {
         List {
-            ForEach(filteredNotes) { note in
+            ForEach(displayedNotes) { note in
                 NavigationLink(value: note) {
-                    NoteRow(note: note, urgency: listVM.urgency(for: note))
+                    timelineRow(note)
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
@@ -398,6 +278,85 @@ struct RecordView: View {
         .listStyle(.plain)
         .industrialForm()
         .environment(\.defaultMinListRowHeight, 0)
+    }
+
+    /// 时间线 row:HH:MM 左 / 摘要 + 副信息右。
+    private func timelineRow(_ note: Note) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(timeOfDay(note.createdAt))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Ink.fgDim)
+                .monospacedDigit()
+                .frame(width: 44, alignment: .leading)
+                .padding(.top, 2)
+            Rectangle()
+                .fill(Ink.line)
+                .frame(width: 1)
+                .padding(.vertical, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(noteSummary(note))
+                    .font(.system(size: 14, weight: note.isDone ? .regular : .medium))
+                    .foregroundStyle(note.isHazard ? Ink.red : Ink.fg)
+                    .strikethrough(note.isDone, color: Ink.fgDim)
+                    .lineLimit(2)
+                metaLine(note)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Ink.line.opacity(0.5)).frame(height: 1)
+                .padding(.leading, 80)
+        }
+        .contentShape(Rectangle())
+    }
+
+    /// 副信息:工地 · 分类 · 录音/照片/隐患 icon
+    @ViewBuilder
+    private func metaLine(_ note: Note) -> some View {
+        HStack(spacing: 6) {
+            if let site = note.siteTag, !site.isEmpty {
+                Text(site)
+            }
+            if let tag = note.otherTags.first {
+                if note.siteTag != nil { Text("·") }
+                Text(tag)
+            }
+            if note.audioFilePath != nil {
+                Image(systemName: "waveform")
+                    .font(.system(size: 10))
+            }
+            if !note.photoPaths.isEmpty {
+                Image(systemName: "photo")
+                    .font(.system(size: 10))
+                if note.photoPaths.count > 1 {
+                    Text("\(note.photoPaths.count)")
+                        .font(.system(size: 10))
+                }
+            }
+            if note.isHazard {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Ink.red)
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(Ink.fgDim)
+    }
+
+    private func timeOfDay(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.dateFormat = "HH:mm"
+        return f.string(from: date)
+    }
+
+    /// 转写文本的摘要(空时给占位)。
+    private func noteSummary(_ note: Note) -> String {
+        let t = note.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { return t }
+        return String(localized: "(仅录音/照片)", locale: AppLanguageManager.currentLocale)
     }
 
     /// 空态
