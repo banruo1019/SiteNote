@@ -31,7 +31,9 @@ struct ScheduleEditorSheet: View {
     @State private var siteTag: String? = nil
     @State private var reminderEnabled: Bool = true
     @State private var reminder1Minutes: Int = 1440
-    @State private var reminder2Minutes: Int = 60
+    /// v1.3 起 UI 不再暴露第二条提醒。@State 保留仅为 model 字段兼容,
+    /// 永远设 0(NotificationService 据此跳过第二条调度)。
+    @State private var reminder2Minutes: Int = 0
     @State private var assignedToUserID: String? = nil
 
     // Phase 0 mock;Phase 2 改 @Query TeamMember。
@@ -207,20 +209,10 @@ struct ScheduleEditorSheet: View {
 
             if reminderEnabled {
                 Picker(
-                    String(localized: "提前 1", locale: AppLanguageManager.currentLocale),
+                    String(localized: "提前提醒", locale: AppLanguageManager.currentLocale),
                     selection: $reminder1Minutes
                 ) {
                     ForEach(leadOptionsPrimary, id: \.minutes) { opt in
-                        Text(opt.label).tag(opt.minutes)
-                    }
-                }
-                .font(.system(size: 15))
-
-                Picker(
-                    String(localized: "提前 2", locale: AppLanguageManager.currentLocale),
-                    selection: $reminder2Minutes
-                ) {
-                    ForEach(leadOptionsSecondary, id: \.minutes) { opt in
                         Text(opt.label).tag(opt.minutes)
                     }
                 }
@@ -252,7 +244,8 @@ struct ScheduleEditorSheet: View {
             siteTag = existing.siteTag
             reminderEnabled = existing.reminderEnabled
             reminder1Minutes = existing.reminder1Minutes
-            reminder2Minutes = existing.reminder2Minutes
+            // v1.3 不再用第二条提醒,旧数据强制覆盖为 0(下次保存关闭)。
+            reminder2Minutes = 0
             assignedToUserID = existing.assignedToUserID
         } else {
             // 新建模式:用预填日期,时间默认 09:00。
