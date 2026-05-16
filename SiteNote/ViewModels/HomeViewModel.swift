@@ -172,7 +172,7 @@ final class HomeViewModel {
     /// - Parameter asDiary: 日志模式。true 时:
     ///   - 强制 `deadline = .archive`,永不提醒
     ///   - 保存后 `isDiaryRecord = true`(在 commitDirectly 里设)
-    ///   - 跳过中文日期猜测和 omni-classify AI 链,只跑 polish + LogEntry 抽取
+    ///   - 跳过中文日期猜测和 omni-classify AI 链,只跑 polish
     ///
     /// **延迟优化**:松手后立即 commit(用 partial + 缓存的上次位置),
     /// 真定位/天气/双语回退/AI polish 全部走后台 Task 补齐。
@@ -504,13 +504,12 @@ final class HomeViewModel {
     }
 
     /// UndoToast 上用户点 📓 存为日记后调用:标 isDiaryRecord + 归档 + 取消推送,关 toast。
-    /// 完事自动跳到「日志 → 台账 → 速记」让用户看到刚存的条目。
     func convertLastSaveToDiary() {
         guard let snapshot = lastSave, let ctx = modelContext else { return }
         let id = snapshot.noteID
 
         // B3:用户已明示要存为日记 → omni-classify 跑出来的 deadline/template 建议没意义,
-        // 取消 enrich Task 避免它们覆写用户决定。polish / extract 不冲突,但取消保持简单一致。
+        // 取消 enrich Task 避免它们覆写用户决定。polish 不冲突,但取消保持简单一致。
         cancelEnrichTasks(for: id)
 
         let descriptor = FetchDescriptor<Note>(predicate: #Predicate<Note> { $0.id == id })
@@ -522,7 +521,6 @@ final class HomeViewModel {
             NotificationService.shared.cancel(for: note)
         }
         dismissUndoToast()
-        AppRouter.shared.requestTab(.log, logMode: .ledger)
     }
 
     /// 用户点 toast 顶行时调用:返回当前已保存的 note,让 RecordView 跳详情页。
@@ -585,8 +583,8 @@ final class HomeViewModel {
             floorPlanX: floorPlanX,
             floorPlanY: floorPlanY
         )
-        // 日志模式:提前在 commit 时就标 isDiaryRecord,不等 AI 抽取回填。
-        // 这样 Note 一落库就被 RecordView / LogTabView 的提醒过滤识别为"非提醒"。
+        // 日志模式:提前在 commit 时就标 isDiaryRecord。
+        // 这样 Note 一落库就被 RecordView 的提醒过滤识别为"非提醒"。
         if asDiary {
             note.isDiaryRecord = true
         }
@@ -622,21 +620,22 @@ final class HomeViewModel {
         HighlightTracker.shared.markJustAdded(note.id)
         startUndoCountdown()
 
-        // AI 链:polish → classify → 抽 LogEntry。三步串行共用一个 Task。
-        // 三个独立开关,任一关闭那步跳过。默认全 on。
-        // 任一开关都先过 AI 总开关(P1-5);总开关关闭则三步全部跳过。
+        // AI 链:polish → classify。两步串行共用一个 Task。
+        // 两个独立开关,任一关闭那步跳过。默认全 on。
+        // 任一开关都先过 AI 总开关(P1-5);总开关关闭则两步全部跳过。
         //
-        // Engineer profile:**三步全部禁用**——用户明确要求"工程师版本去掉所有 AI 分析"。
-        // 转写就是录音原文,不做纠错;没有 deadline/分类建议;不抽 LogEntry。
+        // Engineer profile:**全部禁用**——用户明确要求"工程师版本去掉所有 AI 分析"。
+        // 转写就是录音原文,不做纠错;没有 deadline/分类建议。
+        //
+        // v1.2 大减负:LogEntry 抽取链下架(UI 已删,数据不再增量产生)。
         let isEngineer = UserProfileManager.shared.current == .engineer
         let polishEnabled = !isEngineer && AIToggle.featureEnabled(SettingsKeys.aiPolishEnabled)
         let classifyEnabled = !isEngineer && AIToggle.featureEnabled("settings.aiOmniClassifyEnabled")
-        let extractEnabled = !isEngineer && AIToggle.featureEnabled("settings.aiLogExtractEnabled")
 
-        if (polishEnabled || classifyEnabled || extractEnabled), !transcription.isEmpty {
+        if (polishEnabled || classifyEnabled), !transcription.isEmpty {
             let noteID = note.id
             // B3:Task 句柄存到 enrichTasks。undoLastSave 删 note 前 cancel,
-            // 避免 polish/classify/extract 回写到已删的 note。
+            // 避免 polish/classify 回写到已删的 note。
             // 显式 Task<Void, Never>:见 stopAndSave 里 bgTask 的注释。
             let task: Task<Void, Never> = Task { [weak self] in
                 guard let self else { return }
@@ -659,10 +658,6 @@ final class HomeViewModel {
                 // **日志模式跳过**:用户明示意图是日志,不用 AI 猜 deadline / hazard / 模板 / 条款。
                 if classifyEnabled, !Task.isCancelled {
                     await self.runClassificationIfNeeded(noteID: noteID)
-                }
-                // 3) LogEntry 抽取
-                if extractEnabled, !Task.isCancelled {
-                    await self.extractAndIngestLogs(noteID: noteID)
                 }
                 // 跑完不必 selectively 删——后续 cancelEnrichTasks 会清,
                 // 也可在 undoSeconds 之后由 dismissUndoToast 顺路清。
@@ -717,36 +712,6 @@ final class HomeViewModel {
             print("[SiteNote] AI polish applied to \(noteID.uuidString.prefix(8))")
             #endif
         }
-    }
-
-    /// 从指定 Note 重新抽 LogEntry 并落库。保存流程里被 polish 之后调。
-    /// 失败静默——LogEntry 缺失不影响 Note 本身,用户回来手动改即可。
-    private func extractAndIngestLogs(noteID: UUID) async {
-        // B3:取消则不跑。
-        if Task.isCancelled { return }
-        guard let ctx = modelContext else { return }
-        let descriptor = FetchDescriptor<Note>(
-            predicate: #Predicate<Note> { $0.id == noteID }
-        )
-        guard let note = try? ctx.fetch(descriptor).first else { return }
-        // B3:note 已被撤销(soft delete)也不写。
-        guard note.deletedAt == nil else { return }
-
-        let drafts = await AIService.shared.extractLogEntries(from: note)
-        guard !drafts.isEmpty else {
-            #if DEBUG
-            print("[SiteNote] LogEntry extract: 0 条 for \(noteID.uuidString.prefix(8))")
-            #endif
-            return
-        }
-        // B3:抽完成可能耗时,二次确认状态。
-        if Task.isCancelled { return }
-        guard note.deletedAt == nil else { return }
-        LogEntryIngestor.ingest(drafts: drafts, from: note, into: ctx)
-        try? ctx.save() // B6:LogEntry 是新对象,显式落盘。
-        #if DEBUG
-        print("[SiteNote] LogEntry extract: \(drafts.count) 条 for \(noteID.uuidString.prefix(8))")
-        #endif
     }
 
     /// 把任意 AI 错误压缩成 < 30 字的中文短原因,给 AIStatusBar 红字行用。

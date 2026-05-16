@@ -11,12 +11,11 @@
 import SwiftUI
 
 enum AppTab: Int, CaseIterable, Hashable {
-    case record, log, reports, schedule, settings
+    case record, reports, schedule, settings
 
     var zh: String {
         switch self {
         case .record: return "记"
-        case .log: return "日志"
         case .reports: return "报告"
         case .schedule: return "日程"
         case .settings: return "设置"
@@ -26,7 +25,6 @@ enum AppTab: Int, CaseIterable, Hashable {
     var en: String {
         switch self {
         case .record: return "Record"
-        case .log: return "Log"
         case .reports: return "Reports"
         case .schedule: return "Schedule"
         case .settings: return "Settings"
@@ -36,20 +34,15 @@ enum AppTab: Int, CaseIterable, Hashable {
 
 struct IndustrialTabBar: View {
     @Binding var selection: AppTab
-    /// Engineer 角色下 LogTab 隐藏(R6)。MainTabView 通过这个开关传入 Profile 状态。
-    /// 默认 false 保持 PM 行为不变。
-    var hidesLog: Bool = false
-    /// Engineer 角色 4 Tab 模式:记 / 报告 / 日程 / 设置(EA)。
-    /// 显式开关而非完全靠 `hidesLog` 推断 —— PM 永远是 3 Tab(记/日志/报告);
-    /// Engineer 切到这条分支后,Tab bar 会展示 Schedule + Settings 入口。
+    /// Engineer 角色 4 Tab 模式:记 / 报告 / 日程 / 设置。
+    /// PM 永远是 2 Tab(记/报告) —— v1.2 大减负后日志台账已下架。
     var isEngineerMode: Bool = false
 
     private var visibleTabs: [AppTab] {
         if isEngineerMode {
             return [.record, .reports, .schedule, .settings]
         }
-        return hidesLog ? AppTab.allCases.filter { $0 != .log && $0 != .schedule && $0 != .settings }
-                        : AppTab.allCases.filter { $0 != .schedule && $0 != .settings }
+        return [.record, .reports]
     }
 
     var body: some View {

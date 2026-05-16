@@ -37,67 +37,8 @@ struct NoteDetailView: View {
     @State private var profileManager = UserProfileManager.shared
     var isEngineerProfile: Bool { profileManager.current == .engineer }
 
-    /// 关联的 LogEntry(用于 diary 模式的"类型"行)。
-    @Query var logEntries: [LogEntry]
-
-    init(note: Note) {
-        self.note = note
-        let id = note.id
-        _logEntries = Query(
-            filter: #Predicate<LogEntry> {
-                $0.sourceNoteID == id && $0.deletedAt == nil
-            },
-            sort: [SortDescriptor(\LogEntry.createdAt)]
-        )
-    }
-
     /// 是否日志模式:决定哪些 section 显示 / 隐藏 + 标题样式。
     private var isDiary: Bool { note.isDiaryRecord }
-
-    /// diary 模式专属:已识别的类型 chip(派生自 LogEntries)。
-    @ViewBuilder
-    private var typeRow: some View {
-        let kindOrder: [LogKind] = [.person, .plant, .delivery, .visitor, .event]
-        let presentKinds = kindOrder.filter { k in logEntries.contains(where: { $0.kind == k }) }
-        if !presentKinds.isEmpty {
-            HStack(spacing: 6) {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.fgDim)
-                Text("类型")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(0.5)
-                    .textCase(.uppercase)
-                    .foregroundStyle(Ink.dim)
-                ForEach(presentKinds, id: \.self) { k in
-                    HStack(spacing: 3) {
-                        Text(typeIcon(for: k))
-                        Text(k.displayName)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Ink.fg)
-                        Text("\(logEntries.filter { $0.kind == k }.count)")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Ink.fgDim)
-                            .monospacedDigit()
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Ink.card, in: Capsule())
-                }
-                Spacer()
-            }
-        }
-    }
-
-    private func typeIcon(for k: LogKind) -> String {
-        switch k {
-        case .person: return "👥"
-        case .plant: return "🚜"
-        case .delivery: return "📦"
-        case .visitor: return "🧑"
-        case .event: return "⚠️"
-        }
-    }
 
     @State var sharePDFURL: URL?
     @State var isGeneratingShare: Bool = false
@@ -161,12 +102,6 @@ struct NoteDetailView: View {
                     NoteClassificationCard(note: note) // 1.4 AI 分类建议(diary 已自动裁剪只剩 site+subTags)
                 }
                 tagsRow               // 1.5 工地 + 分类
-                if isDiary && !logEntries.isEmpty {
-                    typeRow           // 1.6 diary 专属:已识别的类型 chip(👥 人员 · 🚜 机械)
-                }
-                if !isEngineerProfile {
-                    LogEntryChipSection(note: note)    // 2. AI 识别的结构化条目(Engineer 不要)
-                }
                 photosBlock           // 3. 照片
                 addPhotoRow           // 4. 加照片
                 if !isDiary && !isEngineerProfile {
@@ -279,17 +214,6 @@ struct NoteDetailView: View {
                        let lat = note.latitude, let lng = note.longitude {
                         SiteCentroidsStorage.observe(siteName: tag, latitude: lat, longitude: lng)
                     }
-                    // 同步到关联的 LogEntry(避免 LogTabView 台账模式工地过滤漏计)。
-                    if let ctx = note.modelContext {
-                        let noteID = note.id
-                        let desc = FetchDescriptor<LogEntry>(
-                            predicate: #Predicate<LogEntry> { $0.sourceNoteID == noteID }
-                        )
-                        let entries = (try? ctx.fetch(desc)) ?? []
-                        for e in entries where e.siteTag != newTag {
-                            e.siteTag = newTag
-                        }
-                    }
                 },
                 onOtherTagsChange: { note.otherTags = $0 }
             )
@@ -322,7 +246,7 @@ struct NoteDetailView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text(isDiary
-                 ? "会清除 AI 抽取的工种/机械数据,到期改为「待分类」。"
+                 ? "到期会改为「待分类」。"
                  : "会归档为只记录(不推送提醒)。")
         }
         .alert("加照片", isPresented: $showsPhotoSourceDialog) {
@@ -680,17 +604,9 @@ struct NoteDetailView: View {
         }
     }
 
-    /// 执行模式切换。diary↔note:切 deadline + 清 LogEntry(日志→记录)+ 重排推送。
+    /// 执行模式切换。diary↔note:切 deadline + 重排推送。
     private func performModeConvert() {
         if isDiary {
-            // 日志 → 记录:清除该 note 的 LogEntry(AI 抽取的结构化数据可能错位)。
-            if let ctx = note.modelContext {
-                let noteID = note.id
-                let desc = FetchDescriptor<LogEntry>(
-                    predicate: #Predicate<LogEntry> { $0.sourceNoteID == noteID }
-                )
-                for e in (try? ctx.fetch(desc)) ?? [] { ctx.delete(e) }
-            }
             note.isDiaryRecord = false
             note.deadline = .inbox  // 回到待分类,让用户重选到期
             note.dueDate = Deadline.inbox.dueDate(from: note.createdAt)

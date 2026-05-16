@@ -23,12 +23,6 @@ struct RecordView: View {
     /// 当前用户角色。@Observable 单例,角色切换时本视图自动重画。
     @State private var profileManager = UserProfileManager.shared
 
-    /// 角色切换后的一次性 hint banner 是否显示。
-    /// 机制:UserDefaults 存上次"看到主屏的角色",当前角色和它不同 → 显示 banner;
-    /// 用户点 X 关闭 → 写入 dismissed flag(以新角色为 key),下次切换才再触发。
-    @State private var showsProfileSwitchBanner: Bool = false
-    @State private var profileSwitchBannerFromName: String = ""
-
     @State private var isShowingCamera = false
     @State private var cameraCapturedImage: UIImage?
     @State var editingStagedIndex: EditingStagedIndex?
@@ -38,15 +32,11 @@ struct RecordView: View {
 
     @State private var navPath = NavigationPath()
 
-    /// 首页 4 档过滤 stat。点一个 stat 列就只显示那类;再点同一个还原全部。
-    @State private var todoFilter: TodoFilter = .all
-
-    /// 各分类折叠状态(独立 binding)。
-    @State private var overdueExpanded = true
+    /// PM 主屏折叠状态(R2 简化:5 段 → 2 段)。
+    /// - 今天:hazard + overdue + today 合并(默认展开)
+    /// - 其他:inbox + done/archived 合并(默认折叠)
     @State private var todayExpanded = true
-    @State private var inboxExpanded = true
-    @State private var hazardExpanded = true
-    @State private var archivedExpanded = false
+    @State private var otherExpanded = false
 
     // Engineer 专属分组的折叠状态。
     // Engineer 主屏 R7 简化后只剩"最近笔记"一段(默认展开,无需折叠交互,但保留 binding 以走通用 section 渲染)。
@@ -57,16 +47,12 @@ struct RecordView: View {
 
     private let listVM = NoteListViewModel()
 
-    enum TodoFilter: Hashable {
-        case all, overdue, today, inbox, hazard
-    }
-
     /// 首屏可显示的分组。按 ProfileKind 决定渲染哪几条。
-    /// PM:hazard / overdue / today / inbox / archived(原行为)
+    /// PM(v1.2 减负):2 段 — todayMerged(隐患/逾期/今天)、otherMerged(待分类/已完成已归档)。
     /// Engineer(R7 简化):**只一个** recentNotes 段 —— 工程师巡检入口在「报告」Tab,
     ///   主屏不需要 PM 的"今天/隐患/逾期"分桶,工程师就想看自己刚记的最近内容。
     private enum HomeSection: Hashable {
-        case hazard, overdue, today, inbox, archived
+        case todayMerged, otherMerged
         case recentNotes
     }
 
@@ -74,7 +60,7 @@ struct RecordView: View {
     private var visibleSections: [HomeSection] {
         switch profileManager.current {
         case .pm:
-            return [.hazard, .overdue, .today, .inbox, .archived]
+            return [.todayMerged, .otherMerged]
         case .engineer:
             return [.recentNotes]
         }
@@ -122,6 +108,17 @@ struct RecordView: View {
     /// `sections.done` 已经按 createdAt 倒序;再加 `sections.archived` 以承接"只是记录"的速记。
     private var doneOrArchivedNotes: [Note] {
         sections.done + sections.archived
+    }
+
+    /// PM 主屏"今天"段:隐患 + 逾期 + 今天到期(R2 减负后合并为一段)。
+    /// 顺序保留 hazard → overdue → today,优先级从高到低,UI 上仍能一眼看到隐患在最前。
+    private var todayMergedNotes: [Note] {
+        hazardNotes + overdueNotes + todayNotes
+    }
+
+    /// PM 主屏"其他"段:待分类 + 已完成/归档(默认折叠)。
+    private var otherMergedNotes: [Note] {
+        inboxNotes + doneOrArchivedNotes
     }
 
     // MARK: - Engineer 派生数据
@@ -179,20 +176,11 @@ struct RecordView: View {
             ZStack(alignment: .bottom) {
                 Ink.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
-                    // AI 自动转日志后的 5s 提示 banner(只在录音/拍照空闲时露,
-                    // 避免遮挡录音中的反馈区)。
-                    if !viewModel.isRecording && viewModel.stagedPhotos.isEmpty {
-                        DiaryConversionBanner()
-                    }
                     if viewModel.isRecording {
                         recordingTopArea
                     } else if !viewModel.stagedPhotos.isEmpty {
                         stagedPhotoFocusArea
                     } else {
-                        // 角色切换后的一次性 hint(idle 态才显示,别打扰录音/拍照)
-                        if showsProfileSwitchBanner {
-                            profileSwitchBanner
-                        }
                         idleTopArea
                     }
                     // heroButtons 常驻(MIC DragGesture 节点稳定)。
@@ -219,10 +207,6 @@ struct RecordView: View {
                 viewModel.setup(modelContext: modelContext)
                 NotificationService.shared.rescheduleAll(notes: allNotes)
                 headerProvider.ensureFresh()
-                evaluateProfileSwitchBanner()
-            }
-            .onChange(of: profileManager.current) { _, _ in
-                evaluateProfileSwitchBanner()
             }
             .sheet(isPresented: $isShowingCamera) {
                 CameraPicker(image: $cameraCapturedImage)
@@ -287,119 +271,13 @@ struct RecordView: View {
         }
     }
 
-    // MARK: - Profile switch hint banner
-
-    /// 一次性提醒 banner:用户从其他角色切到当前角色后,首次进入主屏显示。
-    /// 数据没消失,只是分组规则不一样——给入口跳转到日志的"纵览"段,让 PM 老数据可见。
-    /// 视觉与 OpenPlantSessionsBanner 风格保持一致(细横条 + icon + 操作)。
-    private var profileSwitchBanner: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "arrow.left.arrow.right")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Ink.fg)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("已切换到 \(profileManager.current.displayName) 模式")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Ink.fg)
-                Text("之前的所有记录都还在")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.fgDim)
-            }
-            Spacer(minLength: 8)
-            Button {
-                AppRouter.shared.requestTab(.log, logMode: .overview)
-            } label: {
-                Text("打开日志")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Ink.fg)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Ink.fg, lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
-            Button {
-                dismissProfileSwitchBanner()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Ink.fgDim)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("关闭提示")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Ink.card)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Ink.line).frame(height: 1)
-        }
-    }
-
-    /// 评估当前角色是否需要显示切换提醒 banner。
-    /// 规则:
-    ///   - lastSeenProfile 不存在 → 写入当前角色,不显示(首次启动)
-    ///   - lastSeenProfile != current 且 dismissed flag (key 含当前角色) 未设 → 显示
-    ///   - 用户点 X → dismissed flag 写为 true,直到下次再切换才会清空
-    private func evaluateProfileSwitchBanner() {
-        let defaults = UserDefaults.standard
-        let currentRaw = profileManager.current.rawValue
-        let lastSeen = defaults.string(forKey: Self.lastSeenProfileKey)
-
-        guard let last = lastSeen else {
-            // 首次记录,不显示
-            defaults.set(currentRaw, forKey: Self.lastSeenProfileKey)
-            showsProfileSwitchBanner = false
-            return
-        }
-
-        if last == currentRaw {
-            // 没切换过,不显示(并清掉残留 dismissed flag,避免堵塞)
-            showsProfileSwitchBanner = false
-            return
-        }
-
-        // 真切换了:更新 lastSeen 并清掉旧 dismissed flag(每次切换都重新触发)
-        defaults.set(currentRaw, forKey: Self.lastSeenProfileKey)
-        defaults.removeObject(forKey: Self.dismissedFlagKey(for: currentRaw))
-
-        if let lastKind = ProfileKind(rawValue: last) {
-            profileSwitchBannerFromName = lastKind.displayName
-        } else {
-            profileSwitchBannerFromName = ""
-        }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            showsProfileSwitchBanner = true
-        }
-    }
-
-    private func dismissProfileSwitchBanner() {
-        let defaults = UserDefaults.standard
-        defaults.set(true, forKey: Self.dismissedFlagKey(for: profileManager.current.rawValue))
-        withAnimation(.easeInOut(duration: 0.2)) {
-            showsProfileSwitchBanner = false
-        }
-    }
-
-    private static let lastSeenProfileKey = "record.lastSeenProfile"
-    private static func dismissedFlagKey(for raw: String) -> String {
-        "record.profileSwitchBanner.dismissed.\(raw)"
-    }
-
     // MARK: - Idle top area
 
     private var idleTopArea: some View {
         VStack(spacing: 0) {
-            // 固定顶区:AI 状态条 + 标题 + Key 引导(若需) + 统计 stats + 开启中机械提示
+            // 固定顶区:标题 + 统计 stats(PM 已减负为 EmptyView,Engineer 保留)
             VStack(alignment: .leading, spacing: 0) {
-                AIStatusBar()
                 titleBlock
-                AIKeyHintBanner()            // AI 没配且没 dismiss 时出现
-                OpenPlantSessionsBanner()    // 有未闭合的挖机 session 时才显示
                 statsRow
             }
             // 可滚动分组 list(折叠 + 左右滑)
@@ -434,78 +312,33 @@ struct RecordView: View {
         .padding(.bottom, 16)
     }
 
-    /// 日期 · 天气 · 位置 — 一行小字副标题。
-    /// 位置名有时很长(反向地理编码会返回区 + 州 + 国),用 minimumScaleFactor 兜底,
-    /// 不够时整行缩放而不是挤爆换行。
+    /// 日期单行副标题。
+    /// v1.2 减负:仅显示日期,天气 / 位置不再渲染。
+    /// 注意:headerProvider 仍在 task 阶段 ensureFresh,下游 Note 字段(siteTag/weather)
+    /// 由 HomeViewModel 在保存时回填,PDF 报告路径不受影响。
     private var subtitleRow: some View {
-        HStack(spacing: 6) {
-            Text(todayDateLabel)
-            if let weather = headerProvider.weatherSummary {
-                Text("·")
-                Text(weather)
-            }
-            if let loc = headerProvider.locationShort {
-                Text("·")
-                Image(systemName: "location.fill")
-                    .font(.system(size: 9))
-                Text(loc)
-            }
-        }
-        .font(.system(size: 12, weight: .medium))
-        .tracking(-0.1)
-        .foregroundStyle(Ink.fgDim)
-        .lineLimit(1)
-        .minimumScaleFactor(0.75)
+        Text(todayDateLabel)
+            .font(.system(size: 12, weight: .medium))
+            .tracking(-0.1)
+            .foregroundStyle(Ink.fgDim)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
     }
 
     /// 顶部 stats 行。Profile 决定显示几个 cell:
-    /// - PM:4 档(逾期 / 今天 / 待分类 / 隐患),点击切 todoFilter
+    /// - PM(v1.2 减负):无 stat,EmptyView()。
     /// - Engineer:2 档(待巡检 / 已完成),纯展示
     @ViewBuilder
     private var statsRow: some View {
         switch profileManager.current {
         case .pm:
-            pmStatsRow
+            EmptyView()
         case .engineer:
             engineerStatsRow
         }
     }
 
-    /// PM 4 档 stat 切换:逾期 / 今天 / 待分类 / 隐患。点击某个就筛到那类,再点还原。
-    /// 选中态:数字放大 + 色块底 + label 加粗。
-    private var pmStatsRow: some View {
-        HStack(spacing: 6) {
-            statCell(
-                filter: .overdue,
-                count: overdueNotes.count,
-                label: String(localized: "逾期", locale: AppLanguageManager.currentLocale),
-                color: Ink.red
-            )
-            statCell(
-                filter: .today,
-                count: todayNotes.count,
-                label: String(localized: "今天", locale: AppLanguageManager.currentLocale),
-                color: Ink.fg
-            )
-            statCell(
-                filter: .inbox,
-                count: inboxNotes.count,
-                label: String(localized: "待分类", locale: AppLanguageManager.currentLocale),
-                color: Ink.fgDim
-            )
-            statCell(
-                filter: .hazard,
-                count: hazardNotes.count,
-                label: String(localized: "隐患", locale: AppLanguageManager.currentLocale),
-                color: Ink.red,
-                icon: "exclamationmark.triangle.fill"
-            )
-        }
-        .padding(.horizontal, 24)   // 对齐标题 / subtitle / 列表的 24pt 左右边距
-        .padding(.bottom, 10)
-    }
-
-    /// Engineer 2 档 stat:待巡检 / 已完成。展示型,不切 filter(filter 仍只服务 PM)。
+    /// Engineer 2 档 stat:待巡检 / 已完成。展示型。
     /// "已完成"用 engineerDoneNotes(同口径),避免和 PM doneOrArchived 全集混淆(E2.10)。
     private var engineerStatsRow: some View {
         HStack(spacing: 6) {
@@ -524,17 +357,14 @@ struct RecordView: View {
         .padding(.bottom, 10)
     }
 
-    /// 非 PM 用的展示型 stat cell:点击跳到日志「纵览」段(只读 hint = chevron),
-    /// 之前用户会误以为是 PM 的可切档 stat,加 caret + tap 跳转给一个清晰出口(E2.8)。
+    /// 非 PM 用的展示型 stat cell:纯只读,不可点(v1.2 大减负 LogTab 下架后,
+    /// 原"点击跳日志纵览"目标消失,改成纯数字展示)。
     private func readonlyStatCell(
         count: Int,
         label: String,
         color: Color,
         icon: String? = nil
     ) -> some View {
-        Button {
-            AppRouter.shared.requestTab(.log, logMode: .overview)
-        } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
                     Text("\(count)")
@@ -548,10 +378,6 @@ struct RecordView: View {
                             .foregroundStyle(color)
                     }
                     Spacer(minLength: 0)
-                    // 提示这是个跳转入口,不是和 PM 同样的 toggle stat。
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(Ink.dim)
                 }
                 Text(label)
                     .font(.system(size: 11, weight: .regular))
@@ -564,60 +390,6 @@ struct RecordView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(count > 0 ? color.opacity(0.06) : Color.clear)
             )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func statCell(
-        filter: TodoFilter,
-        count: Int,
-        label: String,
-        color: Color,
-        icon: String? = nil
-    ) -> some View {
-        let isSelected = todoFilter == filter
-        let canSelect = count > 0 || isSelected
-        return Button {
-            guard canSelect else { return }
-            withAnimation(.easeInOut(duration: 0.18)) {
-                todoFilter = isSelected ? .all : filter
-            }
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    // 不用大小跳跃表达选中——改用色块底 + 边框 + 加粗标签。
-                    // 之前 34pt vs 26pt 会让整行高度变化,视觉抖动。
-                    Text("\(count)")
-                        .font(.system(size: 26, weight: .semibold))
-                        .tracking(-0.8)
-                        .foregroundStyle(count > 0 ? color : Ink.dim)
-                        .monospacedDigit()
-                    if let icon, count > 0 {
-                        Image(systemName: icon)
-                            .font(.system(size: 10))
-                            .foregroundStyle(color)
-                    }
-                }
-                Text(label)
-                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? Ink.fg : Ink.fgDim)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? color.opacity(0.08) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(isSelected ? color.opacity(0.4) : Color.clear, lineWidth: 1)
-            )
-            .opacity(canSelect ? 1.0 : 0.55)
-        }
-        .buttonStyle(.plain)
-        .disabled(!canSelect)
     }
 
     /// 折叠 + swipeActions 的 todo list。用 List 包住,swipeActions 才能被识别。
@@ -631,9 +403,17 @@ struct RecordView: View {
             emptyHint
         } else {
             List {
-                ForEach(visibleSections, id: \.self) { section in
+                ForEach(Array(visibleSections.enumerated()), id: \.element) { idx, section in
                     let items = notes(for: section)
                     if !items.isEmpty, showSection(matching: section) {
+                        // PM v1.2 减负:在两段之间插一条视觉分隔(Section header 之外的明显分界)。
+                        if idx > 0 {
+                            Divider()
+                                .overlay(Ink.line)
+                                .listRowInsets(EdgeInsets(top: 12, leading: 24, bottom: 4, trailing: 24))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Ink.bg)
+                        }
                         foldableTodoSection(
                             title: title(for: section),
                             color: color(for: section),
@@ -652,51 +432,38 @@ struct RecordView: View {
     /// 取某 section 对应的 notes 数组(集中维护,UI 不直接读底层)。
     private func notes(for section: HomeSection) -> [Note] {
         switch section {
-        case .hazard: return hazardNotes
-        case .overdue: return overdueNotes
-        case .today: return todayNotes
-        case .inbox: return inboxNotes
-        case .archived: return doneOrArchivedNotes
+        case .todayMerged: return todayMergedNotes
+        case .otherMerged: return otherMergedNotes
         case .recentNotes: return recentNotes
         }
     }
 
     private func title(for section: HomeSection) -> String {
         switch section {
-        case .hazard: return String(localized: "隐患", locale: AppLanguageManager.currentLocale)
-        case .overdue: return String(localized: "逾期", locale: AppLanguageManager.currentLocale)
-        case .today: return String(localized: "今天到期", locale: AppLanguageManager.currentLocale)
-        case .inbox: return String(localized: "待分类", locale: AppLanguageManager.currentLocale)
-        case .archived: return String(localized: "已完成", locale: AppLanguageManager.currentLocale)
+        case .todayMerged: return String(localized: "今天", locale: AppLanguageManager.currentLocale)
+        case .otherMerged: return String(localized: "其他", locale: AppLanguageManager.currentLocale)
         case .recentNotes: return String(localized: "最近记录", locale: AppLanguageManager.currentLocale)
         }
     }
 
     private func color(for section: HomeSection) -> Color {
         switch section {
-        case .hazard, .overdue: return Ink.red
-        case .today: return Ink.fg
-        case .inbox: return Ink.fgDim
-        case .archived: return Ink.fgDim
+        case .todayMerged: return Ink.fg
+        case .otherMerged: return Ink.fgDim
         case .recentNotes: return Ink.fg
         }
     }
 
     private func expansionBinding(for section: HomeSection) -> Binding<Bool> {
         switch section {
-        case .hazard: return $hazardExpanded
-        case .overdue: return $overdueExpanded
-        case .today: return $todayExpanded
-        case .inbox: return $inboxExpanded
-        case .archived: return $archivedExpanded
+        case .todayMerged: return $todayExpanded
+        case .otherMerged: return $otherExpanded
         case .recentNotes: return $recentNotesExpanded
         }
     }
 
     /// 当前过滤下该 section 是否显示。
-    /// 已废弃过滤隐藏逻辑(polish #1):filter 只作为高亮选中态,所有 section 始终可见,
-    /// 用户点"逾期"高亮后不丢失其他段的上下文。函数保留以承接 todoListArea 调用点,
-    /// 总是返回 true。
+    /// v1.2 减负后无 filter,这里恒为 true 但保留以承接 todoListArea 调用点。
     private func showSection(matching section: HomeSection) -> Bool {
         return true
     }

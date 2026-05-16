@@ -24,7 +24,7 @@ struct TrashView: View {
     static let retentionDays: Int = 30
 
     /// App 启动时调用:扫所有 `deletedAt < now - retentionDays` 的 note,做和 `purgeOne` 一样的清理
-    /// (删音频/照片 + 关联 LogEntry + Note 本身)。失败静默,不阻塞启动。
+    /// (删音频/照片 + 历史遗留 LogEntry + Note 本身)。失败静默,不阻塞启动。
     /// 不在 main view 上调度;调用方自己保证在 modelContext 可用的线程。
     @MainActor
     static func runGarbageCollection(modelContext: ModelContext) {
@@ -54,7 +54,8 @@ struct TrashView: View {
                     try? fm.removeItem(at: url)
                 }
             }
-            // 关联 LogEntry
+            // 历史遗留 LogEntry(v1.2 减负前抽取的结构化条目,UI 已下架)。
+            // 永久删 note 时一并清,避免 DB 留孤儿。
             let noteID = note.id
             if let entries = try? modelContext.fetch(FetchDescriptor<LogEntry>(
                 predicate: #Predicate<LogEntry> { $0.sourceNoteID == noteID }
@@ -227,8 +228,8 @@ struct TrashView: View {
                 try? FileManager.default.removeItem(at: url)
             }
         }
-        // 同步删该 note 派生的所有 LogEntry,否则永久删除后 LogEntry 仍指向不存在的 sourceNoteID,
-        // 在台账/纵览里成为孤儿。
+        // 历史遗留 LogEntry(v1.2 减负前抽取的结构化条目,UI 已下架)。
+        // 永久删除 note 时一并清,避免 DB 留孤儿。
         let noteID = note.id
         if let entries = try? modelContext.fetch(FetchDescriptor<LogEntry>(
             predicate: #Predicate<LogEntry> { $0.sourceNoteID == noteID }

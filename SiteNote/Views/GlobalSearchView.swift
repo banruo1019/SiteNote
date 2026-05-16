@@ -2,7 +2,7 @@
 //  GlobalSearchView.swift
 //  SiteNote
 //
-//  全局搜索:跨 Note (transcription / siteTag / otherTags) + LogEntry (subject) 一起搜。
+//  全局搜索:在所有 Note (transcription / siteTag / otherTags / locationAddress) 中搜。
 //
 //  入口:每个 tab 标题行右上角的放大镜按钮 → sheet 弹出。
 //
@@ -10,7 +10,7 @@
 //    · 关键字:大小写不敏感的子串匹配,纯本地、瞬时
 //    · AI 语义:跑 SemanticSearchService(已有 embedding 服务),适合"找漏电的事"这种模糊查询
 //
-//  结果:Note 和 LogEntry 按时间倒序混排。tap Note 进详情;tap LogEntry 也进它的源 Note。
+//  结果:Note 按时间倒序。tap Note 进详情。
 //
 
 import SwiftUI
@@ -18,17 +18,11 @@ import SwiftData
 
 struct GlobalSearchView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
 
     @Query(
         filter: #Predicate<Note> { $0.deletedAt == nil },
         sort: [SortDescriptor(\Note.createdAt, order: .reverse)]
     ) private var allNotes: [Note]
-
-    @Query(
-        filter: #Predicate<LogEntry> { $0.deletedAt == nil },
-        sort: [SortDescriptor(\LogEntry.createdAt, order: .reverse)]
-    ) private var allEntries: [LogEntry]
 
     @State private var query: String = ""
     @State private var aiMode: Bool = false
@@ -68,7 +62,7 @@ struct GlobalSearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 14))
                 .foregroundStyle(Ink.fgDim)
-            TextField("搜速记内容、工地名、工种...", text: $query)
+            TextField("搜速记内容、工地名、地点...", text: $query)
                 .font(.system(size: 14))
                 .focused($queryFocused)
                 .submitLabel(.search)
@@ -127,14 +121,7 @@ struct GlobalSearchView: View {
                         ForEach(noteHits) { note in
                             noteResultRow(note)
                         }
-                    }
-                    if !entryHits.isEmpty {
-                        sectionHeader("工地条目 \(entryHits.count)")
-                        ForEach(entryHits) { entry in
-                            entryResultRow(entry)
-                        }
-                    }
-                    if noteHits.isEmpty && entryHits.isEmpty {
+                    } else {
                         Text("没找到匹配")
                             .font(.system(size: 13))
                             .foregroundStyle(Ink.fgDim)
@@ -151,7 +138,7 @@ struct GlobalSearchView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 32, weight: .thin))
                 .foregroundStyle(Ink.dim)
-            Text("搜速记内容 / 工地 / 工种 / 设备")
+            Text("搜速记内容 / 工地 / 地点")
                 .font(.system(size: 13))
                 .foregroundStyle(Ink.fgDim)
             if AIService.isLanguageModelAvailable {
@@ -221,60 +208,6 @@ struct GlobalSearchView: View {
         .buttonStyle(.plain)
     }
 
-    private func entryResultRow(_ entry: LogEntry) -> some View {
-        // 找到源 Note 才能 NavigationLink。找不到只显示文字。
-        let sourceNote = allNotes.first { $0.id == entry.sourceNoteID }
-        return Group {
-            if let note = sourceNote {
-                NavigationLink(value: note) { entryRowBody(entry) }
-                    .buttonStyle(.plain)
-            } else {
-                entryRowBody(entry)
-            }
-        }
-    }
-
-    private func entryRowBody(_ entry: LogEntry) -> some View {
-        HStack(spacing: 10) {
-            Text(iconFor(entry.kind))
-                .font(.system(size: 14))
-                .frame(width: 22)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(entry.kind.displayName)
-                        .font(.system(size: 9, weight: .semibold))
-                        .tracking(0.3)
-                        .textCase(.uppercase)
-                        .foregroundStyle(Ink.dim)
-                    Text(highlight(entry.subject))
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Ink.fg)
-                    if let q = entry.quantity, q > 0, !entry.isAbsent {
-                        Text("×\(q)")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Ink.fgDim)
-                            .monospacedDigit()
-                    }
-                }
-                if let n = entry.note, !n.isEmpty {
-                    Text(n)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.fgDim)
-                }
-            }
-            Spacer()
-            Text(timeAgo(entry.startAt))
-                .font(.system(size: 11))
-                .foregroundStyle(Ink.dim)
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 10)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Ink.line).frame(height: 0.5)
-        }
-        .contentShape(Rectangle())
-    }
-
     // MARK: - Filtering
 
     private var noteHits: [Note] {
@@ -288,17 +221,6 @@ struct GlobalSearchView: View {
                 || (n.siteTag?.lowercased().contains(lower) ?? false)
                 || (n.locationAddress?.lowercased().contains(lower) ?? false)
                 || n.otherTags.contains(where: { $0.lowercased().contains(lower) })
-        }
-    }
-
-    private var entryHits: [LogEntry] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return [] }
-        let lower = trimmed.lowercased()
-        return allEntries.filter { e in
-            e.subject.lowercased().contains(lower)
-                || (e.note?.lowercased().contains(lower) ?? false)
-                || (e.siteTag?.lowercased().contains(lower) ?? false)
         }
     }
 
@@ -322,16 +244,6 @@ struct GlobalSearchView: View {
     }
 
     // MARK: - Helpers
-
-    private func iconFor(_ k: LogKind) -> String {
-        switch k {
-        case .person: return "👥"
-        case .plant: return "🚜"
-        case .delivery: return "📦"
-        case .visitor: return "🧑"
-        case .event: return "⚠️"
-        }
-    }
 
     private func timeAgo(_ d: Date) -> String {
         let secs = Date().timeIntervalSince(d)

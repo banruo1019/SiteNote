@@ -64,9 +64,6 @@ struct EngineerRecordView: View {
             ZStack(alignment: .bottom) {
                 Ink.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
-                    if !viewModel.isRecording && viewModel.stagedPhotos.isEmpty {
-                        DiaryConversionBanner()
-                    }
                     if viewModel.isRecording {
                         recordingTopArea
                     } else if !viewModel.stagedPhotos.isEmpty {

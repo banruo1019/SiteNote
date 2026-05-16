@@ -97,9 +97,6 @@ enum NoteClassificationPipeline {
             if let lat = note.latitude, let lng = note.longitude {
                 SiteCentroidsStorage.observe(siteName: s.value, latitude: lat, longitude: lng)
             }
-            // 同步所有关联 LogEntry 的 siteTag——否则 LogTabView 台账模式 / PDF 的工地过滤会把
-            // 旧 siteTag=nil 的条目当"未分类"而漏掉,导致到场人数等统计不准。
-            propagateSiteTag(s.value, toLogEntriesOf: note)
         }
         if let d = suggestion.deadline, let dl = Deadline(rawValue: d.value) {
             note.deadline = dl
@@ -131,23 +128,6 @@ enum NoteClassificationPipeline {
     static func dismiss(note: Note) {
         note.classificationJSON = nil
         note.classificationConfirmed = true
-    }
-
-    /// Note 的 siteTag 变了,把关联 LogEntry 的 siteTag 一并同步。
-    /// 通过 note 的 modelContext 查,避免全局 fetch。
-    private static func propagateSiteTag(_ newTag: String, toLogEntriesOf note: Note) {
-        guard let ctx = note.modelContext else { return }
-        let noteID = note.id
-        let descriptor = FetchDescriptor<LogEntry>(
-            predicate: #Predicate<LogEntry> { $0.sourceNoteID == noteID }
-        )
-        let entries = (try? ctx.fetch(descriptor)) ?? []
-        for e in entries where e.siteTag != newTag {
-            e.siteTag = newTag
-        }
-        if !entries.isEmpty {
-            print("[SiteNote] Pipeline: 同步 \(entries.count) 条 LogEntry 的 siteTag → \(newTag)")
-        }
     }
 
     // MARK: - Merge 策略

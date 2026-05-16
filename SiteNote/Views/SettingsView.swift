@@ -267,7 +267,6 @@ struct RemindersSettingsView: View {
 
 struct SiteResourcesSettingsView: View {
     @State private var siteTags: [String] = SiteTagsStorage.load()
-    @State private var newTagName: String = ""
     @State private var showsNewSiteSheet: Bool = false
     /// 刷新计数器:从 SubTagsEditorView 返回后 bump 一下,让分类数量重算。
     @State private var refreshTick: Int = 0
@@ -499,13 +498,6 @@ struct SiteResourcesSettingsView: View {
             Text("Inspection PDF 末页打印的 \u{201C}This inspection does not include \u{2026}\u{201D} 段落。空则用 QDE 那套标准 5 条。")
                 .font(.system(size: DesignTokens.FontSize.body))
         }
-    }
-
-    private func addTag() {
-        let trimmed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        siteTags = SiteTagsStorage.add(trimmed)
-        newTagName = ""
     }
 
     private func deleteTag(_ tag: String) {

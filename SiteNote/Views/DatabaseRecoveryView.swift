@@ -5,7 +5,7 @@
 //  ModelContainer 创建失败时的兜底界面。三个出路:
 //    1. 重试初始化(可能是临时磁盘问题)
 //    2. 导诊断包(发给开发者排查)
-//    3. 重置数据库(最后手段,会清空所有速记/LogEntry)
+//    3. 重置数据库(最后手段,会清空所有速记)
 //
 //  设计原则:不假装"加载中",直接告诉用户"数据库异常,这是恢复选项",
 //  保持冷静工程感。给用户 agency 比假装一切正常更可靠。
@@ -119,7 +119,7 @@ struct DatabaseRecoveryView: View {
             } else {
                 actionButton(
                     title: "重置数据库",
-                    subtitle: "**最后手段** · 会清空所有速记/LogEntry。建议先导诊断包再做。",
+                    subtitle: "**最后手段** · 会清空所有速记。建议先导诊断包再做。",
                     icon: "trash",
                     tone: .destructive,
                     disabled: false
