@@ -282,9 +282,10 @@ struct EngineerSettingsRoot: View {
 
     // MARK: - Section 2: 工作资源
 
+    @ViewBuilder
     private var workResourcesSection: some View {
+        // Section A:工地列表 + 新建按钮(同一层 — 现有工地 + 添加)
         Section {
-            // 工地列表 inline:工程师最常用,直接在 root 展开;新建按钮触发 NewSiteSheet。
             ForEach(siteTags, id: \.self) { tag in
                 HStack {
                     Image(systemName: "building.2.fill")
@@ -318,7 +319,14 @@ struct EngineerSettingsRoot: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+        } header: {
+            SectionHeader(String(localized: "工地", locale: locale))
+        } footer: {
+            SectionFooter(String(localized: "左滑删除工地。", locale: locale))
+        }
 
+        // Section B:跨工地资源管理(配置类,进子页详细编辑)
+        Section {
             NavigationLink {
                 SitePresetEditorView()
             } label: {
@@ -352,7 +360,7 @@ struct EngineerSettingsRoot: View {
                 }
             }
         } header: {
-            SectionHeader(String(localized: "工作资源", locale: locale))
+            SectionHeader(String(localized: "资源", locale: locale))
         } footer: {
             SectionFooter(String(localized: "首次使用建议先建工地 + 上传平面图。", locale: locale))
         }
