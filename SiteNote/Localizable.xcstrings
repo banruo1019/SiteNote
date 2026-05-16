@@ -7523,6 +7523,9 @@
         }
       }
     },
+    "搜索记录" : {
+
+    },
     "搜索速记" : {
       "extractionState" : "manual",
       "localizations" : {

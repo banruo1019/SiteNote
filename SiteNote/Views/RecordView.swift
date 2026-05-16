@@ -34,6 +34,8 @@ struct RecordView: View {
     @State private var searchText: String = ""
     /// 归档工地 set,影响默认列表是否包含其下的 Note。
     @State private var archivedSiteTags: Set<String> = SiteArchiveStorage.loadArchived()
+    /// "已完成"段折叠状态(默认折叠 — 用户看的主要是待办)。
+    @State private var doneSectionExpanded: Bool = false
 
     @State private var headerProvider = AppHeaderProvider.shared
     @State private var profileManager = UserProfileManager.shared
@@ -47,29 +49,37 @@ struct RecordView: View {
         allNotes.filter { $0.deletedAt == nil }
     }
 
-    /// 主屏显示用 list:
-    /// - 默认隐藏归档工地里的 Note(避免长列表里都是已交付项目)
-    /// - search 非空时跨归档全文搜
-    /// - 永远按 createdAt 倒序(极简风格,无 sort 切换)
-    private var displayedNotes: [Note] {
+    /// 应用 search + 归档过滤后的 Note 池(待办 + 已完成共用基础)。
+    private var basePool: [Note] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let base: [Note]
         if query.isEmpty {
             // 隐藏归档工地的 Note
-            base = liveNotes.filter { note in
+            return liveNotes.filter { note in
                 guard let s = note.siteTag else { return true }
                 return !archivedSiteTags.contains(s)
             }
-        } else {
-            // search 跨全集,包括归档
-            base = liveNotes.filter { note in
-                if note.transcription.lowercased().contains(query) { return true }
-                if let s = note.siteTag, s.lowercased().contains(query) { return true }
-                if note.otherTags.contains(where: { $0.lowercased().contains(query) }) { return true }
-                return false
-            }
         }
-        return base.sorted { $0.createdAt > $1.createdAt }
+        // search 跨全集,包括归档
+        return liveNotes.filter { note in
+            if note.transcription.lowercased().contains(query) { return true }
+            if let s = note.siteTag, s.lowercased().contains(query) { return true }
+            if note.otherTags.contains(where: { $0.lowercased().contains(query) }) { return true }
+            return false
+        }
+    }
+
+    /// 待办段:未完成,按 createdAt 倒序。
+    private var pendingNotes: [Note] {
+        basePool
+            .filter { !$0.isDone }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// 已完成段:已完成,按 createdAt 倒序。
+    private var doneNotes: [Note] {
+        basePool
+            .filter { $0.isDone }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
     // MARK: - Body
@@ -197,15 +207,15 @@ struct RecordView: View {
         .padding(.bottom, 16)
     }
 
-    /// 极简风:Search bar 常驻顶部 + 纯时间线列表。
+    /// 极简风:Search bar 常驻顶部 + 待办/已完成 两段。
     @ViewBuilder
     private var siteGroupedList: some View {
         VStack(spacing: 0) {
             searchBar
-            if displayedNotes.isEmpty {
+            if pendingNotes.isEmpty && doneNotes.isEmpty {
                 emptyHint
             } else {
-                timelineList
+                twoSectionList
             }
         }
     }
@@ -244,40 +254,116 @@ struct RecordView: View {
         .padding(.bottom, 16)
     }
 
-    /// 纯时间线列表(无分组无 chip)。每行:左侧 HH:MM + 右侧主+副信息。
-    private var timelineList: some View {
+    /// 两段列表:待办(常显) + 已完成(可折叠)。
+    private var twoSectionList: some View {
         List {
-            ForEach(displayedNotes) { note in
-                NavigationLink(value: note) {
-                    timelineRow(note)
-                }
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Ink.bg)
-                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                    Button {
-                        toggleDone(note)
-                    } label: {
-                        Label(
-                            note.isDone ? "未完成" : "完成",
-                            systemImage: note.isDone ? "arrow.uturn.left" : "checkmark"
-                        )
+            // 待办段
+            if !pendingNotes.isEmpty {
+                Section {
+                    ForEach(pendingNotes) { note in
+                        noteRowItem(note)
                     }
-                    .tint(Ink.fg)
+                } header: {
+                    sectionHeader(
+                        title: String(localized: "待办", locale: AppLanguageManager.currentLocale),
+                        count: pendingNotes.count,
+                        foldable: false,
+                        expanded: .constant(true)
+                    )
                 }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        softDelete(note)
-                    } label: {
-                        Label("删除", systemImage: "trash")
+            }
+
+            // 已完成段(可折叠)
+            if !doneNotes.isEmpty {
+                Section {
+                    if doneSectionExpanded {
+                        ForEach(doneNotes) { note in
+                            noteRowItem(note)
+                        }
                     }
-                    .tint(Ink.red)
+                } header: {
+                    sectionHeader(
+                        title: String(localized: "已完成", locale: AppLanguageManager.currentLocale),
+                        count: doneNotes.count,
+                        foldable: true,
+                        expanded: $doneSectionExpanded
+                    )
                 }
             }
         }
         .listStyle(.plain)
         .industrialForm()
         .environment(\.defaultMinListRowHeight, 0)
+    }
+
+    /// 单条 Note row + swipe actions。
+    @ViewBuilder
+    private func noteRowItem(_ note: Note) -> some View {
+        NavigationLink(value: note) {
+            timelineRow(note)
+        }
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Ink.bg)
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                toggleDone(note)
+            } label: {
+                Label(
+                    note.isDone ? "未完成" : "完成",
+                    systemImage: note.isDone ? "arrow.uturn.left" : "checkmark"
+                )
+            }
+            .tint(Ink.fg)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                softDelete(note)
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+            .tint(Ink.red)
+        }
+    }
+
+    /// Section header(待办不可折叠,已完成可折叠)。
+    private func sectionHeader(
+        title: String,
+        count: Int,
+        foldable: Bool,
+        expanded: Binding<Bool>
+    ) -> some View {
+        Button {
+            if foldable {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    expanded.wrappedValue.toggle()
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.5)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Ink.fgDim)
+                Spacer()
+                Text("\(count)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.dim)
+                if foldable {
+                    Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Ink.dim)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!foldable)
+        .textCase(nil)
     }
 
     /// 时间线 row:HH:MM 左 / 摘要 + 副信息右。
