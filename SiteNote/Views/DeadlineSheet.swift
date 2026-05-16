@@ -173,7 +173,7 @@ struct DeadlineSheet: View {
 
     /// AI 自动标签推断,只在用户还没手选时生效。
     private func runAutoTagSuggestion() {
-        let enabled = AIToggle.featureEnabled(SettingsKeys.aiAutoTagEnabled)
+        let enabled = AIToggle.featureEnabled(SettingsKeys.aiOmniClassifyEnabled)
         guard enabled,
               !transcription.isEmpty,
               selectedSiteTag == nil,
