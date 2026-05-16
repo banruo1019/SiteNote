@@ -101,13 +101,6 @@ struct EngineerScheduleView: View {
                 .foregroundStyle(Ink.fg)
             Spacer()
             siteFilterMenu
-            NavigationLink(value: SettingsDestination()) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 17, weight: .regular))
-                    .foregroundStyle(Ink.fgDim)
-                    .frame(width: 32, height: 32)
-                    .contentShape(Rectangle())
-            }
             Button {
                 editingSchedule = nil
                 showEditor = true
@@ -128,6 +121,13 @@ struct EngineerScheduleView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            NavigationLink(value: SettingsDestination()) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 17, weight: .regular))
+                    .foregroundStyle(Ink.fgDim)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
         }
         .padding(.horizontal, 24)
         .padding(.top, 20)

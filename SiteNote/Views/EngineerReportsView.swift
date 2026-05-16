@@ -171,6 +171,19 @@ struct EngineerReportsView: View {
             }
             .navigationTitle(String(localized: "报告", locale: AppLanguageManager.currentLocale))
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(value: SettingsDestination()) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 17, weight: .regular))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                    .accessibilityLabel(String(localized: "设置", locale: AppLanguageManager.currentLocale))
+                }
+            }
+            .navigationDestination(for: SettingsDestination.self) { _ in
+                SettingsView()
+            }
             .navigationDestination(item: $selectedReport) { report in
                 InspectionFormView(report: report)
             }
