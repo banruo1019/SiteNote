@@ -580,6 +580,22 @@ struct ReportsExportSettingsView: View {
                     }
                 }
 
+                NavigationLink {
+                    SavedReportsView()
+                } label: {
+                    HStack {
+                        Image(systemName: "folder")
+                            .foregroundStyle(Ink.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("我的报告")
+                                .font(.system(size: DesignTokens.FontSize.body))
+                            Text("已导出的 PDF 归档 + iCloud 同步状态")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 Text("在 iPhone 的「文件」App → 「我的 iPhone」→「SiteNote」可以看到所有录音和照片文件。")
                     .font(.system(size: DesignTokens.FontSize.body))
                     .foregroundStyle(.secondary)

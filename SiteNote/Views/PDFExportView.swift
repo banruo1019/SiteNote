@@ -241,7 +241,8 @@ struct PDFExportView: View {
                     endDate: endDate,
                     title: title
                 )
-                exportURL = url
+                let archivedURL = (try? ReportArchiveService.archive(sourceURL: url)) ?? url
+                exportURL = archivedURL
             } catch {
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             }

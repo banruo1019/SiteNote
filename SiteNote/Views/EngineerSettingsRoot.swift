@@ -411,6 +411,22 @@ struct EngineerSettingsRoot: View {
             }
 
             NavigationLink {
+                SavedReportsView()
+            } label: {
+                HStack {
+                    Image(systemName: "folder")
+                        .foregroundStyle(Ink.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "我的报告", locale: locale))
+                            .font(.system(size: DesignTokens.FontSize.body))
+                        Text(String(localized: "导出过的 PDF 巡检日志 / SVR 报告", locale: locale))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                }
+            }
+
+            NavigationLink {
                 TrashView()
             } label: {
                 HStack {

@@ -613,9 +613,10 @@ struct InspectionFormView: View {
         let notes = selectedNotes
         do {
             let url = try await InspectionReportPDFBuilder.build(report: report, notes: notes)
-            report.lastPDFPath = url.path
+            let archivedURL = (try? ReportArchiveService.archive(sourceURL: url)) ?? url
+            report.lastPDFPath = archivedURL.path
             report.updatedAt = Date()
-            exportContext = ExportContext(pdfURL: url)
+            exportContext = ExportContext(pdfURL: archivedURL)
         } catch {
             errorMessage = error.localizedDescription
         }
