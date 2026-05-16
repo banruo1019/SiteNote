@@ -54,9 +54,6 @@ struct DeadlineSheet: View {
     @State private var floorPlanMark: FloorPlanMarkResult?
     @State private var isShowingFloorPlan: Bool = false
 
-    /// AI 自动标签的解释,非空时在顶部显示。
-    @State private var aiReasoning: String?
-
     /// 高级选项(隐患/模板/条款/平面图)是否展开。默认折叠,保持速记速度。
     @State private var showsAdvanced: Bool = false
 
@@ -74,22 +71,6 @@ struct DeadlineSheet: View {
                 VStack(spacing: DesignTokens.Spacing.medium) {
                     // ========= 主要区(常用)=========
                     transcriptionPreview
-
-                    if let reasoning = aiReasoning {
-                        HStack(alignment: .top, spacing: 6) {
-                            Image(systemName: "sparkles")
-                                .foregroundStyle(.purple)
-                            Text(reasoning)
-                                .font(.system(size: DesignTokens.FontSize.body))
-                                .foregroundStyle(.purple)
-                        }
-                        .padding(.horizontal, DesignTokens.Spacing.small)
-                        .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.purple.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .transition(.asymmetric(insertion: .opacity, removal: .opacity))
-                    }
 
                     if let locationLabel {
                         HStack {
@@ -144,7 +125,6 @@ struct DeadlineSheet: View {
             availableTags = SiteTagsStorage.load()
             availableClauseRefs = ClauseRefsStorage.load()
             availableFloorPlans = FloorPlansStorage.load()
-            runAutoTagSuggestion()
         }
         .sheet(isPresented: $isShowingFloorPlan) {
             FloorPlanMarkView(preferredSiteTag: selectedSiteTag) { result in
@@ -169,29 +149,6 @@ struct DeadlineSheet: View {
                 pickerItems = []
             }
         }
-    }
-
-    /// AI 自动标签推断,只在用户还没手选时生效。
-    private func runAutoTagSuggestion() {
-        let enabled = AIToggle.featureEnabled(SettingsKeys.aiOmniClassifyEnabled)
-        guard enabled,
-              !transcription.isEmpty,
-              selectedSiteTag == nil,
-              selectedClauseRef == nil
-        else { return }
-
-        let suggestion = AIService.shared.suggestTags(
-            transcription: transcription,
-            availableSites: availableTags,
-            availableClauses: availableClauseRefs
-        )
-        if let site = suggestion.suggestedSiteTag {
-            selectedSiteTag = site
-        }
-        if let clause = suggestion.suggestedClauseRef {
-            selectedClauseRef = clause
-        }
-        aiReasoning = suggestion.reasoning
     }
 
     // MARK: - Transcription

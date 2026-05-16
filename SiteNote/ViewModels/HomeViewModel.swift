@@ -592,72 +592,41 @@ final class HomeViewModel {
         // Engineer profile:**全部禁用**——用户明确要求"工程师版本去掉所有 AI 分析"。
         // 转写就是录音原文,不做纠错;没有 deadline/分类建议。
         //
-        // v1.2 大减负:LogEntry 抽取链下架(UI 已删,数据不再增量产生)。
+        // v1.2 AI 精简:omni-classify / LogEntry 抽取链全下架,只剩 polish。
         let isEngineer = UserProfileManager.shared.current == .engineer
         let polishEnabled = !isEngineer && AIToggle.featureEnabled(SettingsKeys.aiPolishEnabled)
-        let classifyEnabled = !isEngineer && AIToggle.featureEnabled("settings.aiOmniClassifyEnabled")
 
-        if (polishEnabled || classifyEnabled), !transcription.isEmpty {
+        if polishEnabled, !transcription.isEmpty {
             let noteID = note.id
-            // B3:Task 句柄存到 enrichTasks。undoLastSave 删 note 前 cancel,
-            // 避免 polish/classify 回写到已删的 note。
-            // 显式 Task<Void, Never>:见 stopAndSave 里 bgTask 的注释。
+            // Task 句柄存到 enrichTasks。undoLastSave 删 note 前 cancel,
+            // 避免 polish 回写到已删的 note。
             let task: Task<Void, Never> = Task { [weak self] in
                 guard let self else { return }
-                // 1) polish(best-effort)
-                if polishEnabled, !Task.isCancelled {
+                if !Task.isCancelled {
                     do {
                         let polished = try await AIService.shared.polishTranscription(transcription)
                         if !Task.isCancelled, polished != transcription {
                             self.applyPolishedTranscription(noteID: noteID, polished: polished)
                         }
-                        AIFailureTracker.shared.clear()
                     } catch {
+                        // Apple Intelligence 不可用时静默退化(polishTranscription 已经返回原文)。
                         #if DEBUG
                         print("[SiteNote] AI polish unavailable/failed: \(error.localizedDescription)")
                         #endif
-                        AIFailureTracker.shared.record(reason: Self.aiFailureReason(error))
                     }
                 }
-                // 2) omni-classify(GPS 规则 + AI 综合分类)→ 写建议 JSON 到 note,用户到详情页确认。
-                // **日志模式跳过**:用户明示意图是日志,不用 AI 猜 deadline / hazard / 模板 / 条款。
-                if classifyEnabled, !Task.isCancelled {
-                    await self.runClassificationIfNeeded(noteID: noteID)
-                }
-                // 跑完不必 selectively 删——后续 cancelEnrichTasks 会清,
-                // 也可在 undoSeconds 之后由 dismissUndoToast 顺路清。
             }
             enrichTasks[noteID, default: []].append(task)
         }
     }
 
-    /// B3:取消并清空指定 note 的所有 enrich Task。
-    /// undoLastSave / convertLastSaveToDiary 调用,确保 AI 不会写回已撤销/已改的 note。
+    /// 取消并清空指定 note 的所有 enrich Task。
+    /// undoLastSave 调用,确保 AI 不会写回已撤销的 note。
     private func cancelEnrichTasks(for noteID: UUID) {
         if let tasks = enrichTasks[noteID] {
             for t in tasks { t.cancel() }
         }
         enrichTasks[noteID] = nil
-    }
-
-    /// 从 noteID 拉出 Note,跑 Phase A+B 的 pipeline,结果写回 classificationJSON。
-    /// 日志 note 也跑——但 pipeline 内部会把建议裁剪到只剩 site + subTags,
-    /// 不会推 deadline/hazard/template/clause。
-    private func runClassificationIfNeeded(noteID: UUID) async {
-        // B3:取消则不跑。
-        if Task.isCancelled { return }
-        guard let ctx = modelContext else { return }
-        let descriptor = FetchDescriptor<Note>(
-            predicate: #Predicate<Note> { $0.id == noteID }
-        )
-        guard let note = try? ctx.fetch(descriptor).first else { return }
-        // B3:note 已被撤销(soft delete)也不跑。
-        guard note.deletedAt == nil else { return }
-        await NoteClassificationPipeline.classify(note: note)
-        // B6:pipeline 内部修改了 classificationJSON 等字段,显式落盘缩短脏窗口。
-        // 取消 / 删除路径下不要回写。
-        if Task.isCancelled { return }
-        try? ctx.save()
     }
 
     /// AI polish 完成后调用,把对应 Note 的 transcription 更新为修复版。

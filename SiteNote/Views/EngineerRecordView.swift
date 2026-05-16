@@ -113,9 +113,6 @@ struct EngineerRecordView: View {
             .navigationDestination(for: SettingsDestination.self) { _ in
                 SettingsView()
             }
-            .navigationDestination(for: AIStatusDestination.self) { _ in
-                InputAISettingsView()
-            }
             .alert(
                 String(localized: "出错了", locale: AppLanguageManager.currentLocale),
                 isPresented: Binding(
@@ -164,9 +161,7 @@ struct EngineerRecordView: View {
     private var idleTopArea: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                AIStatusBar()
                 titleBlock
-                AIKeyHintBanner()
             }
             recentNotesList
         }

@@ -153,12 +153,11 @@ final class Note {
     /// 和 `siteTag` 正交:一条 note 既可以有工地又可以有多个其他标签。
     var otherTags: [String] = []
 
-    /// AI/规则分类建议的 JSON(`NoteClassificationSuggestion` 编码)。
-    /// 保存流程后异步写入(GPS 规则 + AI omni-classify)。非空表示有待用户确认的建议。
-    /// 用户在 Note 详情页点"确认"后,建议落到真实字段上,此字段被清空。
+    /// **[Deprecated v1.2 AI 精简]** 字段保留仅为 SwiftData schema 兼容。
+    /// 永远 nil,不再有 AI 写入。
     var classificationJSON: String? = nil
 
-    /// 用户是否处理过这条 Note 的 AI 建议(确认或明确忽略)。false 且 classificationJSON 非空 = 待确认。
+    /// **[Deprecated v1.2 AI 精简]** 同上。永远 false。
     var classificationConfirmed: Bool = false
 
     /// **[Deprecated v1.2]** legacy 字段,字段保留仅为 SwiftData schema 兼容

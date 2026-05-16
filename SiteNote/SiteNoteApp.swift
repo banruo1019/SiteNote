@@ -20,40 +20,9 @@ struct SiteNoteApp: App {
     @UIApplicationDelegateAdaptor(SiteNoteAppDelegate.self) private var appDelegate
 
     init() {
-        // E3.11:删 App 再装回会把 sandbox 文件清掉,但 Keychain 默认幸存。
-        // 用 UserDefaults 上的"首次启动 flag"判定:不存在 = 新装/重装,主动清掉残留的 OpenAI Key。
-        // (Keychain 是 device-only,转手他人/卖机时残留更危险。)
-        let firstLaunchFlag = "app.firstLaunchDoneV1"
-        if !UserDefaults.standard.bool(forKey: firstLaunchFlag) {
-            KeychainStorage.delete(for: KeychainKeys.openAIAPIKey)
-            UserDefaults.standard.set(true, forKey: firstLaunchFlag)
-        }
-
-        // P0 隐私 bug 修复迁移:
-        // 旧版 UI 上"自动推断标签" toggle 写的是 aiAutoTagEnabled,
-        // 但分类管线(HomeViewModel)实际读的是 aiOmniClassifyEnabled —— toggle 形同虚设。
-        // 修复后改成 UI 直接绑 aiOmniClassifyEnabled。为不丢老用户已经关掉过的状态,
-        // 一次性把旧 key 的值复制到两个新 key 上(把"关掉所有 AI 推断"语义带过来)。
-        // - aiLogExtractEnabled 之前根本没 UI 入口,默认 true;但既然用户当年是"想关 AI 推断",
-        //   就把 log 抽取也按用户意图关掉,保持最小惊讶。
-        let aiKeyMigrationFlag = "app.aiKeyMigrationV1Done"
-        if !UserDefaults.standard.bool(forKey: aiKeyMigrationFlag) {
-            let defaults = UserDefaults.standard
-            let legacyKey = SettingsKeys.aiAutoTagEnabled
-            let newClassifyKey = SettingsKeys.aiOmniClassifyEnabled
-            let newExtractKey = SettingsKeys.aiLogExtractEnabled
-
-            if let legacyValue = defaults.object(forKey: legacyKey) as? Bool {
-                // 只在用户从未显式设置过新 key 时迁(避免覆盖已经迁过/新装用户的默认值)。
-                if defaults.object(forKey: newClassifyKey) == nil {
-                    defaults.set(legacyValue, forKey: newClassifyKey)
-                }
-                if defaults.object(forKey: newExtractKey) == nil {
-                    defaults.set(legacyValue, forKey: newExtractKey)
-                }
-            }
-            defaults.set(true, forKey: aiKeyMigrationFlag)
-        }
+        // v1.2 起不再使用 OpenAI。主动清掉残留的 API Key(每次启动都做,
+        // 用户从旧版升级或多设备 sync 残留时,这里兜底确保 key 不留在 Keychain)。
+        KeychainStorage.delete(for: KeychainKeys.openAIAPIKey)
 
         CrashReporter.shared.start()
     }

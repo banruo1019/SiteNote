@@ -27,9 +27,6 @@ struct RecordView: View {
     @State private var cameraCapturedImage: UIImage?
     @State var editingStagedIndex: EditingStagedIndex?
 
-    @State var photoAnalysisResult: PhotoAnalysisDisplay?
-    @State var isAnalyzingPhoto = false
-
     @State private var navPath = NavigationPath()
 
     /// PM 主屏折叠状态(R2 简化:5 段 → 2 段)。
@@ -231,9 +228,6 @@ struct RecordView: View {
             .navigationDestination(for: SettingsDestination.self) { _ in
                 SettingsView()
             }
-            .navigationDestination(for: AIStatusDestination.self) { _ in
-                InputAISettingsView()
-            }
             .navigationDestination(for: InspectionEntryDestination.self) { _ in
                 InspectionReportListView()
             }
@@ -262,9 +256,6 @@ struct RecordView: View {
                 }
             } message: {
                 Text(viewModel.errorMessage ?? "")
-            }
-            .sheet(item: $photoAnalysisResult) { result in
-                PhotoAnalysisResultView(result: result.analysis)
             }
             .animation(.easeInOut(duration: 0.2), value: viewModel.lastSave?.noteID)
         }
@@ -752,73 +743,6 @@ struct EditingStagedIndex: Identifiable {
     let id: UUID = UUID()
     let value: Int
     let image: UIImage
-}
-
-struct PhotoAnalysisDisplay: Identifiable {
-    let id = UUID()
-    let analysis: AIService.PhotoAnalysis
-}
-
-extension RecordView {
-    func analyzeLastStagedPhoto() {
-        guard let image = viewModel.stagedPhotos.last else { return }
-        isAnalyzingPhoto = true
-        Task {
-            do {
-                let result = try await AIService.shared.analyzePhoto(image)
-                photoAnalysisResult = PhotoAnalysisDisplay(analysis: result)
-            } catch {
-                viewModel.errorMessage = (error as? LocalizedError)?.errorDescription ?? String(localized: "AI 分析失败", locale: AppLanguageManager.currentLocale)
-            }
-            isAnalyzingPhoto = false
-        }
-    }
-}
-
-private struct PhotoAnalysisResultView: View {
-    let result: AIService.PhotoAnalysis
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("AI 描述") {
-                    Text(result.description).font(.system(size: 14))
-                }
-                if result.suggestedHazard {
-                    Section {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(Ink.red)
-                            Text("建议标记为隐患")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Ink.red)
-                        }
-                    }
-                }
-                if let action = result.suggestedAction, !action.isEmpty {
-                    Section("建议动作") {
-                        Text(action).font(.system(size: 14))
-                    }
-                }
-                if !result.rawLabels.isEmpty {
-                    Section("原始标签") {
-                        Text(result.rawLabels.joined(separator: " · "))
-                            .font(.system(size: 13))
-                            .foregroundStyle(Ink.fgDim)
-                    }
-                }
-            }
-            .industrialForm()
-            .navigationTitle("AI 分析")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("完成") { dismiss() }
-                }
-            }
-        }
-    }
 }
 
 #Preview {

@@ -37,9 +37,6 @@ struct ReportsView: View {
             .navigationDestination(for: SettingsDestination.self) { _ in
                 SettingsView()
             }
-            .navigationDestination(for: AIStatusDestination.self) { _ in
-                InputAISettingsView()
-            }
             .navigationDestination(for: Note.self) { note in
                 NoteRouter(note: note)
             }

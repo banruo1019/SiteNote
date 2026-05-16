@@ -940,28 +940,6 @@
         }
       }
     },
-    "• AI 「自动」或「OpenAI」:转写文本和照片会发送到 OpenAI 服务器。「仅本地」:全程在设备内完成,不联网。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "- With AI set to Auto or OpenAI, transcripts and photos are sent to OpenAI servers. With On-device only, everything stays on the device."
-          }
-        }
-      }
-    },
-    "• OpenAI API Key 存 iOS Keychain(加密),仅本机可用。不会传给我们。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "- The OpenAI API key is stored in the iOS Keychain (encrypted) and stays on this device. We never see it."
-          }
-        }
-      }
-    },
     "• 天气查询会把当前坐标发给 Open-Meteo(第三方,无需登录),用于在记录里附天气。可在 设置 → 报告与导出 关闭。": {
       "localizations": {
         "en": {
@@ -979,17 +957,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "- Location is sampled once when you tap record (~100 m, reverse-geocoded). No background tracking."
-          }
-        }
-      }
-    },
-    "• 工地内容高度敏感时,建议用「仅本地」引擎或关闭 AI 总开关。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "- When site content is highly sensitive, use the On-device only engine or turn off the AI master switch."
           }
         }
       }
@@ -1556,17 +1523,6 @@
         }
       }
     },
-    "AI 引擎": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "AI Engine"
-          }
-        }
-      }
-    },
     "AI 描述": {
       "extractionState": "manual",
       "localizations": {
@@ -1754,28 +1710,6 @@
         }
       }
     },
-    "API Key 保存在 iOS Keychain(加密存储),仅本机可用。可在 platform.openai.com/api-keys 获取。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The API key is stored in the iOS Keychain (encrypted) and stays on this device. Get one at platform.openai.com/api-keys."
-          }
-        }
-      }
-    },
-    "API Key 已保存": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "API key saved"
-          }
-        }
-      }
-    },
     "App 会按你选的角色调整主屏分组、AI 识别重点、PDF 默认模板。可随时切换。": {
       "extractionState": "manual",
       "localizations": {
@@ -1891,17 +1825,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Email send / Attn autofill"
-          }
-        }
-      }
-    },
-    "Embedding 模型(搜索)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Embedding Model (Search)"
           }
         }
       }
@@ -2183,39 +2106,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "OHS compliance — resolve or escalate as soon as possible."
-          }
-        }
-      }
-    },
-    "OpenAI API 配置": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OpenAI API"
-          }
-        }
-      }
-    },
-    "OpenAI 图像分析失败": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OpenAI image analysis failed"
-          }
-        }
-      }
-    },
-    "OpenAI 文本/视觉": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OpenAI Text / Vision"
           }
         }
       }
@@ -2591,28 +2481,6 @@
     "TemplateEditorView (E3.9 / E3.10 / E3.3 footer)": {
       "extractionState": "manual"
     },
-    "text-embedding-3-large(精度高)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "text-embedding-3-large (high accuracy)"
-          }
-        }
-      }
-    },
-    "text-embedding-3-small(便宜)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "text-embedding-3-small (cheap)"
-          }
-        }
-      }
-    },
     "to(自动替换为)": {
       "extractionState": "manual",
       "localizations": {
@@ -2922,17 +2790,6 @@
         }
       }
     },
-    "专业词汇": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trade Terms"
-          }
-        }
-      }
-    },
     "业主/总包签字:": {
       "extractionState": "manual",
       "localizations": {
@@ -3156,17 +3013,6 @@
         }
       }
     },
-    "仅 OpenAI GPT": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OpenAI GPT only"
-          }
-        }
-      }
-    },
     "仅本地 Apple Intelligence": {
       "extractionState": "manual",
       "localizations": {
@@ -3305,17 +3151,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "You can switch any time later via Settings → I am …"
-          }
-        }
-      }
-    },
-    "优先用 OpenAI(质量好),失败或未配置 key 时自动切到本地 Apple Intelligence。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Prefers OpenAI for quality and falls back to on-device Apple Intelligence if it fails or no key is set."
           }
         }
       }
@@ -3472,17 +3307,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save"
-          }
-        }
-      }
-    },
-    "保存 API Key": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Save API Key"
           }
         }
       }
@@ -4671,17 +4495,6 @@
         }
       }
     },
-    "只用 OpenAI。数据(转写/照片)会发送到 OpenAI 服务器。需要配置下面的 API Key。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OpenAI only. Transcripts and photos are sent to OpenAI servers. Requires the API key below."
-          }
-        }
-      }
-    },
     "只用本地 Apple Intelligence。无需联网,数据不离开设备。要求 iPhone 15 Pro 及以上并在系统设置启用 Apple Intelligence。": {
       "extractionState": "manual",
       "localizations": {
@@ -5307,6 +5120,7 @@
         }
       }
     },
+    "存为日记": {},
     "存这个": {
       "extractionState": "manual",
       "localizations": {
@@ -6463,17 +6277,6 @@
         }
       }
     },
-    "开启后会用 OpenAI(若已配 Key,质量更好)或 Apple Intelligence(若机型支持) 自动改写转写、推断标签、生成日记和洞察。关闭后所有 AI 功能跳过。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "When on, OpenAI (if a key is set, better quality) or Apple Intelligence (if your device supports it) cleans up transcripts, infers tags, and writes diaries and insights. When off, all AI features are skipped."
-          }
-        }
-      }
-    },
     "开始": {
       "extractionState": "manual",
       "localizations": {
@@ -6503,17 +6306,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Engine"
-          }
-        }
-      }
-    },
-    "引擎选择、OpenAI API Key、模型、功能微调。99% 情况下不需要动。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Engine selection, OpenAI API key, models, fine-grained toggles. You won't need this 99% of the time."
           }
         }
       }
@@ -6562,28 +6354,6 @@
         }
       }
     },
-    "当前: OpenAI · %@": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Current: OpenAI . %@"
-          }
-        }
-      }
-    },
-    "当前: 无可用引擎(可在高级配置加 OpenAI Key)": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Current: no engine available (add an OpenAI key in Advanced)"
-          }
-        }
-      }
-    },
     "当前分配:%@": {},
     "当前正在使用 %@ 模式": {
       "extractionState": "manual",
@@ -6592,17 +6362,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Currently using %@ mode"
-          }
-        }
-      }
-    },
-    "当前没有可用的 AI 引擎。请到「设置 → AI 辅助」配置 OpenAI API Key 或启用 Apple Intelligence。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No AI engine available. Configure an OpenAI API key or enable Apple Intelligence under Settings → AI Assistant."
           }
         }
       }
@@ -6816,17 +6575,6 @@
         }
       }
     },
-    "录音、位置和分类都在你设备本地处理。可选 OpenAI Key 提升 AI 质量。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Audio, location, and tagging stay on your device. Add an OpenAI key for better AI quality."
-          }
-        }
-      }
-    },
     "录音已自动结束(超过 3 分钟)。": {
       "extractionState": "manual",
       "localizations": {
@@ -6911,17 +6659,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "To Inspect"
-          }
-        }
-      }
-    },
-    "快捷词": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shortcuts"
           }
         }
       }
@@ -8473,17 +8210,6 @@
         }
       }
     },
-    "更新 API Key": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Update API Key"
-          }
-        }
-      }
-    },
     "有 %lld 条速记引用了「%@」。继续删除会清除这些速记的图纸定位(其他内容保留)。": {
       "localizations": {
         "en": {
@@ -8729,17 +8455,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not configured"
-          }
-        }
-      }
-    },
-    "未配置 API Key": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "API key not set"
           }
         }
       }
@@ -9448,17 +9163,6 @@
         }
       }
     },
-    "没有配置 OpenAI API Key。请到「设置 → AI 辅助」填入。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No OpenAI API Key configured. Add one in Settings → AI Assistance."
-          }
-        }
-      }
-    },
     "测试中...": {
       "extractionState": "manual",
       "localizations": {
@@ -9652,17 +9356,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clear all annotations?"
-          }
-        }
-      }
-    },
-    "清空所有速记(含垃圾桶)、录音、照片、平面图、工地 / 分类 / 模板 / 条款 / 术语 / 快捷词。**不可恢复**。建议先到「报告与导出」→「导出全部数据为 ZIP」做备份再清。按下后 3 秒内可取消。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wipes all notes (including trash), audio, photos, floor plans, sites, categories, templates, clauses, jargon, and shortcuts. **Cannot be undone.** Back up first via Reports and Export -> Export All Data as ZIP. You have 3 seconds to cancel after tapping."
           }
         }
       }
@@ -10641,18 +10334,6 @@
         }
       }
     },
-    "自动推断分类(工地/分类标签)": {},
-    "自动推断标签": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auto-infer tags"
-          }
-        }
-      }
-    },
     "自定义 App 图标 / 主题色": {
       "extractionState": "manual",
       "localizations": {
@@ -10935,17 +10616,6 @@
         }
       }
     },
-    "识别语言、AI 总开关与配置": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Speech language, AI master switch and configuration"
-          }
-        }
-      }
-    },
     "该联系人没有电话号码": {
       "extractionState": "manual",
       "localizations": {
@@ -10975,17 +10645,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Detail photos (\\(draft.photos.count))"
-          }
-        }
-      }
-    },
-    "语义搜索 Embedding": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Semantic Search Embedding"
           }
         }
       }
@@ -11502,17 +11161,6 @@
       }
     },
     "还没有归档的报告": {},
-    "还没有快捷词。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No shortcuts yet."
-          }
-        }
-      }
-    },
     "还没有报告": {
       "extractionState": "manual",
       "localizations": {
@@ -11815,17 +11463,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pick a common type"
-          }
-        }
-      }
-    },
-    "选择引擎(OpenAI / 本地)、填 API Key、切换功能开关。": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Choose engine (OpenAI / on-device), enter API key, toggle features."
           }
         }
       }
@@ -12412,6 +12049,7 @@
         }
       }
     },
+    "项目经理快速记录 + 出 PDF 巡检日志。": {},
     "项目编号(如 25159)": {
       "extractionState": "manual",
       "localizations": {
@@ -12477,17 +12115,6 @@
       }
     },
     "高级": {},
-    "高级配置": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Advanced"
-          }
-        }
-      }
-    },
     "麦克风启动失败,请稍后再试。": {
       "extractionState": "manual",
       "localizations": {

@@ -43,44 +43,6 @@ struct InputAISettingsView: View {
 
             Section {
                 NavigationLink {
-                    JargonTermsEditorView()
-                } label: {
-                    HStack {
-                        Image(systemName: "text.bubble")
-                            .foregroundStyle(Ink.fg)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("专业词汇")
-                                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                            Text("自家专属词,加进去识别更准 + AI 不瞎改")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Ink.fgDim)
-                        }
-                    }
-                }
-                NavigationLink {
-                    JargonShortcutsEditorView()
-                } label: {
-                    HStack {
-                        Image(systemName: "arrow.triangle.swap")
-                            .foregroundStyle(Ink.fg)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("快捷词")
-                                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                            Text("说短话自动展开,如「打 con」→「打 concrete」")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Ink.fgDim)
-                        }
-                    }
-                }
-            } header: {
-                Text("识别词典")
-            } footer: {
-                Text("基础词典(澳洲工地通用 100+ 词)已内置,这里只配你公司/工地的专属词。")
-                    .font(.system(size: 12))
-            }
-
-            Section {
-                NavigationLink {
                     AIEngineSettingsView()
                 } label: {
                     HStack {
@@ -98,7 +60,7 @@ struct InputAISettingsView: View {
             } header: {
                 Text("AI 辅助")
             } footer: {
-                Text("选择引擎(OpenAI / 本地)、填 API Key、切换功能开关。")
+                Text("Apple Intelligence 文字润色开关。")
                     .font(.system(size: DesignTokens.FontSize.body))
             }
         }
@@ -108,16 +70,10 @@ struct InputAISettingsView: View {
     }
 
     private var aiQuickStatus: String {
-        let engine = AIService.currentEngine
-        var parts: [String] = []
-        switch engine {
-        case .auto: parts.append(String(localized: "自动", locale: AppLanguageManager.currentLocale))
-        case .openai: parts.append("OpenAI")
-        case .local: parts.append(String(localized: "本地", locale: AppLanguageManager.currentLocale))
+        if AIService.isLocalAvailable {
+            return String(localized: "Apple ✓", locale: AppLanguageManager.currentLocale)
         }
-        if AIService.isOpenAIAvailable { parts.append("OpenAI ✓") }
-        if AIService.isLocalAvailable { parts.append("Apple ✓") }
-        return parts.joined(separator: " · ")
+        return String(localized: "未就绪", locale: AppLanguageManager.currentLocale)
     }
 }
 
@@ -836,16 +792,10 @@ enum SettingsKeys {
     static let speechLanguage = "settings.speechLanguage"
     static let morningReminderHour = "settings.morningReminderHour"
     static let morningReminderMinute = "settings.morningReminderMinute"
-    /// P1-5:AI 总开关。默认开(符合"AI 显眼"约束)。关掉 = polish/autoTag 都不跑。
+    /// v1.2 AI 精简:AI 总开关。关掉 = Polish 不跑。
     static let aiMasterEnabled = "settings.aiMasterEnabled"
+    /// v1.2 AI 精简:Apple Intelligence Polish 开关。
     static let aiPolishEnabled = "settings.aiPolishEnabled"
-    /// HomeViewModel:633 用此 key 控分类管线;UI 里"自动推断标签" toggle 直接对它。
-    /// 旧 key aiAutoTagEnabled 已废,SiteNoteApp.init 里做一次性 migration 把旧值复制过来。
-    static let aiOmniClassifyEnabled = "settings.aiOmniClassifyEnabled"
-    /// HomeViewModel:634 用此 key 控 LogEntry 抽取。需要独立 UI 入口。
-    static let aiLogExtractEnabled = "settings.aiLogExtractEnabled"
-    /// **已废**(保留常量给 SiteNoteApp.init 做一次性 migration,删常量 = 升级用户 toggle 状态丢失)。
-    static let aiAutoTagEnabled = "settings.aiAutoTagEnabled"
     static let dailyDigestEnabled = "settings.dailyDigestEnabled"
 }
 

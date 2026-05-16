@@ -67,7 +67,6 @@ struct NoteDetailView: View {
     @State var aiWorking: Bool = false
     @State var aiError: String?
     @State var polishPreview: PolishPreview?
-    @State var photoAnalyses: PhotoAnalysesSheet?
     /// E1.2:当前正在跑的 AI Task 句柄。取消按钮 → task?.cancel()。
     /// 可能是 polish / photo analysis 中的任一种。
     @State var currentAITask: Task<Void, Never>?
@@ -98,9 +97,6 @@ struct NoteDetailView: View {
         ScrollView {
             VStack(spacing: DesignTokens.Spacing.medium) {
                 titleBlock            // 1. 标题
-                if !isEngineerProfile {
-                    NoteClassificationCard(note: note) // 1.4 AI 分类建议
-                }
                 tagsRow               // 1.5 工地 + 分类
                 photosBlock           // 3. 照片
                 addPhotoRow           // 4. 加照片
@@ -118,13 +114,6 @@ struct NoteDetailView: View {
         .background(Ink.bg.ignoresSafeArea())
         .navigationTitle("详情")
         .navigationBarTitleDisplayMode(.inline)
-        .onDisappear {
-            // 用户离开详情页 = 可能刚改过 transcription / siteTag / otherTags / 模板等。
-            // 让语义搜索 cache 失效,下次搜索时按新内容重算 embedding。
-            // **note 已脱离 context 时 skip**——读 note.id 也可能崩。
-            guard !note.isDeleted, note.modelContext != nil else { return }
-            SemanticSearchService.shared.invalidate(noteID: note.id)
-        }
         .overlay {
             if aiWorking {
                 aiLoadingOverlay
@@ -194,9 +183,6 @@ struct NoteDetailView: View {
         }
         .sheet(item: $polishPreview) { preview in
             polishPreviewSheet(preview)
-        }
-        .sheet(item: $photoAnalyses) { sheet in
-            photoAnalysesSheet(sheet)
         }
         .sheet(isPresented: $showsOriginalTranscription) {
             originalTranscriptionSheet
@@ -368,16 +354,6 @@ struct NoteDetailView: View {
                 Label("润色转写", systemImage: "text.badge.checkmark")
             }
             .disabled(!available || note.transcription.isEmpty)
-
-            // Engineer 视角下不提供 AI 照片分析(任务 3:Engineer 不调照片 AI)。
-            if !isEngineerProfile {
-                Button {
-                    runPhotoAnalysis()
-                } label: {
-                    Label("分析照片", systemImage: "photo.badge.checkmark")
-                }
-                .disabled(!available || note.photoPaths.isEmpty)
-            }
 
             if !available {
                 Divider()

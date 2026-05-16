@@ -180,17 +180,9 @@ enum BackupService {
         "settings.morningReminderMinute",
         "settings.dailyDigestEnabled",
         "settings.inspectorName",
-        // AI 总开关 / 单功能
+        // AI 总开关 / Polish 开关(v1.2 起 AI 精简到只 Polish)
         "settings.aiMasterEnabled",
         "settings.aiPolishEnabled",
-        "settings.aiAutoTagEnabled",
-        "settings.aiOmniClassifyEnabled",
-        "settings.aiLogExtractEnabled",
-        // AI 引擎配置(API Key 在 Keychain,不进备份)
-        "settings.aiEngine",
-        "settings.openAITextModel",
-        "settings.openAIVisionModel",
-        "settings.openAIEmbeddingModel",
         // 用户内容列表
         "settings.siteTags",
         "settings.subTagsGlobalV1",
@@ -198,8 +190,6 @@ enum BackupService {
         "settings.clauseRefs.seeded",
         "settings.floorPlans",
         "settings.siteCentroids.v1",
-        "settings.jargonCustomTerms",
-        "settings.jargonShortcuts",
         // (Obsidian 已下架,这两个 key 留作 legacy 兼容,旧用户备份能恢复)
         "settings.obsidian.exportFolderPath",
         // 引导

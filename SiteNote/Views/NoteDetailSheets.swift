@@ -60,20 +60,6 @@ struct PolishPreview: Identifiable {
     let after: String
 }
 
-struct PhotoAnalysisRow: Identifiable {
-    let id: UUID = UUID()
-    let path: String
-    let image: UIImage
-    let description: String
-    let hazard: Bool
-    let action: String?
-}
-
-struct PhotoAnalysesSheet: Identifiable {
-    let id: UUID = UUID()
-    let rows: [PhotoAnalysisRow]
-}
-
 // MARK: - TagPickerSheet
 
 /// 标签选择 sheet。

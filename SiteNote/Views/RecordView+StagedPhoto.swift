@@ -93,44 +93,20 @@ extension RecordView {
             Spacer(minLength: 12)
 
             // 主操作按钮:下移到右手拇指触碰区(屏幕下半部)
-            HStack(spacing: 10) {
-                Button {
-                    viewModel.savePhotosOnly()
-                } label: {
-                    Text("直接存")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Ink.fg)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Ink.fg, lineWidth: 1.5)
-                        )
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    analyzeLastStagedPhoto()
-                } label: {
-                    HStack(spacing: 6) {
-                        if isAnalyzingPhoto {
-                            SparkleLoading(label: "分析中")
-                        } else {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("AI 分析")
-                                .font(.system(size: 15, weight: .semibold))
-                        }
-                    }
+            // v1.2 大减负:Apple Intelligence 本地路径没有照片视觉 API,
+            // 原"AI 分析"按钮(走 OpenAI vision)随 OpenAI 砍掉而去掉,只保留"直接存"。
+            Button {
+                viewModel.savePhotosOnly()
+            } label: {
+                Text("直接存")
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(Ink.fg)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
-                .disabled(isAnalyzingPhoto)
             }
+            .buttonStyle(.plain)
             .padding(.horizontal, 24)
             .padding(.bottom, 20)
         }

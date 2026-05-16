@@ -6,9 +6,9 @@
 //
 //  入口:每个 tab 标题行右上角的放大镜按钮 → sheet 弹出。
 //
-//  搜索模式(默认关键字,可切换 AI 语义):
-//    · 关键字:大小写不敏感的子串匹配,纯本地、瞬时
-//    · AI 语义:跑 SemanticSearchService(已有 embedding 服务),适合"找漏电的事"这种模糊查询
+//  搜索:大小写不敏感的子串匹配,纯本地、瞬时。
+//  (v1.2 之前的 AI 语义搜索已下架 —— OpenAI 砍掉后只剩本地 Apple Intelligence,
+//   不再维护单独的 embedding 服务。)
 //
 //  结果:Note 按时间倒序。tap Note 进详情。
 //
@@ -25,16 +25,12 @@ struct GlobalSearchView: View {
     ) private var allNotes: [Note]
 
     @State private var query: String = ""
-    @State private var aiMode: Bool = false
-    @State private var semanticHits: [Note]? = nil
-    @State private var isSemanticSearching: Bool = false
     @FocusState private var queryFocused: Bool
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 searchBar
-                aiToggleRow
                 Divider().overlay(Ink.line)
                 resultsArea
             }
@@ -50,12 +46,10 @@ struct GlobalSearchView: View {
                 NoteRouter(note: note)
             }
             .onAppear { queryFocused = true }
-            .onChange(of: query) { _, _ in runSemanticIfNeeded() }
-            .onChange(of: aiMode) { _, _ in runSemanticIfNeeded() }
         }
     }
 
-    // MARK: - Top:输入 + AI 切换
+    // MARK: - Top:输入
 
     private var searchBar: some View {
         HStack(spacing: 8) {
@@ -81,29 +75,7 @@ struct GlobalSearchView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(.horizontal, 16)
         .padding(.top, 12)
-    }
-
-    private var aiToggleRow: some View {
-        HStack {
-            Toggle(isOn: $aiMode) {
-                HStack(spacing: 4) {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 11))
-                    Text("AI 语义搜索")
-                        .font(.system(size: 12, weight: .medium))
-                    if isSemanticSearching {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                    }
-                }
-            }
-            .toggleStyle(.switch)
-            .tint(Ink.accent)
-            .disabled(!AIService.isLanguageModelAvailable)
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.bottom, 12)
     }
 
     // MARK: - Results
@@ -141,13 +113,6 @@ struct GlobalSearchView: View {
             Text("搜速记内容 / 工地 / 地点")
                 .font(.system(size: 13))
                 .foregroundStyle(Ink.fgDim)
-            if AIService.isLanguageModelAvailable {
-                Text("打开 AI 语义搜索可以问「漏电的事」这类模糊查询")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.dim)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
-            }
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -208,7 +173,6 @@ struct GlobalSearchView: View {
     private var noteHits: [Note] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
-        if aiMode, let sem = semanticHits { return sem }
 
         let lower = trimmed.lowercased()
         return allNotes.filter { n in
@@ -216,25 +180,6 @@ struct GlobalSearchView: View {
                 || (n.siteTag?.lowercased().contains(lower) ?? false)
                 || (n.locationAddress?.lowercased().contains(lower) ?? false)
                 || n.otherTags.contains(where: { $0.lowercased().contains(lower) })
-        }
-    }
-
-    private func runSemanticIfNeeded() {
-        guard aiMode else {
-            semanticHits = nil
-            return
-        }
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            semanticHits = nil
-            return
-        }
-        isSemanticSearching = true
-        let snapshot = allNotes
-        Task {
-            let result = await SemanticSearchService.shared.search(query: trimmed, in: snapshot)
-            semanticHits = result
-            isSemanticSearching = false
         }
     }
 
