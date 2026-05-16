@@ -36,6 +36,8 @@ struct RecordView: View {
     @State private var archivedSiteTags: Set<String> = SiteArchiveStorage.loadArchived()
     /// "已完成"段折叠状态(默认折叠 — 用户看的主要是待办)。
     @State private var doneSectionExpanded: Bool = false
+    /// Engineer 视角的工地 filter(nil = 全部工地)。PM 视角不用。
+    @State private var engineerSiteFilter: String? = nil
 
     @State private var headerProvider = AppHeaderProvider.shared
     @State private var profileManager = UserProfileManager.shared
@@ -207,17 +209,104 @@ struct RecordView: View {
         .padding(.bottom, 16)
     }
 
-    /// 极简风:Search bar 常驻顶部 + 待办/已完成 两段。
+    /// 主屏列表 — 按 profile 分两种结构:
+    /// - PM:Search + 待办/已完成 两段(用户主要看待办)
+    /// - Engineer:Search + 工地 filter + 创建顺序列表(数据库查询视角)
     @ViewBuilder
     private var siteGroupedList: some View {
-        VStack(spacing: 0) {
-            searchBar
-            if pendingNotes.isEmpty && doneNotes.isEmpty {
-                emptyHint
-            } else {
-                twoSectionList
+        if profileManager.current == .engineer {
+            engineerSiteFilteredList
+        } else {
+            VStack(spacing: 0) {
+                searchBar
+                if pendingNotes.isEmpty && doneNotes.isEmpty {
+                    emptyHint
+                } else {
+                    twoSectionList
+                }
             }
         }
+    }
+
+    // MARK: - Engineer 视角:工地 filter + 创建顺序列表
+
+    /// Engineer 已知工地(从 Note + SiteTagsStorage 合并)。
+    private var engineerAllSiteTags: [String] {
+        let fromNotes = Set(liveNotes.compactMap { $0.siteTag })
+        let configured = Set(SiteTagsStorage.load())
+        return Array(fromNotes.union(configured)).sorted()
+    }
+
+    /// Engineer 视角应用 filter 后的 Note。Search 不空时跨 filter 全文搜。
+    private var engineerFilteredNotes: [Note] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let base: [Note]
+        if let site = engineerSiteFilter, query.isEmpty {
+            base = liveNotes.filter { $0.siteTag == site }
+        } else if !query.isEmpty {
+            base = liveNotes.filter { note in
+                if note.transcription.lowercased().contains(query) { return true }
+                if let s = note.siteTag, s.lowercased().contains(query) { return true }
+                if note.otherTags.contains(where: { $0.lowercased().contains(query) }) { return true }
+                return false
+            }
+        } else {
+            base = liveNotes
+        }
+        return base.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    @ViewBuilder
+    private var engineerSiteFilteredList: some View {
+        VStack(spacing: 0) {
+            searchBar
+            engineerSiteChipRow
+            if engineerFilteredNotes.isEmpty {
+                emptyHint
+            } else {
+                engineerTimelineList
+            }
+        }
+    }
+
+    /// Engineer 视角顶部 chip 行(水平滚动,单选工地)。
+    private var engineerSiteChipRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                engineerChip(nil, label: String(localized: "全部", locale: AppLanguageManager.currentLocale))
+                ForEach(engineerAllSiteTags, id: \.self) { tag in
+                    engineerChip(tag, label: tag)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private func engineerChip(_ tag: String?, label: String) -> some View {
+        let isOn = engineerSiteFilter == tag
+        return Button {
+            engineerSiteFilter = tag
+        } label: {
+            Text(label)
+                .font(.system(size: 12, weight: isOn ? .semibold : .medium))
+                .foregroundStyle(isOn ? Ink.bg : Ink.fg)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(isOn ? Ink.fg : Ink.card))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var engineerTimelineList: some View {
+        List {
+            ForEach(engineerFilteredNotes) { note in
+                noteRowItem(note)
+            }
+        }
+        .listStyle(.plain)
+        .industrialForm()
+        .environment(\.defaultMinListRowHeight, 0)
     }
 
     /// 顶部常驻 Search bar。

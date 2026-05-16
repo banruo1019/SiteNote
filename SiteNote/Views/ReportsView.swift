@@ -16,6 +16,16 @@ struct ReportsView: View {
         sort: \Note.createdAt
     ) private var allNotes: [Note]
 
+    /// 工地过滤器:nil = 全部工地。决定大卡片导 PDF 时预选哪些 Note。
+    @State private var siteFilter: String? = nil
+
+    /// 已知工地列表(从 Note + SiteTagsStorage 合并)。
+    private var allSiteTags: [String] {
+        let fromNotes = Set(allNotes.compactMap { $0.siteTag })
+        let configured = Set(SiteTagsStorage.load())
+        return Array(fromNotes.union(configured)).sorted()
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -52,6 +62,7 @@ struct ReportsView: View {
                 .tracking(-0.8)
                 .foregroundStyle(Ink.fg)
             Spacer()
+            siteFilterMenu
             SearchBarButton()
             NavigationLink(value: SettingsDestination()) {
                 Image(systemName: "gearshape")
@@ -64,6 +75,50 @@ struct ReportsView: View {
         .padding(.horizontal, 24)
         .padding(.top, 20)
         .padding(.bottom, 24)
+    }
+
+    /// 工地 picker(capsule)。默认"全部工地"。
+    private var siteFilterMenu: some View {
+        Menu {
+            Button {
+                siteFilter = nil
+            } label: {
+                if siteFilter == nil {
+                    Label(
+                        String(localized: "全部工地", locale: AppLanguageManager.currentLocale),
+                        systemImage: "checkmark"
+                    )
+                } else {
+                    Text(String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
+                }
+            }
+            Divider()
+            ForEach(allSiteTags, id: \.self) { tag in
+                Button {
+                    siteFilter = tag
+                } label: {
+                    if siteFilter == tag {
+                        Label(tag, systemImage: "checkmark")
+                    } else {
+                        Text(tag)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "building.2")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(siteFilter ?? String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(Ink.fg)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Ink.card))
+        }
     }
 
     // MARK: - Main card(唯一入口:出巡检报告)

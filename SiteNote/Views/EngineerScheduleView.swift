@@ -33,6 +33,30 @@ struct EngineerScheduleView: View {
     @State private var selectedDate: Date = Calendar.current.startOfDay(for: Date())
     @State private var showEditor: Bool = false
     @State private var editingSchedule: SiteVisitSchedule? = nil
+    /// 工地过滤器:nil = 全部工地。
+    @State private var siteFilter: String? = nil
+
+    /// 应用工地 filter 后的 schedules / reports。
+    private var filteredSchedules: [SiteVisitSchedule] {
+        if let site = siteFilter {
+            return allSchedules.filter { $0.siteTag == site }
+        }
+        return Array(allSchedules)
+    }
+    private var filteredReports: [InspectionReport] {
+        if let site = siteFilter {
+            return allInspectionReports.filter { $0.projectNo == site }
+        }
+        return Array(allInspectionReports)
+    }
+
+    /// 工地列表(从 schedules + reports + SiteTagsStorage 合并)。
+    private var allSiteTags: [String] {
+        let fromSchedules = Set(allSchedules.compactMap { $0.siteTag })
+        let fromReports = Set(allInspectionReports.compactMap { $0.projectNo.isEmpty ? nil : $0.projectNo })
+        let configured = Set(SiteTagsStorage.load())
+        return Array(fromSchedules.union(fromReports).union(configured)).sorted()
+    }
 
     var body: some View {
         NavigationStack {
@@ -76,6 +100,7 @@ struct EngineerScheduleView: View {
                 .tracking(-0.8)
                 .foregroundStyle(Ink.fg)
             Spacer()
+            siteFilterMenu
             NavigationLink(value: SettingsDestination()) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 17, weight: .regular))
@@ -107,6 +132,52 @@ struct EngineerScheduleView: View {
         .padding(.horizontal, 24)
         .padding(.top, 20)
         .padding(.bottom, 16)
+    }
+
+    /// 工地过滤 menu(capsule)。默认"全部工地"。
+    private var siteFilterMenu: some View {
+        Menu {
+            Button {
+                siteFilter = nil
+            } label: {
+                if siteFilter == nil {
+                    Label(
+                        String(localized: "全部工地", locale: AppLanguageManager.currentLocale),
+                        systemImage: "checkmark"
+                    )
+                } else {
+                    Text(String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
+                }
+            }
+            Divider()
+            ForEach(allSiteTags, id: \.self) { tag in
+                Button {
+                    siteFilter = tag
+                } label: {
+                    if siteFilter == tag {
+                        Label(tag, systemImage: "checkmark")
+                    } else {
+                        Text(tag)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "building.2")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(siteFilter ?? String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(Ink.fg)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(Ink.card)
+            )
+        }
     }
 
     // MARK: - Month header
@@ -286,7 +357,7 @@ struct EngineerScheduleView: View {
         let cal = Calendar.current
         let dayStart = cal.startOfDay(for: selectedDate)
         guard let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else { return [] }
-        return allSchedules
+        return filteredSchedules
             .filter { $0.scheduledDate >= dayStart && $0.scheduledDate < dayEnd }
             .sorted { $0.fireDate < $1.fireDate }
     }
@@ -295,14 +366,14 @@ struct EngineerScheduleView: View {
         let cal = Calendar.current
         let start = cal.startOfDay(for: date)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return false }
-        return allSchedules.contains { $0.scheduledDate >= start && $0.scheduledDate < end }
+        return filteredSchedules.contains { $0.scheduledDate >= start && $0.scheduledDate < end }
     }
 
     private var reportsOnSelectedDate: [InspectionReport] {
         let cal = Calendar.current
         let dayStart = cal.startOfDay(for: selectedDate)
         guard let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else { return [] }
-        return allInspectionReports
+        return filteredReports
             .filter { $0.reportDate >= dayStart && $0.reportDate < dayEnd }
             .sorted { $0.reportDate < $1.reportDate }
     }
@@ -418,23 +489,13 @@ struct EngineerScheduleView: View {
     }
 
     private var emptyDayState: some View {
-        Button {
-            editingSchedule = nil
-            showEditor = true
-        } label: {
-            HStack(spacing: 8) {
-                Text(String(localized: "今天没有安排", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Ink.fgDim)
-                Spacer()
-                Text(String(localized: "+ 新建", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Ink.fg2)
-            }
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
+        HStack {
+            Text(String(localized: "今天没有安排", locale: AppLanguageManager.currentLocale))
+                .font(.system(size: 13))
+                .foregroundStyle(Ink.fgDim)
+            Spacer()
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 12)
     }
 
     private func scheduleRow(_ s: SiteVisitSchedule) -> some View {
@@ -566,7 +627,7 @@ struct EngineerScheduleView: View {
     /// 未删除 + pending + scheduledDate >= 今天起;按 fireDate 升序前 10。
     private var upcomingSchedules: [SiteVisitSchedule] {
         let today = Calendar.current.startOfDay(for: Date())
-        return allSchedules
+        return filteredSchedules
             .filter { $0.status == .pending && $0.scheduledDate >= today }
             .sorted { $0.fireDate < $1.fireDate }
             .prefix(10)
