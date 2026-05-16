@@ -107,24 +107,20 @@ private struct RootContainerView: View {
         BackupService.migrateLegacyDirectories()
         CrashReporter.migrateLegacyDirectory()
 
-        // Schema:v1.1 范围 + v1.2 加 SiteVisitSchedule。
-        // Team / TeamMember 暂不加入主 Schema(方案 C):
-        //   - v1.2 先上 iCloud 备份(单人多设备 sync)
-        //   - 团队功能 prototype 阶段,等 v1.3 写 VersionedSchema + MigrationPlan 一起接入
-        //   - 避免老用户从 v1.0/v1.1 升级时 schema migration 失败
-        let schema = Schema([
-            Note.self,
-            LogEntry.self,
-            ShareLog.self,
-            InspectionReport.self,
-            SiteVisitSchedule.self,
-        ])
+        // Schema 通过 VersionedSchema + MigrationPlan 管理(SiteNote/Schemas/)。
+        // v1.0/v1.1 老用户升级 v1.2 时,SwiftData 自动跑 V1 → V2 lightweight
+        // migration:加 InspectionReport / SiteVisitSchedule / Team / TeamMember
+        // 4 张空表,旧 3 张数据保留。
+        //
+        // **历史教训**:之前直接把 Team @Relationship 双向引用塞进 Schema 导致
+        // v1.0 升级时 SwiftDataError 1。这次:Team / TeamMember 改用 teamID UUID
+        // 软引用(见 Team.swift)+ 走显式 MigrationPlan,确保升级路径稳。
+        let schema = Schema(SiteNoteSchemaV2.models)
 
         // ⚠️ iCloud sync 由 ICloudSyncConfig.shared.isEnabled feature flag 控制(默认 false)。
-        // - false → 本地 only ModelConfiguration(等同 v1.1 行为,零变化)
+        // - false → 本地 only ModelConfiguration
         // - true  → CloudKit private DB,SwiftData 自动 sync 到 iCloud
-        // 用户在 设置 → 数据 → 启用 iCloud 同步 toggle 切换(后续 UI 添加)。
-        // 切换后需要重启 App 生效(SwiftData 当前不支持 hot-swap configuration)。
+        // 切换后需要重启 App 生效(SwiftData 不支持 hot-swap configuration)。
         let modelConfiguration: ModelConfiguration
         if ICloudSyncConfig.shared.isEnabled {
             modelConfiguration = ICloudSyncConfig.cloudKitConfiguration(schema: schema)
@@ -133,7 +129,11 @@ private struct RootContainerView: View {
         }
 
         do {
-            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(
+                for: schema,
+                migrationPlan: SiteNoteMigrationPlan.self,
+                configurations: [modelConfiguration]
+            )
             // B2: 启动时清理孤儿 .m4a。录音中被杀的进程会留下永久不被引用的音频文件,
             // 长期累积可能占满磁盘。同步执行,失败不阻塞。
             VoiceCaptureService.cleanupOrphanAudio(modelContext: container.mainContext)
