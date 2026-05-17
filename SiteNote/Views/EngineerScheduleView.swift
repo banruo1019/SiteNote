@@ -36,6 +36,25 @@ struct EngineerScheduleView: View {
     /// 工地过滤器:nil = 全部工地。
     @State private var siteFilter: String? = nil
 
+    // MARK: - v1.4 巡检 session 集成
+
+    /// 顶部 banner / 一键开巡检 / 完成弹窗 都接它。
+    @State private var sessionManager = InspectionSessionManager.shared
+    /// 顶部 banner 的"完成巡检"按下后弹 EndInspectionSheet。
+    @State private var showsEndSheet: Bool = false
+    /// 当日详情段落切换:全部 / 仅日程 / 仅报告。
+    @State private var dayDetailScope: DayDetailScope = .all
+    /// 点已关联报告的日程 → 跳报告详情。NavigationStack path-style 仍走旧 NavigationLink,
+    /// 这里只是给 sheet/导航触发用,实际跳转走 navigationDestination(item:)。
+    @State private var navigateToReportID: UUID? = nil
+
+    /// 当日详情段切换枚举。
+    enum DayDetailScope: String, CaseIterable, Hashable {
+        case all
+        case schedules
+        case reports
+    }
+
     /// 应用工地 filter 后的 schedules / reports。
     private var filteredSchedules: [SiteVisitSchedule] {
         if let site = siteFilter {
@@ -66,6 +85,13 @@ struct EngineerScheduleView: View {
                     titleRow
                     ScrollView {
                         VStack(spacing: 0) {
+                            // v1.4:active session 时显示顶部 banner;点"完成巡检"弹 EndInspectionSheet
+                            InspectionSessionBanner(onComplete: { _ in
+                                showsEndSheet = true
+                            })
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 12)
+
                             monthHeader
                             calendarGrid
                             divider
@@ -78,6 +104,12 @@ struct EngineerScheduleView: View {
             .navigationDestination(for: SettingsDestination.self) { _ in
                 SettingsView()
             }
+            // 已关联报告的日程 → 直接跳报告详情(复用 InspectionFormView 当作详情入口)
+            .navigationDestination(item: $navigateToReportID) { id in
+                if let report = fetchReport(for: id) {
+                    InspectionFormView(report: report)
+                }
+            }
             .sheet(isPresented: $showEditor, onDismiss: {
                 editingSchedule = nil
             }) {
@@ -85,6 +117,13 @@ struct EngineerScheduleView: View {
                     schedule: editingSchedule,
                     prefilledDate: editingSchedule == nil ? selectedDate : nil
                 )
+            }
+            .sheet(isPresented: $showsEndSheet) {
+                if let report = sessionManager.currentReport(in: modelContext) {
+                    EndInspectionSheet(report: report) { _, _ in
+                        showsEndSheet = false
+                    }
+                }
             }
         }
     }
@@ -163,11 +202,16 @@ struct EngineerScheduleView: View {
             let cal = Calendar.current
             let isToday = cal.isDateInToday(date)
             let isSelected = cal.isDate(date, inSameDayAs: selectedDate)
-            let dayCount = scheduleCount(on: date)
+            let scheduleN = scheduleCount(on: date)
+            let reportN = reportCount(on: date)
             let day = cal.component(.day, from: date)
             // M1:今天 = 黑圆填充;选中(非今天)= 灰底圆;否则透明
             let bgFill: Color = isToday ? Ink.fg : (isSelected ? Ink.card : .clear)
             let textColor: Color = isToday ? Ink.bg : Ink.fg
+
+            // dot 分色:先报告(黑/今天反色为白)再日程(蓝),总数 ≤ 3
+            let reportDots = min(reportN, 3)
+            let scheduleDots = min(scheduleN, max(0, 3 - reportDots))
 
             Button {
                 withAnimation(.easeInOut(duration: 0.12)) {
@@ -185,9 +229,16 @@ struct EngineerScheduleView: View {
                             .foregroundStyle(textColor)
                     }
                     HStack(spacing: 2.5) {
-                        ForEach(0..<min(dayCount, 3), id: \.self) { _ in
+                        // 已出报告 — 黑 dot(今天反色为白,以保对比)
+                        ForEach(0..<reportDots, id: \.self) { _ in
                             Circle()
-                                .fill(isToday ? Ink.bg : Ink.accentBlue)
+                                .fill(isToday ? Ink.bg : Ink.fg)
+                                .frame(width: 4, height: 4)
+                        }
+                        // 未做日程 — 蓝 dot
+                        ForEach(0..<scheduleDots, id: \.self) { _ in
+                            Circle()
+                                .fill(Ink.accentBlue)
                                 .frame(width: 4, height: 4)
                         }
                     }
@@ -209,6 +260,14 @@ struct EngineerScheduleView: View {
         let start = cal.startOfDay(for: date)
         guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return 0 }
         return filteredSchedules.filter { $0.scheduledDate >= start && $0.scheduledDate < end }.count
+    }
+
+    /// 某一天的 InspectionReport 数(reportDate 落在当天,用于黑 dot)。
+    private func reportCount(on date: Date) -> Int {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: date)
+        guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return 0 }
+        return filteredReports.filter { $0.reportDate >= start && $0.reportDate < end }.count
     }
 
     // MARK: - 当日详情
@@ -255,43 +314,66 @@ struct EngineerScheduleView: View {
             }
             .padding(.horizontal, 24)
 
-            // 当日巡检日程
-            VStack(alignment: .leading, spacing: 6) {
-                sectionMiniHeader(
-                    String(localized: "当日巡检日程", locale: AppLanguageManager.currentLocale),
+            // 段落 segmented:全部 / 日程 N / 报告 N
+            Picker("", selection: $dayDetailScope) {
+                Text(String(localized: "全部", locale: AppLanguageManager.currentLocale))
+                    .tag(DayDetailScope.all)
+                Text(scopeLabel(
+                    base: String(localized: "日程", locale: AppLanguageManager.currentLocale),
                     count: schedulesOnSelectedDate.count
-                )
-                if schedulesOnSelectedDate.isEmpty {
-                    emptyDayState
-                } else {
-                    cardGroup {
-                        VStack(spacing: 0) {
-                            ForEach(Array(schedulesOnSelectedDate.enumerated()), id: \.element.id) { idx, s in
-                                scheduleRow(s, isLast: idx == schedulesOnSelectedDate.count - 1)
+                ))
+                    .tag(DayDetailScope.schedules)
+                Text(scopeLabel(
+                    base: String(localized: "报告", locale: AppLanguageManager.currentLocale),
+                    count: reportsOnSelectedDate.count
+                ))
+                    .tag(DayDetailScope.reports)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 4)
+
+            // 当日巡检日程 — scope=.all 或 .schedules 时显示
+            if dayDetailScope == .all || dayDetailScope == .schedules {
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionMiniHeader(
+                        String(localized: "当日巡检日程", locale: AppLanguageManager.currentLocale),
+                        count: schedulesOnSelectedDate.count
+                    )
+                    if schedulesOnSelectedDate.isEmpty {
+                        emptyDayState
+                    } else {
+                        cardGroup {
+                            VStack(spacing: 0) {
+                                ForEach(Array(schedulesOnSelectedDate.enumerated()), id: \.element.id) { idx, s in
+                                    scheduleRow(s, isLast: idx == schedulesOnSelectedDate.count - 1)
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // 当日巡检报告
-            VStack(alignment: .leading, spacing: 6) {
-                sectionMiniHeader(
-                    String(localized: "当日巡检报告", locale: AppLanguageManager.currentLocale),
-                    count: reportsOnSelectedDate.count
-                )
-                if reportsOnSelectedDate.isEmpty {
-                    Text(String(localized: "当日无报告", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 13))
-                        .foregroundStyle(Ink.fgDim)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 10)
-                } else {
-                    cardGroup {
-                        VStack(spacing: 0) {
-                            ForEach(Array(reportsOnSelectedDate.enumerated()), id: \.element.id) { idx, r in
-                                reportRow(r, isLast: idx == reportsOnSelectedDate.count - 1)
+            // 当日巡检报告 — scope=.all 或 .reports 时显示
+            if dayDetailScope == .all || dayDetailScope == .reports {
+                VStack(alignment: .leading, spacing: 6) {
+                    sectionMiniHeader(
+                        String(localized: "当日巡检报告", locale: AppLanguageManager.currentLocale),
+                        count: reportsOnSelectedDate.count
+                    )
+                    if reportsOnSelectedDate.isEmpty {
+                        Text(String(localized: "当日无报告", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 13))
+                            .foregroundStyle(Ink.fgDim)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 10)
+                    } else {
+                        cardGroup {
+                            VStack(spacing: 0) {
+                                ForEach(Array(reportsOnSelectedDate.enumerated()), id: \.element.id) { idx, r in
+                                    reportRow(r, isLast: idx == reportsOnSelectedDate.count - 1)
+                                }
                             }
                         }
                     }
@@ -300,6 +382,11 @@ struct EngineerScheduleView: View {
         }
         .padding(.top, 14)
         .padding(.bottom, 20)
+    }
+
+    /// segmented tab 文本:无内容时不挂数字,避免 "日程 0" 视觉负担。
+    private func scopeLabel(base: String, count: Int) -> String {
+        count > 0 ? "\(base) \(count)" : base
     }
 
     /// "当日巡检日程" 这种 mini 段头(uppercase + count chip)。
@@ -359,13 +446,24 @@ struct EngineerScheduleView: View {
     }
 
     private func scheduleRow(_ s: SiteVisitSchedule, isLast: Bool) -> some View {
-        Button {
-            editingSchedule = s
-            showEditor = true
-        } label: {
-            ScheduleRowContent(schedule: s, isLast: isLast)
+        VStack(spacing: 0) {
+            // 行主体:沿用 ScheduleRowContent,外包 Button → 点开编辑
+            Button {
+                editingSchedule = s
+                showEditor = true
+            } label: {
+                ScheduleRowContent(schedule: s, isLast: true)  // 内部 hairline 让位给外部
+            }
+            .buttonStyle(.plain)
+
+            // 智能按钮区:未关联 → [▶ 开始巡检];已关联 → [→ SVR-xxx]
+            scheduleActionRow(for: s)
+
+            // 行底分隔线(最后一行不画)
+            if !isLast {
+                Rectangle().fill(Ink.line).frame(height: 1)
+            }
         }
-        .buttonStyle(.plain)
         .contextMenu {
             if s.status != .completed {
                 Button {
@@ -406,6 +504,85 @@ struct EngineerScheduleView: View {
                 )
             }
         }
+    }
+
+    // MARK: - v1.4 智能按钮 + session 启动
+
+    /// 日程行下方的操作按钮:
+    /// - linkedReportID == nil → [▶ 开始巡检](一键开 session 并双向绑定)
+    /// - linkedReportID != nil → [→ SVR-xxx >](跳报告详情)
+    @ViewBuilder
+    private func scheduleActionRow(for s: SiteVisitSchedule) -> some View {
+        HStack {
+            Spacer()
+            if let rid = s.linkedReportID {
+                Button {
+                    navigateToReportID = rid
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(String(
+                            format: String(localized: "→ %@", locale: AppLanguageManager.currentLocale),
+                            reportNo(for: rid)
+                        ))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Ink.fgDim)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Ink.dim)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                Button {
+                    startSessionFromSchedule(s)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(String(localized: "开始巡检", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(Ink.bg)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Ink.fg))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
+    }
+
+    /// 从日程一键启动巡检 session(双向绑定 schedule ↔ report)。
+    private func startSessionFromSchedule(_ s: SiteVisitSchedule) {
+        let preset = s.siteTag.flatMap { SitePresetStorage.find(siteTag: $0) }
+        _ = sessionManager.startFromSchedule(
+            s,
+            siteTag: s.siteTag ?? "",
+            preset: preset,
+            defaultAttn: preset?.defaultAttn ?? "",
+            in: modelContext
+        )
+    }
+
+    /// 用 reportID 反查 reportNo(navigation chip 显示用)。找不到时回退 short uuid。
+    private func reportNo(for id: UUID) -> String {
+        if let r = fetchReport(for: id) {
+            let no = r.reportNo.trimmingCharacters(in: .whitespaces)
+            if !no.isEmpty { return no }
+        }
+        return String(id.uuidString.prefix(6))
+    }
+
+    /// 用 reportID 反查 InspectionReport,供导航 destination 使用。
+    private func fetchReport(for id: UUID) -> InspectionReport? {
+        let desc = FetchDescriptor<InspectionReport>(
+            predicate: #Predicate<InspectionReport> { $0.id == id }
+        )
+        return try? modelContext.fetch(desc).first
     }
 
     // MARK: - Divider

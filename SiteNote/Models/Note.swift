@@ -165,6 +165,12 @@ final class Note {
     /// 所有调用方已清掉。
     var isDiaryRecord: Bool = false
 
+    /// v1.4 巡检 session — 这条 note 属于哪次巡检报告。
+    /// nil = 自由速记(legacy 老 note 都是 nil,向后兼容)。
+    /// 录音保存时,如果 InspectionSessionManager.currentSessionID 不空,
+    /// HomeViewModel 会写到这里。InspectionReport 那边也同步追加 noteIDs。
+    var inspectionSessionID: UUID? = nil
+
     /// 到期选择。映射到 `deadlineRaw` 存储。非法值降级到 `.threeDays`。
     var deadline: Deadline {
         get { Deadline(rawValue: deadlineRaw) ?? .threeDays }

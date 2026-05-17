@@ -240,9 +240,15 @@ private struct SitePresetEditSheet: View {
 
     // 默认值
     @State private var defaultAttn: String
+    /// [Deprecated v1.4] 老的"默认 Builder" picker 已删,字段保留用于回写 draft(向后兼容)。
     @State private var defaultBuilderID: UUID?
     @State private var defaultInspectionType: String
-    @State private var builders: [Builder] = BuildersStorage.load()
+
+    // v1.4 本工地联系人:linked 是 superset,defaultRecipient ⊆ linked。
+    @State private var linkedContactIDs: [UUID]
+    @State private var defaultRecipientIDs: [UUID]
+    @State private var availableContacts: [Builder] = []
+    @State private var showsAddContactSheet: Bool = false
 
     // 备注
     @State private var notes: String
@@ -285,6 +291,9 @@ private struct SitePresetEditSheet: View {
         _notes = State(initialValue: initial.notes)
         _assignedToUserID = State(initialValue: initial.assignedToUserID)
         _assignedAt = State(initialValue: initial.assignedAt)
+        // v1.4 本工地联系人:从 SitePreset 直接读;onAppear 再刷新 availableContacts。
+        _linkedContactIDs = State(initialValue: initial.linkedContactIDs)
+        _defaultRecipientIDs = State(initialValue: initial.defaultRecipientIDs)
         // 编辑模式:address 已是用户/之前保存的值,不要被 siteTag picker 覆盖。
         // 新建模式:允许自动填(直到用户真的编辑过 address)。
         switch target {
@@ -301,6 +310,7 @@ private struct SitePresetEditSheet: View {
                 siteSection
                 projectInfoSection
                 defaultsSection
+                contactsSection
                 floorPlansSection
                 assignmentSection
                 notesSection
@@ -347,6 +357,23 @@ private struct SitePresetEditSheet: View {
             }
             .onChange(of: siteTag) { _, newTag in
                 prefillAddressIfNeeded(for: newTag)
+            }
+            .sheet(isPresented: $showsAddContactSheet) {
+                // 新增联系人:写入 BuildersStorage 后立即绑到本工地。
+                // markAsDefault 由 AddContactSheet 内的勾选决定。
+                AddContactSheet(company: clientName) { newBuilder, markAsDefault in
+                    availableContacts = BuildersStorage.load()
+                    if !linkedContactIDs.contains(newBuilder.id) {
+                        linkedContactIDs.append(newBuilder.id)
+                    }
+                    if markAsDefault, !defaultRecipientIDs.contains(newBuilder.id) {
+                        defaultRecipientIDs.append(newBuilder.id)
+                    }
+                }
+            }
+            .onAppear {
+                // 每次出现都重新读 BuildersStorage,确保从其他入口加的新联系人能看到。
+                availableContacts = BuildersStorage.load()
             }
         }
     }
@@ -463,28 +490,6 @@ private struct SitePresetEditSheet: View {
             )
             .textInputAutocapitalization(.words)
 
-            Picker(
-                String(localized: "默认 Builder", locale: locale),
-                selection: Binding(
-                    get: { defaultBuilderID },
-                    set: { newID in
-                        defaultBuilderID = newID
-                        // 选中 Builder 时自动把 name 填到 defaultAttn。
-                        if let newID, let b = builders.first(where: { $0.id == newID }) {
-                            defaultAttn = b.name
-                        }
-                    }
-                )
-            ) {
-                Text(String(localized: "(不绑定)", locale: locale))
-                    .tag(UUID?.none)
-                ForEach(builders) { b in
-                    Text(b.company.isEmpty ? b.name : "\(b.name) · \(b.company)")
-                        .tag(Optional(b.id))
-                }
-            }
-            .font(.system(size: DesignTokens.FontSize.body))
-
             TextField(
                 String(localized: "默认巡检类型(如 level 1 reo)", locale: locale),
                 text: $defaultInspectionType
@@ -495,10 +500,91 @@ private struct SitePresetEditSheet: View {
             SectionHeader(String(localized: "默认值", locale: locale))
         } footer: {
             SectionFooter(String(
-                localized: "选 Builder 后自动填「收件人」=builder.name。导出报告时巡检类型仍可单独改。",
+                localized: "导出报告时巡检类型仍可单独改。",
                 locale: locale
             ))
         }
+    }
+
+    // MARK: - 本工地联系人 (v1.4)
+
+    /// 当前 linkedContactIDs 对应的 Builder 对象(过滤后保持 linkedContactIDs 中的顺序)。
+    /// 联系人的 Builder 本体由 BuildersStorage 管;这里只决定本工地用谁。
+    private var linkedContacts: [Builder] {
+        let byID = Dictionary(uniqueKeysWithValues: availableContacts.map { ($0.id, $0) })
+        return linkedContactIDs.compactMap { byID[$0] }
+    }
+
+    private var contactsSection: some View {
+        Section {
+            if linkedContacts.isEmpty {
+                Text(String(localized: "本工地还没绑联系人。点下方「+ 加联系人」开始。", locale: locale))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Ink.fgDim)
+            } else {
+                ForEach(linkedContacts) { contact in
+                    contactRow(contact)
+                }
+                .onDelete { idxSet in
+                    // 仅从本工地解绑(不删除 Builder 本体),同时把默认收件人里同步清掉。
+                    let idsToRemove = idxSet.map { linkedContacts[$0].id }
+                    linkedContactIDs.removeAll { idsToRemove.contains($0) }
+                    defaultRecipientIDs.removeAll { idsToRemove.contains($0) }
+                }
+            }
+            Button {
+                showsAddContactSheet = true
+            } label: {
+                Label(
+                    String(localized: "加联系人", locale: locale),
+                    systemImage: "plus.circle"
+                )
+                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+            }
+        } header: {
+            SectionHeader(String(
+                localized: "本工地联系人 (\(linkedContacts.count) / 默认 \(defaultRecipientIDs.count))",
+                locale: locale
+            ))
+        } footer: {
+            SectionFooter(String(
+                localized: "左滑移除。勾选 = 巡检时默认勾上。",
+                locale: locale
+            ))
+        }
+    }
+
+    /// 单行联系人:整行点击 = 切换默认收件人勾选。
+    @ViewBuilder
+    private func contactRow(_ contact: Builder) -> some View {
+        let isDefault = defaultRecipientIDs.contains(contact.id)
+        Button {
+            if isDefault {
+                defaultRecipientIDs.removeAll { $0 == contact.id }
+            } else {
+                defaultRecipientIDs.append(contact.id)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: isDefault ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isDefault ? Ink.fg : Ink.fgDim)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(contact.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Ink.fg)
+                    if !contact.email.isEmpty {
+                        Text(contact.email)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // Phase 0 mock;Phase 2 改为 @Query TeamMember
@@ -621,6 +707,11 @@ private struct SitePresetEditSheet: View {
         draft.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.assignedToUserID = assignedToUserID
         draft.assignedAt = assignedAt
+        // v1.4 本工地联系人:defaultRecipientIDs 必须 ⊆ linkedContactIDs(理论上一直成立,
+        // 这里再做一次过滤以防外部数据被改坏)。
+        draft.linkedContactIDs = linkedContactIDs
+        let linkedSet = Set(linkedContactIDs)
+        draft.defaultRecipientIDs = defaultRecipientIDs.filter { linkedSet.contains($0) }
 
         onSave(draft)
         dismiss()

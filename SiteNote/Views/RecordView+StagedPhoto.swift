@@ -91,21 +91,42 @@ extension RecordView {
 
             Spacer(minLength: 12)
 
-            // 主操作按钮:下移到右手拇指触碰区(屏幕下半部)
-            // v1.2 大减负:Apple Intelligence 本地路径没有照片视觉 API,
-            // 原"AI 分析"按钮(走 OpenAI vision)随 OpenAI 砍掉而去掉,只保留"直接存"。
-            Button {
-                viewModel.savePhotosOnly()
-            } label: {
-                Text("直接存")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Color.white)
+            // 主操作行:[+ 继续拍] [✓ 直接存]
+            // 工程师巡检场景一次现场常拍多张,"继续拍" 让用户连续触发 camera
+            // 不用绕回 hero 按钮。"直接存" 保存所有 staged → Engineer 巡检中自动跳详情(RecordView.onChange 监听)
+            HStack(spacing: 10) {
+                Button {
+                    isShowingCamera = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text("继续拍")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .foregroundStyle(Ink.fg)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(Ink.fg)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Ink.fg, lineWidth: 1.5)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    viewModel.savePhotosOnly()
+                } label: {
+                    Text("直接存")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Ink.fg)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
             .padding(.horizontal, 24)
             .padding(.bottom, 20)
         }

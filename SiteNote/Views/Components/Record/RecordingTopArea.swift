@@ -8,7 +8,7 @@
 //  - "录音中 · ~1.2 MB" mini 副标
 //  - 28 段 AudioWaveformView 实时电平
 //  - 实时转写文本 + 闪烁光标
-//  - 手势提示 pill:松手保存 / 下滑取消(纯视觉,不接收 hit)
+//  - 手势提示 pill:松手保存 / 上划取消(纯视觉,不接收 hit)
 //
 //  从 RecordView 提取(~130 行),依赖通过参数注入,无 @State。
 //  注:`siteTag` 直接传 String? 而不是 allNotes,让 caller 负责挑出 last note,
@@ -103,7 +103,7 @@ struct RecordingTopArea: View {
 
             Spacer()
 
-            // 手势提示 pill:松手保存 / 下滑取消(只展示,不可点)
+            // 手势提示 pill:松手保存 / 上划取消(只展示,不可点)
             HStack(spacing: 10) {
                 Text(String(localized: "松手保存", locale: AppLanguageManager.currentLocale))
                     .font(.system(size: 12, weight: .semibold))
@@ -114,9 +114,9 @@ struct RecordingTopArea: View {
                     .background(Ink.fg)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 HStack(spacing: 6) {
-                    Image(systemName: "arrow.down")
+                    Image(systemName: "arrow.up")
                         .font(.system(size: 11, weight: .semibold))
-                    Text(String(localized: "下滑取消", locale: AppLanguageManager.currentLocale))
+                    Text(String(localized: "上划取消", locale: AppLanguageManager.currentLocale))
                         .font(.system(size: 12, weight: .semibold))
                 }
                 .foregroundStyle(Ink.fgDim)

@@ -96,6 +96,7 @@ struct NoteDetailView: View {
     private var mainBody: some View {
         ScrollView {
             VStack(spacing: DesignTokens.Spacing.medium) {
+                sessionBanner         // 0. 归属巡检报告 banner(note.inspectionSessionID 不空时显示)
                 titleBlock            // 1. 标题
                 tagsRow               // 1.5 工地 + 分类
                 photosBlock           // 3. 照片
@@ -283,6 +284,57 @@ struct NoteDetailView: View {
         } message: {
             Text(photoAnnotationError ?? "")
         }
+    }
+
+    // MARK: - 0. 归属巡检报告 banner
+
+    /// 当 note.inspectionSessionID 不为空且能查到对应的 InspectionReport 时,
+    /// 在详情页顶部显示一个可点击 banner,跳转到对应报告的填报页。
+    @ViewBuilder
+    private var sessionBanner: some View {
+        if let sid = note.inspectionSessionID,
+           let report = fetchReport(for: sid) {
+            NavigationLink {
+                InspectionFormView(report: report)
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Ink.fg)
+                        .frame(width: 28, height: 28)
+                        .background(Ink.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "属于 \(report.reportNo)", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Ink.fg)
+                        Text(String(localized: "\(report.project) · 巡检报告", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Ink.dim)
+                }
+                .padding(14)
+                .background(Ink.card)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Ink.line, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// 按 sessionID 查对应的 InspectionReport(SwiftData FetchDescriptor)。
+    private func fetchReport(for sessionID: UUID) -> InspectionReport? {
+        let desc = FetchDescriptor<InspectionReport>(
+            predicate: #Predicate<InspectionReport> { $0.id == sessionID }
+        )
+        return try? modelContext.fetch(desc).first
     }
 
     // MARK: - 1. 标题块(转写正文大字 + AI 助手)

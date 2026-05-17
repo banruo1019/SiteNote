@@ -22,7 +22,7 @@ struct SitePreset: Codable, Identifiable, Hashable {
     var clientName: String         // "HRK"
     var address: String            // "38 FORSYTH ST NORTH WILLOUGHBY"
     var defaultAttn: String        // "Banruo"(builder.name 或手输)
-    var defaultBuilderID: UUID?    // BuildersStorage.Builder.id;nil 表示无关联
+    var defaultBuilderID: UUID?    // [Deprecated v1.4] 保留向后兼容;新代码用 defaultRecipientIDs
     var defaultInspectionType: String  // "level 1 reo"(用户每次只改这个)
     var notes: String              // 备注(可选)
 
@@ -31,6 +31,14 @@ struct SitePreset: Codable, Identifiable, Hashable {
     var assignedToUserID: String?
     /// 分配时间(Owner 决定时记)。
     var assignedAt: Date?
+
+    /// v1.4 工地工作台:本工地能用的所有联系人(Builder.id),superset of defaultRecipientIDs。
+    /// 在 SitePresetEditor 内"本工地联系人"段管理。空 = 没绑联系人。
+    var linkedContactIDs: [UUID] = []
+
+    /// v1.4 开始巡检时自动勾上的收件人(子集必须 ∈ linkedContactIDs)。
+    /// 取代 defaultBuilderID 的单选。空 = 没默认收件人。
+    var defaultRecipientIDs: [UUID] = []
 
     init(
         id: UUID = UUID(),
@@ -44,7 +52,9 @@ struct SitePreset: Codable, Identifiable, Hashable {
         defaultInspectionType: String = "",
         notes: String = "",
         assignedToUserID: String? = nil,
-        assignedAt: Date? = nil
+        assignedAt: Date? = nil,
+        linkedContactIDs: [UUID] = [],
+        defaultRecipientIDs: [UUID] = []
     ) {
         self.id = id
         self.siteTag = siteTag
@@ -58,6 +68,37 @@ struct SitePreset: Codable, Identifiable, Hashable {
         self.notes = notes
         self.assignedToUserID = assignedToUserID
         self.assignedAt = assignedAt
+        self.linkedContactIDs = linkedContactIDs
+        self.defaultRecipientIDs = defaultRecipientIDs
+    }
+
+    /// Codable decode:老数据没有 linkedContactIDs / defaultRecipientIDs → 默认空 array。
+    /// 如老数据有 defaultBuilderID 但 array 空 → 自动迁移(塞进两个 array)。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(UUID.self, forKey: .id)
+        self.siteTag = try c.decode(String.self, forKey: .siteTag)
+        self.projectName = try c.decodeIfPresent(String.self, forKey: .projectName) ?? ""
+        self.projectNo = try c.decodeIfPresent(String.self, forKey: .projectNo) ?? ""
+        self.clientName = try c.decodeIfPresent(String.self, forKey: .clientName) ?? ""
+        self.address = try c.decodeIfPresent(String.self, forKey: .address) ?? ""
+        self.defaultAttn = try c.decodeIfPresent(String.self, forKey: .defaultAttn) ?? ""
+        self.defaultBuilderID = try c.decodeIfPresent(UUID.self, forKey: .defaultBuilderID)
+        self.defaultInspectionType = try c.decodeIfPresent(String.self, forKey: .defaultInspectionType) ?? ""
+        self.notes = try c.decodeIfPresent(String.self, forKey: .notes) ?? ""
+        self.assignedToUserID = try c.decodeIfPresent(String.self, forKey: .assignedToUserID)
+        self.assignedAt = try c.decodeIfPresent(Date.self, forKey: .assignedAt)
+
+        var linked = try c.decodeIfPresent([UUID].self, forKey: .linkedContactIDs) ?? []
+        var defaults = try c.decodeIfPresent([UUID].self, forKey: .defaultRecipientIDs) ?? []
+
+        // v1.4 一次性迁移:老 defaultBuilderID 自动塞进新 arrays(只在 arrays 为空时)
+        if linked.isEmpty, defaults.isEmpty, let legacy = defaultBuilderID {
+            linked = [legacy]
+            defaults = [legacy]
+        }
+        self.linkedContactIDs = linked
+        self.defaultRecipientIDs = defaults
     }
 }
 

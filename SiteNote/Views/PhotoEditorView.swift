@@ -207,20 +207,34 @@ struct PhotoEditorView: View {
         appendStroke(points: points)
     }
 
-    /// 把一个矩形采样成 4 段直线 stroke。
+    /// 把一个矩形沿 4 条边采样多点 → PKDrawing 单 stroke。
+    /// **不能只传 5 个角点** — PKStrokePath 把 controlPoints 当 spline 平滑,
+    /// 5 个点会被插值成"水滴"形。每条边 ~20 个点(共 ~80)spline 才贴边。
     private func commitRect(from start: CGPoint, to end: CGPoint) {
         let r = boundingRect(from: start, to: end)
         guard r.width > 2, r.height > 2 else { return }
+        let perEdge = 20
         let corners = [
             CGPoint(x: r.minX, y: r.minY),
             CGPoint(x: r.maxX, y: r.minY),
             CGPoint(x: r.maxX, y: r.maxY),
             CGPoint(x: r.minX, y: r.maxY),
-            CGPoint(x: r.minX, y: r.minY)
+            CGPoint(x: r.minX, y: r.minY) // 闭合回起点
         ]
         var points: [PKStrokePoint] = []
-        for (i, c) in corners.enumerated() {
-            points.append(strokePoint(at: c, timeOffset: Double(i) * 0.05))
+        var t: TimeInterval = 0
+        for i in 0..<(corners.count - 1) {
+            let a = corners[i]
+            let b = corners[i + 1]
+            for s in 0...perEdge {
+                let f = Double(s) / Double(perEdge)
+                let pt = CGPoint(
+                    x: a.x + (b.x - a.x) * f,
+                    y: a.y + (b.y - a.y) * f
+                )
+                points.append(strokePoint(at: pt, timeOffset: t))
+                t += 0.005
+            }
         }
         appendStroke(points: points)
     }
@@ -386,85 +400,100 @@ struct PhotoEditorView: View {
         textItems.removeAll { $0.text.trimmingCharacters(in: .whitespaces).isEmpty }
     }
 
-    /// 底部 toolbar:三行 —— 颜色 / 工具模式 + 清空 / 取消+保存。
+    /// 底部 toolbar:4 行布局,避免 6 工具 + 3 操作挤一行导致溢出小屏。
+    /// Row 1: 颜色 / Row 2: 工具(均分宽度)/ Row 3: 撤销+重做+清空 / Row 4: 取消+保存
     private var unifiedToolBar: some View {
         VStack(spacing: 10) {
-            // Row 1: 颜色圆点
-            HStack(spacing: 12) {
-                ForEach([Color.red, Color.yellow, Color.green, Color.blue, Color.white, Color.black], id: \.self) { color in
-                    Button {
-                        selectedColor = color
-                        // 颜色变化同步到当前正在编辑的文字。
-                        if let id = focusedTextID,
-                           let idx = textItems.firstIndex(where: { $0.id == id }) {
-                            textItems[idx].color = UIColor(color)
-                        }
-                    } label: {
-                        Circle()
-                            .fill(color)
-                            .frame(width: 32, height: 32)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white, lineWidth: selectedColor == color ? 3 : 1)
-                            )
-                    }
-                    .accessibilityLabel("选择颜色")
-                }
-            }
-            .padding(.horizontal, 20)
-
-            // Row 2: 工具模式切换 + Undo/Redo + 清空
-            HStack(spacing: 8) {
-                toolButton(icon: "pencil.tip", label: "画笔", mode: .pen)
-                toolButton(icon: "line.diagonal", label: "直线", mode: .line)
-                toolButton(icon: "circle", label: "圆", mode: .circle)
-                toolButton(icon: "rectangle", label: "框", mode: .rect)
-                toolButton(icon: "textformat", label: "文字", mode: .text)
-                toolButton(icon: "eraser", label: "橡皮", mode: .eraser)
-                Spacer()
-                actionIconButton(systemName: "arrow.uturn.backward", labelText: String(localized: "撤销", locale: AppLanguageManager.currentLocale)) {
-                    performUndo()
-                }
-                actionIconButton(systemName: "arrow.uturn.forward", labelText: String(localized: "重做", locale: AppLanguageManager.currentLocale)) {
-                    performRedo()
-                }
-                actionIconButton(systemName: "trash", labelText: String(localized: "清空全部", locale: AppLanguageManager.currentLocale)) {
-                    showsClearConfirm = true
-                }
-            }
-            .padding(.horizontal, 20)
-
-            // Row 3: 取消 / 保存
-            HStack(spacing: 10) {
-                Button {
-                    dismiss()
-                } label: {
-                    Text("取消")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .strokeBorder(Color.white.opacity(0.5), lineWidth: 1)
-                        )
-                }
-
-                Button(action: save) {
-                    Text("保存")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 10)
+            colorRow
+            toolRow
+            actionIconsRow
+            bottomActionsRow
         }
         .padding(.top, 12)
+        .padding(.bottom, 10)
         .background(Color.black)
+    }
+
+    /// Row 1: 6 颜色,居中
+    private var colorRow: some View {
+        HStack(spacing: 14) {
+            ForEach([Color.red, Color.yellow, Color.green, Color.blue, Color.white, Color.black], id: \.self) { color in
+                Button {
+                    selectedColor = color
+                    if let id = focusedTextID,
+                       let idx = textItems.firstIndex(where: { $0.id == id }) {
+                        textItems[idx].color = UIColor(color)
+                    }
+                } label: {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 26, height: 26)
+                        .overlay(
+                            Circle().stroke(Color.white, lineWidth: selectedColor == color ? 3 : 1)
+                        )
+                        .padding(6) // 扩大点击命中区
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(String(localized: "选择颜色", locale: AppLanguageManager.currentLocale))
+            }
+        }
+    }
+
+    /// Row 2: 6 工具,frame maxWidth infinity 均分宽度,小屏也不溢出
+    private var toolRow: some View {
+        HStack(spacing: 4) {
+            toolButton(icon: "pencil.tip", label: "画笔", mode: .pen)
+            toolButton(icon: "line.diagonal", label: "直线", mode: .line)
+            toolButton(icon: "circle", label: "圆", mode: .circle)
+            toolButton(icon: "square", label: "框", mode: .rect)
+            toolButton(icon: "textformat", label: "文字", mode: .text)
+            toolButton(icon: "eraser", label: "橡皮", mode: .eraser)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    /// Row 3: 撤销 / 重做 / 清空,居中
+    private var actionIconsRow: some View {
+        HStack(spacing: 10) {
+            actionIconButton(systemName: "arrow.uturn.backward", labelText: String(localized: "撤销", locale: AppLanguageManager.currentLocale)) {
+                performUndo()
+            }
+            actionIconButton(systemName: "arrow.uturn.forward", labelText: String(localized: "重做", locale: AppLanguageManager.currentLocale)) {
+                performRedo()
+            }
+            actionIconButton(systemName: "trash", labelText: String(localized: "清空全部", locale: AppLanguageManager.currentLocale)) {
+                showsClearConfirm = true
+            }
+        }
+    }
+
+    /// Row 4: 取消 / 保存,full width 二等分
+    private var bottomActionsRow: some View {
+        HStack(spacing: 10) {
+            Button {
+                dismiss()
+            } label: {
+                Text(String(localized: "取消", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(Color.white.opacity(0.5), lineWidth: 1)
+                    )
+            }
+            Button(action: save) {
+                Text(String(localized: "保存", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+        .padding(.horizontal, 16)
     }
 
     /// 图标按钮(撤销/重做/清空 共用样式)。和 toolButton 的尺寸视觉对齐。
@@ -512,12 +541,13 @@ struct PhotoEditorView: View {
         } label: {
             VStack(spacing: 2) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                 Text(label)
                     .font(.system(size: 10))
             }
             .foregroundStyle(active ? Color.black : Color.white)
-            .frame(width: 46, height: 46)
+            .frame(maxWidth: .infinity)  // 均分宽度,小屏不溢出
+            .frame(height: 44)
             .background(active ? Color.white : Color.white.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }

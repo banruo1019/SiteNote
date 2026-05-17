@@ -241,7 +241,11 @@ struct PDFExportView: View {
                     endDate: endDate,
                     title: title
                 )
-                let archivedURL = (try? ReportArchiveService.archive(sourceURL: url)) ?? url
+                // 按选中的工地分文件夹存(没选 = "全部工地" → "未分类")
+                let archivedURL = (try? ReportArchiveService.archive(
+                    sourceURL: url,
+                    projectFolder: selectedTag
+                )) ?? url
                 exportURL = archivedURL
             } catch {
                 errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription

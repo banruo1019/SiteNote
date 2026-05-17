@@ -259,6 +259,26 @@ final class HomeViewModel {
         enrichTasks[noteID, default: []].append(bgTask)
     }
 
+    /// 上滑取消录音:停止采集、删音频文件、清状态,**不**保存任何 note。
+    /// 调用方:HeroButtons 的 DragGesture 检测到向上滑动超阈值时调。
+    func cancelRecording() {
+        guard isRecording else { return }
+        maxDurationGuard?.cancel()
+        maxDurationGuard = nil
+
+        let result = voice.stopCapturing()
+        isRecording = false
+        currentAudioLevel = 0
+        recordingStartTime = nil
+        partialTranscription = ""
+
+        // 删掉刚录的音频文件(用户主动放弃,不要占空间)
+        if let path = result.audioRelativePath,
+           let url = VoiceCaptureService.absoluteURL(forRelative: path) {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     /// 后台补齐:双语回退转写、实时 GPS、天气。失败静默降级。
     /// E1.3:严格串行——双语回退 → polish。回退失败时不动 transcription,
     /// commitDirectly 里那条 polish Task 自己负责把 polish 应用上去(基于原文)。
@@ -546,6 +566,10 @@ final class HomeViewModel {
         // B6:insert 后立刻显式落盘。autosave 也会落,但同 task 的 polish 一秒后回来
         // 改这条 note,在 autosave 触发前 app 被挂起 → polish 改动丢失。显式 save 缩短脏窗口。
         try? modelContext?.save()
+        // v1.4 巡检 session — 如果有 active session,把这条 note 绑过去
+        if let ctx = modelContext {
+            InspectionSessionManager.shared.attachIfNeeded(noteID: note.id, in: ctx)
+        }
         NotificationService.shared.schedule(for: note)
 
         // GPS 学习:若保存时已有 siteTag + 坐标,把这条样本喂给 centroid。

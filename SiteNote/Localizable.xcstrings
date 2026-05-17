@@ -178,6 +178,9 @@
     "· 今天" : {
 
     },
+    "(%@)" : {
+
+    },
     "(不绑定)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -572,6 +575,9 @@
         }
       }
     },
+    "%@ · 巡检报告" : {
+
+    },
     "%@ / %@" : {
       "localizations" : {
         "zh-Hans" : {
@@ -626,6 +632,9 @@
         }
       }
     },
+    "%@ 还没有联系人。点下方「新建收件人」添加。" : {
+
+    },
     "%@(点击修改)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -639,6 +648,16 @@
     },
     "%lld" : {
 
+    },
+    "%lld / %lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld / %2$lld"
+          }
+        }
+      }
     },
     "%lld / %lld 成员" : {
       "localizations" : {
@@ -821,6 +840,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld items · confirmed"
+          }
+        }
+      }
+    },
+    "%lld 条 notes · %lld 张照片" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld 条 notes · %2$lld 张照片"
           }
         }
       }
@@ -1027,6 +1056,9 @@
           }
         }
       }
+    },
+    "→ %@" : {
+
     },
     "|" : {
 
@@ -1760,16 +1792,10 @@
         }
       }
     },
-    "Apple ✓" : {
-
-    },
     "Apple Intelligence 不可用" : {
 
     },
     "Apple Intelligence 已启用" : {
-
-    },
-    "Apple Intelligence 文字润色开关。" : {
 
     },
     "Apple Watch / CarPlay" : {
@@ -1936,6 +1962,9 @@
         }
       }
     },
+    "example@email.com" : {
+
+    },
     "FFL steel / Roof slab / Level 1 reo" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2027,6 +2056,7 @@
 
     },
     "Inspection PDF 末页打印的 “This inspection does not include …” 段落。空则用 QDE 那套标准 5 条。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2300,6 +2330,12 @@
         }
       }
     },
+    "PDF 文件无法读取,请稍后重试。" : {
+
+    },
+    "PDF 文件无法读取,请重试生成。" : {
+
+    },
     "PDF 无效或没有页面。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2355,6 +2391,9 @@
         }
       }
     },
+    "PDF 巡检报告" : {
+
+    },
     "PDF 巡检日志" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2365,6 +2404,9 @@
           }
         }
       }
+    },
+    "PDF 还在生成,请稍候。" : {
+
     },
     "PDF 选完会跳出页面预览,点哪一页就把那一页转成图片。" : {
       "extractionState" : "manual",
@@ -2387,6 +2429,9 @@
           }
         }
       }
+    },
+    "PDF 预览" : {
+
     },
     "PM / 工长 / Builder" : {
       "extractionState" : "manual",
@@ -2780,6 +2825,9 @@
         }
       }
     },
+    "上划取消" : {
+
+    },
     "上次分享" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2813,7 +2861,7 @@
         }
       }
     },
-    "下滑取消" : {
+    "下方勾选收件人或填临时邮箱" : {
 
     },
     "不利天气日" : {
@@ -2964,6 +3012,9 @@
           }
         }
       }
+    },
+    "临时邮箱:" : {
+
     },
     "主照片" : {
       "extractionState" : "manual",
@@ -3135,6 +3186,9 @@
           }
         }
       }
+    },
+    "仅存档,不发邮件" : {
+
     },
     "仅本地 Apple Intelligence" : {
       "extractionState" : "manual",
@@ -3335,6 +3389,9 @@
           }
         }
       }
+    },
+    "会用 %@ 的信息开一个新巡检 session,不复制原报告里的 notes。" : {
+
     },
     "位置" : {
       "extractionState" : "manual",
@@ -3605,6 +3662,9 @@
           }
         }
       }
+    },
+    "先选工地。收件人会自动筛选当前工地的公司联系人。" : {
+
     },
     "免责声明" : {
       "extractionState" : "manual",
@@ -3884,6 +3944,9 @@
           }
         }
       }
+    },
+    "再发一次邮件" : {
+
     },
     "最多 10 人 · 第一版免费" : {
 
@@ -4289,6 +4352,9 @@
         }
       }
     },
+    "删除(本地+iCloud)" : {
+
+    },
     "删除平面图?" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4457,6 +4523,9 @@
         }
       }
     },
+    "包含的 Notes(%lld)" : {
+
+    },
     "即将上线" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4478,6 +4547,9 @@
           }
         }
       }
+    },
+    "即将推出" : {
+
     },
     "原因 / 备注" : {
       "extractionState" : "manual",
@@ -4588,6 +4660,9 @@
           }
         }
       }
+    },
+    "发送给" : {
+
     },
     "发送邀请" : {
 
@@ -4703,6 +4778,9 @@
       }
     },
     "可看团队全部、只能改自己的报告" : {
+
+    },
+    "可能是 notes 已被删除,或本报告就是空的草稿。" : {
 
     },
     "可选。填了之后这个工地就有 GPS 锚点,以后在这附近录的速记会自动建议归到这里。" : {
@@ -4847,7 +4925,13 @@
     "团队全部" : {
 
     },
+    "团队共享" : {
+
+    },
     "团队名称" : {
+
+    },
+    "团队成员可以在他们的报告页看到此份报告。CloudKit Sharing 还在开发中。" : {
 
     },
     "团队邀请" : {
@@ -5056,6 +5140,9 @@
         }
       }
     },
+    "处理中..." : {
+
+    },
     "备份出错" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5121,6 +5208,9 @@
           }
         }
       }
+    },
+    "复制成新巡检" : {
+
     },
     "复杂的标签层级 / 颜色 / 优先级" : {
       "extractionState" : "manual",
@@ -5222,6 +5312,9 @@
           }
         }
       }
+    },
+    "如 level 1 reo" : {
+
     },
     "如 RFI、缺陷、施工、开会、紧急" : {
       "extractionState" : "manual",
@@ -5361,6 +5454,15 @@
         }
       }
     },
+    "完成一次巡检 session 后,报告会自动出现在这里。" : {
+
+    },
+    "完成后自动出 PDF 发邮件。" : {
+
+    },
+    "完成巡检" : {
+
+    },
     "定位权限未授予" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5382,6 +5484,9 @@
           }
         }
       }
+    },
+    "客户" : {
+
     },
     "客户(如 HRK)" : {
       "extractionState" : "manual",
@@ -5618,6 +5723,9 @@
           }
         }
       }
+    },
+    "属于 %@" : {
+
     },
     "工人" : {
       "extractionState" : "manual",
@@ -5955,6 +6063,9 @@
         }
       }
     },
+    "工程师工作流以巡检为单位。" : {
+
+    },
     "左滑删除。点行可以改颜色和名字。分类是全局的,不分工地。颜色会用在平面图图钉上。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5989,6 +6100,7 @@
       }
     },
     "左滑永久删除 · 右滑恢复。永久删除不可撤销。\n超过 30 天的会在下次启动时自动永久删除。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -6089,6 +6201,9 @@
     "已加入团队" : {
 
     },
+    "已发 %@" : {
+
+    },
     "已取消" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6170,6 +6285,9 @@
           }
         }
       }
+    },
+    "已收 %d 条" : {
+
     },
     "已有 %lld 条" : {
       "extractionState" : "manual",
@@ -6506,6 +6624,9 @@
         }
       }
     },
+    "开始 %@" : {
+
+    },
     "开始试录" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6516,6 +6637,9 @@
           }
         }
       }
+    },
+    "开始巡检" : {
+
     },
     "引擎" : {
       "extractionState" : "manual",
@@ -6666,6 +6790,9 @@
         }
       }
     },
+    "当前设备未配置邮箱账号。请到 iOS 设置 → 邮件 添加账号后重试。" : {
+
+    },
     "当天早上" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6795,6 +6922,9 @@
           }
         }
       }
+    },
+    "录的每条都属于某次巡检," : {
+
     },
     "录音" : {
       "extractionState" : "manual",
@@ -7197,6 +7327,7 @@
       }
     },
     "打开系统设置" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7304,6 +7435,15 @@
         }
       }
     },
+    "报告信息" : {
+
+    },
+    "报告信息(可改后确认)" : {
+
+    },
+    "报告本身会移入垃圾桶。关联的 notes 不会删,已归档的 PDF 也会保留在「我的报告」。" : {
+
+    },
     "报告编号:%@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7405,6 +7545,9 @@
           }
         }
       }
+    },
+    "按住麦克风说话,或点相机拍照,本次巡检的内容会出现在这里。" : {
+
     },
     "按工地" : {
       "extractionState" : "manual",
@@ -7536,6 +7679,9 @@
     "提前提醒" : {
 
     },
+    "提示" : {
+
+    },
     "提醒" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7590,6 +7736,12 @@
           }
         }
       }
+    },
+    "搜索报告(编号 / 项目 / 类型)" : {
+
+    },
+    "搜索本次巡检" : {
+
     },
     "搜索记录" : {
 
@@ -7677,6 +7829,9 @@
         }
       }
     },
+    "操作" : {
+
+    },
     "操作失败" : {
 
     },
@@ -7690,6 +7845,9 @@
           }
         }
       }
+    },
+    "收件人" : {
+
     },
     "收起高级选项" : {
       "extractionState" : "manual",
@@ -7714,6 +7872,7 @@
       }
     },
     "改时间后立刻对所有未完成速记重新排推送。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8449,6 +8608,9 @@
         }
       }
     },
+    "暂无工地预设" : {
+
+    },
     "暂时不可用" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8559,6 +8721,9 @@
         }
       }
     },
+    "未发" : {
+
+    },
     "未命名" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8603,6 +8768,9 @@
         }
       }
     },
+    "未填类型" : {
+
+    },
     "未完成" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8614,7 +8782,7 @@
         }
       }
     },
-    "未就绪" : {
+    "未建工地" : {
 
     },
     "未找到此工地的预设。可在 设置 → 工地预设 添加。" : {
@@ -8738,6 +8906,9 @@
         }
       }
     },
+    "未选工地" : {
+
+    },
     "未配置" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8850,6 +9021,9 @@
           }
         }
       }
+    },
+    "本次巡检还没记录" : {
+
     },
     "机型或 iOS 不支持" : {
       "extractionState" : "manual",
@@ -9289,6 +9463,9 @@
         }
       }
     },
+    "正在巡检" : {
+
+    },
     "正文" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9404,6 +9581,12 @@
           }
         }
       }
+    },
+    "没有关联的 notes" : {
+
+    },
+    "没有匹配的报告" : {
+
     },
     "没有匹配的速记" : {
       "extractionState" : "manual",
@@ -9671,9 +9854,6 @@
         }
       }
     },
-    "清空所有速记(含垃圾桶)、录音、照片、平面图、工地 / 分类 / 模板 / 条款 / 术语 / 快捷词。**不可恢复**。建议先到「报告与导出」→「导出全部数据为 ZIP」做备份再清。按下后 3 秒内可取消。" : {
-
-    },
     "清空时出错:%@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9863,6 +10043,9 @@
           }
         }
       }
+    },
+    "状态" : {
+
     },
     "状态: ✓ 已完成" : {
       "extractionState" : "manual",
@@ -10210,6 +10393,9 @@
         }
       }
     },
+    "确定开始新巡检?" : {
+
+    },
     "确定要重置数据库吗?" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10220,6 +10406,15 @@
           }
         }
       }
+    },
+    "确认后发送邮件给收件人" : {
+
+    },
+    "确认完成巡检" : {
+
+    },
+    "确认完成巡检并发邮件" : {
+
     },
     "视觉模型" : {
       "extractionState" : "manual",
@@ -10458,6 +10653,12 @@
         }
       }
     },
+    "继续拍" : {
+
+    },
+    "编号" : {
+
+    },
     "编辑 caption" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10601,6 +10802,9 @@
         }
       }
     },
+    "联系人簿是空的。到 设置 → 联系人簿 添加 Builder/Foreman,或在下方手输临时邮箱。" : {
+
+    },
     "联系方式" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10667,6 +10871,9 @@
         }
       }
     },
+    "自动分配" : {
+
+    },
     "自定义 App 图标 / 主题色" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10721,6 +10928,9 @@
           }
         }
       }
+    },
+    "草稿" : {
+
     },
     "草稿(\\(drafts.count))" : {
       "extractionState" : "manual",
@@ -10957,6 +11167,9 @@
         }
       }
     },
+    "试试换个关键词。" : {
+
+    },
     "该联系人没有电话号码" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11081,6 +11294,9 @@
         }
       }
     },
+    "请先勾选收件人或填临时邮箱;或关掉「发送邮件」选项仅存档。" : {
+
+    },
     "请先在「设置 → 工地资源 → 工地平面图」上传。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11114,6 +11330,9 @@
         }
       }
     },
+    "请到 iOS 设置 → 邮件 添加账号后再试。" : {
+
+    },
     "请到 iOS 设置 → 邮件 添加邮箱账号后再试,或先分享 PDF 通过其他方式发送。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11126,6 +11345,7 @@
       }
     },
     "请到「系统设置」打开 SiteNote 的通知权限,否则下面这些时间设置都不会生效。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -11291,6 +11511,9 @@
         }
       }
     },
+    "巡检中" : {
+
+    },
     "巡检人:%@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11411,6 +11634,9 @@
           }
         }
       }
+    },
+    "巡检类型" : {
+
     },
     "近期没有待办日程" : {
       "extractionState" : "manual",
@@ -11818,6 +12044,12 @@
         }
       }
     },
+    "选工地 + 录音拍照,完成出 PDF" : {
+
+    },
+    "选择工地" : {
+
+    },
     "选择常用类型" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11909,10 +12141,14 @@
         }
       }
     },
+    "选项" : {
+
+    },
     "通知" : {
 
     },
     "通知未授权,提醒不会响" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12111,6 +12347,9 @@
         }
       }
     },
+    "重新预览 PDF" : {
+
+    },
     "重派" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12209,6 +12448,9 @@
           }
         }
       }
+    },
+    "长按开始录音,松手保存,上划取消" : {
+
     },
     "长按拖动可以排序;左滑删除。" : {
       "extractionState" : "manual",
@@ -12389,6 +12631,9 @@
         }
       }
     },
+    "项目" : {
+
+    },
     "项目信息" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12399,6 +12644,9 @@
           }
         }
       }
+    },
+    "项目名" : {
+
     },
     "项目名(如 Proposed duplex)" : {
       "extractionState" : "manual",
@@ -12423,6 +12671,9 @@
       }
     },
     "项目经理快速记录 + 出 PDF 巡检日志。" : {
+
+    },
+    "项目编号" : {
 
     },
     "项目编号(如 25159)" : {
@@ -12458,6 +12709,9 @@
         }
       }
     },
+    "预览完整 PDF" : {
+
+    },
     "颜色" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12481,6 +12735,7 @@
       }
     },
     "首次开启提醒时会请求通知授权。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

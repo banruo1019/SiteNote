@@ -613,7 +613,11 @@ struct InspectionFormView: View {
         let notes = selectedNotes
         do {
             let url = try await InspectionReportPDFBuilder.build(report: report, notes: notes)
-            let archivedURL = (try? ReportArchiveService.archive(sourceURL: url)) ?? url
+            // 按 projectNo 分文件夹存(空 → "未分类")。Engineer 报告页用这个 folder 分组。
+            let archivedURL = (try? ReportArchiveService.archive(
+                sourceURL: url,
+                projectFolder: report.projectNo
+            )) ?? url
             report.lastPDFPath = archivedURL.path
             report.updatedAt = Date()
             exportContext = ExportContext(pdfURL: archivedURL)
