@@ -70,8 +70,6 @@ struct EngineerScheduleView: View {
                             calendarGrid
                             divider
                             dayDetailSection
-                            divider
-                            upcomingSection
                         }
                     }
                 }
@@ -107,17 +105,14 @@ struct EngineerScheduleView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "plus")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                     Text(String(localized: "新建", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 12, weight: .semibold))
                 }
-                .foregroundStyle(Ink.fg)
+                .foregroundStyle(Ink.bg)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Ink.line2, lineWidth: 1)
-                )
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Ink.fg))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -134,161 +129,27 @@ struct EngineerScheduleView: View {
         .padding(.bottom, 16)
     }
 
-    /// 工地过滤 menu(capsule)。默认"全部工地"。
+    /// 工地过滤 menu — 共享组件 `SiteFilterMenu`。
     private var siteFilterMenu: some View {
-        Menu {
-            Button {
-                siteFilter = nil
-            } label: {
-                if siteFilter == nil {
-                    Label(
-                        String(localized: "全部工地", locale: AppLanguageManager.currentLocale),
-                        systemImage: "checkmark"
-                    )
-                } else {
-                    Text(String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
-                }
-            }
-            Divider()
-            ForEach(allSiteTags, id: \.self) { tag in
-                Button {
-                    siteFilter = tag
-                } label: {
-                    if siteFilter == tag {
-                        Label(tag, systemImage: "checkmark")
-                    } else {
-                        Text(tag)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "building.2")
-                    .font(.system(size: 11, weight: .semibold))
-                Text(siteFilter ?? String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-            }
-            .foregroundStyle(Ink.fg)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule().fill(Ink.card)
-            )
-        }
+        SiteFilterMenu(allTags: allSiteTags, selection: $siteFilter)
     }
 
     // MARK: - Month header
 
     private var monthHeader: some View {
-        HStack(spacing: 0) {
-            Button {
-                if let prev = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        currentMonth = prev
-                    }
-                }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Ink.fg2)
-                    .frame(width: 40, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text(monthLabel)
-                .font(.system(size: 16, weight: .semibold))
-                .tracking(-0.2)
-                .foregroundStyle(Ink.fg)
-                .monospacedDigit()
-
-            Spacer()
-
-            Button {
-                if let next = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        currentMonth = next
-                    }
-                }
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Ink.fg2)
-                    .frame(width: 40, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-    }
-
-    private var monthLabel: String {
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        f.setLocalizedDateFormatFromTemplate("yMMMM")
-        return f.string(from: currentMonth)
+        MonthNavigationHeader(currentMonth: $currentMonth)
     }
 
     // MARK: - Calendar grid
 
-    /// 当月的 cell 列表(含为对齐第一行的占位 cell)。
-    /// 用 Calendar.current.firstWeekday 决定第一列是星期几,跟系统设置一致。
-    private var calendarCells: [CalendarCell] {
-        let cal = Calendar.current
-        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: currentMonth)) ?? currentMonth
-        let range = cal.range(of: .day, in: .month, for: monthStart) ?? 1..<2
-        let firstWeekdayOfMonth = cal.component(.weekday, from: monthStart) // 1...7
-        let leadingEmpty = (firstWeekdayOfMonth - cal.firstWeekday + 7) % 7
-
-        var cells: [CalendarCell] = []
-        for _ in 0..<leadingEmpty {
-            cells.append(CalendarCell(date: nil))
-        }
-        for day in range {
-            if let d = cal.date(byAdding: .day, value: day - 1, to: monthStart) {
-                cells.append(CalendarCell(date: d))
-            }
-        }
-        // 末尾占位到 42(6 行)— 月视图固定高度,避免月切换时高度跳变。
-        while cells.count < 42 {
-            cells.append(CalendarCell(date: nil))
-        }
-        return cells
-    }
-
-    private var weekdayLabels: [String] {
-        let cal = Calendar.current
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        let symbols = f.veryShortStandaloneWeekdaySymbols ?? [] // index 0 = Sunday
-        guard symbols.count == 7 else { return [] }
-        let offset = cal.firstWeekday - 1
-        return (0..<7).map { symbols[(offset + $0) % 7] }
-    }
-
     private var calendarGrid: some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
         return VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { _, label in
-                    Text(label)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Ink.fgDim)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.horizontal, 16)
+            WeekdayHeaderRow()
 
             LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(Array(calendarCells.enumerated()), id: \.offset) { _, cell in
-                    cellView(cell)
+                ForEach(Array(CalendarHelpers.monthCells(for: currentMonth).enumerated()), id: \.offset) { _, date in
+                    cellView(for: date)
                 }
             }
             .padding(.horizontal, 16)
@@ -297,58 +158,57 @@ struct EngineerScheduleView: View {
     }
 
     @ViewBuilder
-    private func cellView(_ cell: CalendarCell) -> some View {
-        if let date = cell.date {
+    private func cellView(for cellDate: Date?) -> some View {
+        if let date = cellDate {
             let cal = Calendar.current
             let isToday = cal.isDateInToday(date)
             let isSelected = cal.isDate(date, inSameDayAs: selectedDate)
-            let hasItems = hasSchedules(on: date)
+            let dayCount = scheduleCount(on: date)
             let day = cal.component(.day, from: date)
+            // M1:今天 = 黑圆填充;选中(非今天)= 灰底圆;否则透明
+            let bgFill: Color = isToday ? Ink.fg : (isSelected ? Ink.card : .clear)
+            let textColor: Color = isToday ? Ink.bg : Ink.fg
 
             Button {
                 withAnimation(.easeInOut(duration: 0.12)) {
                     selectedDate = cal.startOfDay(for: date)
                 }
             } label: {
-                ZStack {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Ink.fg)
-                    } else if isToday {
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Ink.accentBlue, lineWidth: 1)
+                VStack(spacing: 3) {
+                    ZStack {
+                        Circle()
+                            .fill(bgFill)
+                            .frame(width: 26, height: 26)
+                        Text("\(day)")
+                            .font(.system(size: 13, weight: isToday ? .semibold : .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(textColor)
                     }
-                    Text("\(day)")
-                        .font(.system(size: 14, weight: isToday || isSelected ? .semibold : .regular))
-                        .monospacedDigit()
-                        .foregroundStyle(cellTextColor(isSelected: isSelected, isToday: isToday))
-                    if hasItems {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Circle()
-                                    .fill(isSelected ? Ink.bg : Ink.accentBlue)
-                                    .frame(width: 4, height: 4)
-                                    .padding(.trailing, 6)
-                                    .padding(.bottom, 4)
-                            }
+                    HStack(spacing: 2.5) {
+                        ForEach(0..<min(dayCount, 3), id: \.self) { _ in
+                            Circle()
+                                .fill(isToday ? Ink.bg : Ink.accentBlue)
+                                .frame(width: 4, height: 4)
                         }
                     }
+                    .frame(height: 4)
                 }
-                .frame(height: 38)
+                .frame(height: 42)
+                .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         } else {
-            Color.clear.frame(height: 38)
+            Color.clear.frame(height: 42)
         }
     }
 
-    private func cellTextColor(isSelected: Bool, isToday: Bool) -> Color {
-        if isSelected { return Ink.bg }
-        if isToday { return Ink.accentBlue }
-        return Ink.fg
+    /// 某一天落在月格里的 schedule 条数(用于决定 dot 数,最多 3)。
+    private func scheduleCount(on date: Date) -> Int {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: date)
+        guard let end = cal.date(byAdding: .day, value: 1, to: start) else { return 0 }
+        return filteredSchedules.filter { $0.scheduledDate >= start && $0.scheduledDate < end }.count
     }
 
     // MARK: - 当日详情
@@ -379,189 +239,133 @@ struct EngineerScheduleView: View {
     }
 
     private var dayDetailSection: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 14) {
+            // 日期主标题:周三 5 月 17 · 今天
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(selectedDateLabel)
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.5)
-                    .textCase(.uppercase)
-                    .foregroundStyle(Ink.fgDim)
+                    .font(.system(size: 15, weight: .semibold))
+                    .tracking(-0.2)
+                    .foregroundStyle(Ink.fg)
+                if Calendar.current.isDateInToday(selectedDate) {
+                    Text(String(localized: "· 今天", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                }
                 Spacer()
             }
+            .padding(.horizontal, 24)
 
             // 当日巡检日程
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "当日巡检日程", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Ink.fg2)
-                    Spacer()
-                    Text(String(localized: "\(schedulesOnSelectedDate.count) 项", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.dim)
-                        .monospacedDigit()
-                }
-
+            VStack(alignment: .leading, spacing: 6) {
+                sectionMiniHeader(
+                    String(localized: "当日巡检日程", locale: AppLanguageManager.currentLocale),
+                    count: schedulesOnSelectedDate.count
+                )
                 if schedulesOnSelectedDate.isEmpty {
                     emptyDayState
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(schedulesOnSelectedDate) { s in
-                            scheduleRow(s)
+                    cardGroup {
+                        VStack(spacing: 0) {
+                            ForEach(Array(schedulesOnSelectedDate.enumerated()), id: \.element.id) { idx, s in
+                                scheduleRow(s, isLast: idx == schedulesOnSelectedDate.count - 1)
+                            }
                         }
                     }
                 }
             }
 
-            // 当日报告
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(String(localized: "当日报告", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Ink.fg2)
-                    Spacer()
-                    Text(String(localized: "\(reportsOnSelectedDate.count) 项", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.dim)
-                        .monospacedDigit()
-                }
-
+            // 当日巡检报告
+            VStack(alignment: .leading, spacing: 6) {
+                sectionMiniHeader(
+                    String(localized: "当日巡检报告", locale: AppLanguageManager.currentLocale),
+                    count: reportsOnSelectedDate.count
+                )
                 if reportsOnSelectedDate.isEmpty {
                     Text(String(localized: "当日无报告", locale: AppLanguageManager.currentLocale))
                         .font(.system(size: 13))
                         .foregroundStyle(Ink.fgDim)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
                 } else {
-                    VStack(spacing: 0) {
-                        ForEach(reportsOnSelectedDate) { r in
-                            reportRow(r)
+                    cardGroup {
+                        VStack(spacing: 0) {
+                            ForEach(Array(reportsOnSelectedDate.enumerated()), id: \.element.id) { idx, r in
+                                reportRow(r, isLast: idx == reportsOnSelectedDate.count - 1)
+                            }
                         }
                     }
                 }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
+        .padding(.top, 14)
         .padding(.bottom, 20)
     }
 
-    private func reportRow(_ r: InspectionReport) -> some View {
+    /// "当日巡检日程" 这种 mini 段头(uppercase + count chip)。
+    private func sectionMiniHeader(_ title: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(Ink.fgDim)
+            Spacer()
+            Text("\(count)")
+                .font(.system(size: 10, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(Ink.fg2)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Ink.card)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 4)
+    }
+
+    /// 描边圆角卡片容器,用于当日两段内容。
+    private func cardGroup<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Ink.line, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, 24)
+    }
+
+    private func reportRow(_ r: InspectionReport, isLast: Bool) -> some View {
         NavigationLink {
             InspectionFormView(report: r)
         } label: {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "doc.text")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(Ink.fg2)
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(r.reportNo.isEmpty ? String(localized: "(无编号)", locale: AppLanguageManager.currentLocale) : r.reportNo)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Ink.fg)
-                        .lineLimit(1)
-                    if !r.projectNo.isEmpty {
-                        Text(r.projectNo)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Ink.fgDim)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.dim)
-            }
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
+            InspectionReportRowContent(report: r, isLast: isLast)
         }
         .buttonStyle(.plain)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Ink.line).frame(height: 1)
-        }
     }
 
+    /// 友好日期标签 — "周三 5 月 17"。
     private var selectedDateLabel: String {
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        f.setLocalizedDateFormatFromTemplate("yMMMd")
-        return f.string(from: selectedDate)
+        Formatters.weekdayMonthDay.string(from: selectedDate)
     }
 
     private var emptyDayState: some View {
-        HStack {
-            Text(String(localized: "今天没有安排", locale: AppLanguageManager.currentLocale))
-                .font(.system(size: 13))
-                .foregroundStyle(Ink.fgDim)
-            Spacer()
-        }
-        .padding(.vertical, 12)
+        Text(String(localized: "这天没有日程", locale: AppLanguageManager.currentLocale))
+            .font(.system(size: 13))
+            .foregroundStyle(Ink.fgDim)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 10)
     }
 
-    private func scheduleRow(_ s: SiteVisitSchedule) -> some View {
+    private func scheduleRow(_ s: SiteVisitSchedule, isLast: Bool) -> some View {
         Button {
             editingSchedule = s
             showEditor = true
         } label: {
-            HStack(alignment: .top, spacing: 12) {
-                // 左侧 vertical bar
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(statusColor(s.status))
-                    .frame(width: 3)
-                    .frame(maxHeight: .infinity)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        Text(timeLabel(s))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Ink.fgDim)
-                            .monospacedDigit()
-                        if s.status == .completed {
-                            Text(String(localized: "已完成", locale: AppLanguageManager.currentLocale))
-                                .font(.system(size: 10, weight: .semibold))
-                                .tracking(0.5)
-                                .textCase(.uppercase)
-                                .foregroundStyle(Ink.fgDim)
-                        } else if s.status == .cancelled {
-                            Text(String(localized: "已取消", locale: AppLanguageManager.currentLocale))
-                                .font(.system(size: 10, weight: .semibold))
-                                .tracking(0.5)
-                                .textCase(.uppercase)
-                                .foregroundStyle(Ink.dim)
-                        }
-                    }
-                    Text(s.title.isEmpty ? String(localized: "(无标题)", locale: AppLanguageManager.currentLocale) : s.title)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(s.status == .cancelled ? Ink.fgDim : Ink.fg)
-                        .strikethrough(s.status == .cancelled)
-                        .lineLimit(2)
-                    if let tag = s.siteTag, !tag.isEmpty {
-                        Text(tag)
-                            .font(.system(size: 12))
-                            .foregroundStyle(Ink.fgDim)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                // 右侧完成 / 未完成 icon — 直接点切换状态
-                Button {
-                    toggleCompletion(s)
-                } label: {
-                    Image(systemName: s.status == .completed ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 22, weight: .regular))
-                        .foregroundStyle(s.status == .completed ? Ink.fg : Ink.dim)
-                        .frame(width: 40, height: 40)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
+            ScheduleRowContent(schedule: s, isLast: isLast)
         }
         .buttonStyle(.plain)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Ink.line).frame(height: 1)
-        }
         .contextMenu {
             if s.status != .completed {
                 Button {
@@ -602,127 +406,6 @@ struct EngineerScheduleView: View {
                 )
             }
         }
-    }
-
-    private func statusColor(_ status: ScheduleStatus) -> Color {
-        switch status {
-        case .pending: return Ink.accentBlue
-        case .completed: return Ink.green
-        case .cancelled: return Ink.dim
-        }
-    }
-
-    private func timeLabel(_ s: SiteVisitSchedule) -> String {
-        guard let t = s.scheduledTime else {
-            return String(localized: "全天", locale: AppLanguageManager.currentLocale)
-        }
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        f.dateFormat = "HH:mm"
-        return f.string(from: t)
-    }
-
-    // MARK: - 即将到来
-
-    /// 未删除 + pending + scheduledDate >= 今天起;按 fireDate 升序前 10。
-    private var upcomingSchedules: [SiteVisitSchedule] {
-        let today = Calendar.current.startOfDay(for: Date())
-        return filteredSchedules
-            .filter { $0.status == .pending && $0.scheduledDate >= today }
-            .sorted { $0.fireDate < $1.fireDate }
-            .prefix(10)
-            .map { $0 }
-    }
-
-    private var upcomingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "即将到来", locale: AppLanguageManager.currentLocale))
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.5)
-                .textCase(.uppercase)
-                .foregroundStyle(Ink.fgDim)
-
-            if upcomingSchedules.isEmpty {
-                Text(String(localized: "近期没有待办日程", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Ink.fgDim)
-                    .padding(.vertical, 14)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(upcomingSchedules) { s in
-                        upcomingRow(s)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
-        .padding(.bottom, 32)
-    }
-
-    private func upcomingRow(_ s: SiteVisitSchedule) -> some View {
-        Button {
-            // 跳到该日期 + 直接进入编辑
-            withAnimation(.easeInOut(duration: 0.15)) {
-                selectedDate = Calendar.current.startOfDay(for: s.scheduledDate)
-                currentMonth = s.scheduledDate
-            }
-            editingSchedule = s
-            showEditor = true
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(relativeDateLabel(s.scheduledDate))
-                        .font(.system(size: 12, weight: .semibold))
-                        .tracking(0.3)
-                        .textCase(.uppercase)
-                        .foregroundStyle(Ink.fg)
-                        .monospacedDigit()
-                    Text(timeLabel(s))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Ink.fgDim)
-                        .monospacedDigit()
-                }
-                .frame(width: 76, alignment: .leading)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(s.title.isEmpty ? String(localized: "(无标题)", locale: AppLanguageManager.currentLocale) : s.title)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Ink.fg)
-                        .lineLimit(2)
-                    if let tag = s.siteTag, !tag.isEmpty {
-                        Text(tag)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Ink.fgDim)
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.dim)
-            }
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Ink.line).frame(height: 1)
-        }
-    }
-
-    /// "今天" / "明天" / "MMM d"
-    private func relativeDateLabel(_ date: Date) -> String {
-        let cal = Calendar.current
-        if cal.isDateInToday(date) {
-            return String(localized: "今天", locale: AppLanguageManager.currentLocale)
-        }
-        if cal.isDateInTomorrow(date) {
-            return String(localized: "明天", locale: AppLanguageManager.currentLocale)
-        }
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        f.setLocalizedDateFormatFromTemplate("MMMd")
-        return f.string(from: date)
     }
 
     // MARK: - Divider
@@ -770,12 +453,6 @@ struct EngineerScheduleView: View {
         try? modelContext.save()
         NotificationService.shared.cancelVisit(id)
     }
-}
-
-// MARK: - Helpers
-
-private struct CalendarCell {
-    let date: Date?
 }
 
 #Preview {

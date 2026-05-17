@@ -50,13 +50,12 @@ struct BuildersEditorView: View {
                     }
                     .onMove(perform: moveBuilders)
                 } header: {
-                    Text(String(localized: "联系人 (\(builders.count))", locale: locale))
+                    SectionHeader(String(localized: "联系人 (\(builders.count))", locale: locale))
                 } footer: {
-                    Text(String(
+                    SectionFooter(String(
                         localized: "最多 200 个。空 email 拒收。这些联系人会出现在 Inspection 表单的「Attn」字段和「一键发邮件」。",
                         locale: locale
                     ))
-                    .font(.system(size: 12))
                 }
             }
         }
@@ -253,7 +252,7 @@ private struct BuilderEditSheet: View {
                     TextField(String(localized: "公司", locale: locale), text: $company)
                         .textInputAutocapitalization(.words)
                 } header: {
-                    Text(String(localized: "基本信息", locale: locale))
+                    SectionHeader(String(localized: "基本信息", locale: locale))
                 }
 
                 Section {
@@ -264,10 +263,9 @@ private struct BuilderEditSheet: View {
                     TextField(String(localized: "手机", locale: locale), text: $phone)
                         .keyboardType(.phonePad)
                 } header: {
-                    Text(String(localized: "联系方式", locale: locale))
+                    SectionHeader(String(localized: "联系方式", locale: locale))
                 } footer: {
-                    Text(String(localized: "邮箱用于「一键发邮件」。手机仅留作备用,不会自动拨号。", locale: locale))
-                        .font(.system(size: 12))
+                    SectionFooter(String(localized: "邮箱用于「一键发邮件」。手机仅留作备用,不会自动拨号。", locale: locale))
                 }
 
                 Section {
@@ -276,7 +274,7 @@ private struct BuilderEditSheet: View {
                               axis: .vertical)
                         .lineLimit(2...5)
                 } header: {
-                    Text(String(localized: "备注", locale: locale))
+                    SectionHeader(String(localized: "备注", locale: locale))
                 }
 
                 if let errorMessage {

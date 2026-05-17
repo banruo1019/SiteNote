@@ -77,48 +77,9 @@ struct ReportsView: View {
         .padding(.bottom, 24)
     }
 
-    /// 工地 picker(capsule)。默认"全部工地"。
+    /// 工地 picker — 共享组件 `SiteFilterMenu`。
     private var siteFilterMenu: some View {
-        Menu {
-            Button {
-                siteFilter = nil
-            } label: {
-                if siteFilter == nil {
-                    Label(
-                        String(localized: "全部工地", locale: AppLanguageManager.currentLocale),
-                        systemImage: "checkmark"
-                    )
-                } else {
-                    Text(String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
-                }
-            }
-            Divider()
-            ForEach(allSiteTags, id: \.self) { tag in
-                Button {
-                    siteFilter = tag
-                } label: {
-                    if siteFilter == tag {
-                        Label(tag, systemImage: "checkmark")
-                    } else {
-                        Text(tag)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "building.2")
-                    .font(.system(size: 11, weight: .semibold))
-                Text(siteFilter ?? String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-            }
-            .foregroundStyle(Ink.fg)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(Ink.card))
-        }
+        SiteFilterMenu(allTags: allSiteTags, selection: $siteFilter)
     }
 
     // MARK: - Main card(唯一入口:出巡检报告)
@@ -144,42 +105,78 @@ struct ReportsView: View {
     }
 
     private var mainCardLabel: some View {
-        HStack(spacing: 16) {
-            Image(systemName: "doc.text.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(Ink.accent)
-                .frame(width: 56, height: 56)
-                .background(Ink.card)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 4) {
-                Text("出巡检报告")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Ink.fg)
-                Text("把这段时间的速记拼成 PDF 巡检日志,给上级/业主/法律存档")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Ink.fgDim)
-                    .lineLimit(2)
+        VStack(spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                pdfThumb
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(localized: "PDF 巡检日志", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.5)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Ink.fgDim)
+                    Text(String(localized: "出 PDF 巡检日志", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 18, weight: .semibold))
+                        .tracking(-0.3)
+                        .foregroundStyle(Ink.fg)
+                        .padding(.top, 2)
+                    Text(String(localized: "选日期 + 工地 + 速记,生成可直接发给业主的 PDF。", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Ink.fgDim)
+                        .lineSpacing(2)
+                        .padding(.top, 4)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14))
-                .foregroundStyle(Ink.dim)
+            HStack(spacing: 6) {
+                Text(String(localized: "开始", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 14, weight: .semibold))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundStyle(Ink.bg)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Ink.fg)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
-        .padding(20)
-        .background(Ink.bg)
+        .padding(18)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(Ink.line, lineWidth: 1)
         )
         .padding(.horizontal, 24)
-        .padding(.top, 24)
+        .padding(.top, 8)
+    }
+
+    /// PDF 缩略图占位 — M1 视觉锚点,告诉用户输出是 PDF。
+    private var pdfThumb: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Rectangle().fill(Ink.fg).frame(height: 6).clipShape(RoundedRectangle(cornerRadius: 1))
+            Rectangle().fill(Ink.line2).frame(height: 3).clipShape(RoundedRectangle(cornerRadius: 1)).frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 12)
+            Rectangle().fill(Ink.line2).frame(height: 3).clipShape(RoundedRectangle(cornerRadius: 1))
+            Rectangle().fill(Ink.line2).frame(height: 3).clipShape(RoundedRectangle(cornerRadius: 1)).frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 18)
+            Rectangle().fill(Ink.card2).frame(height: 18).clipShape(RoundedRectangle(cornerRadius: 2))
+            Rectangle().fill(Ink.line2).frame(height: 3).clipShape(RoundedRectangle(cornerRadius: 1))
+            Rectangle().fill(Ink.line2).frame(height: 3).clipShape(RoundedRectangle(cornerRadius: 1)).frame(maxWidth: .infinity, alignment: .leading).padding(.trailing, 24)
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .frame(width: 72, height: 96)
+        .background(Ink.bg)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Ink.line, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
     }
 
     private var footerHint: some View {
-        Text("想要的格式不在这里?进设置 → 高级 → 数据导出")
-            .font(.system(size: 12))
+        Text(String(localized: "v1.2 后报告 Tab 只保留 PDF 巡检日志一个入口。", locale: AppLanguageManager.currentLocale))
+            .font(.system(size: 11))
             .foregroundStyle(Ink.fgDim)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 24)
             .padding(.top, 16)
     }

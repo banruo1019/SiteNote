@@ -61,51 +61,44 @@ struct DeadlineSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("什么时候前要处理完?")
-                .font(.system(size: DesignTokens.FontSize.large, weight: .semibold))
-                .padding(.vertical, DesignTokens.Spacing.medium)
-
-            Divider()
+            // 居中标题
+            Text(String(localized: "什么时候前要处理完?", locale: AppLanguageManager.currentLocale))
+                .font(.system(size: 17, weight: .semibold))
+                .tracking(-0.2)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
 
             ScrollView {
-                VStack(spacing: DesignTokens.Spacing.medium) {
-                    // ========= 主要区(常用)=========
+                VStack(spacing: 16) {
                     transcriptionPreview
 
-                    if let locationLabel {
-                        HStack {
-                            Image(systemName: "location")
-                            Text(locationLabel)
-                                .font(.system(size: DesignTokens.FontSize.body))
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    // 主操作:4 个 deadline 按钮并排
+                    deadlineButtonRow
 
-                    if !availableTags.isEmpty {
-                        siteTagPicker
-                    }
+                    // 副选项行:工地 chip + 照片 chip + 更多选项
+                    secondaryOptionsRow
 
-                    // 平面图入口:有平面图就直接放出来,不藏在"更多选项"里。
                     if !availableFloorPlans.isEmpty {
                         floorPlanButton
                     }
 
-                    photoRow
-
-                    // ========= Deadline 按钮(主行动,前置)=========
-                    Divider().padding(.vertical, DesignTokens.Spacing.small)
-                    deadlineButtons
-
-                    // ========= 更多选项(折叠)=========
-                    advancedToggleButton
-
                     if showsAdvanced {
-                        VStack(spacing: DesignTokens.Spacing.medium) {
+                        VStack(spacing: 12) {
+                            photoRow
                             hazardToggle
-
                             if !availableClauseRefs.isEmpty {
                                 clauseRefPicker
+                            }
+                            if let locationLabel {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "location")
+                                        .font(.system(size: 12))
+                                    Text(locationLabel)
+                                        .font(.system(size: 12))
+                                }
+                                .foregroundStyle(Ink.fgDim)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                         }
                         .transition(.asymmetric(
@@ -114,7 +107,8 @@ struct DeadlineSheet: View {
                         ))
                     }
                 }
-                .padding(DesignTokens.Spacing.medium)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
                 .animation(.easeInOut(duration: 0.25), value: showsAdvanced)
             }
         }
@@ -157,29 +151,121 @@ struct DeadlineSheet: View {
     private var transcriptionPreview: some View {
         let text = transcription.isEmpty ? String(localized: "(无转写,仅保存录音)", locale: AppLanguageManager.currentLocale) : transcription
         Text(text)
-            .font(.system(size: DesignTokens.FontSize.body))
-            .foregroundStyle(transcription.isEmpty ? .tertiary : .primary)
+            .font(.system(size: 14))
+            .lineSpacing(4)
+            .foregroundStyle(transcription.isEmpty ? Ink.fgDim : Ink.fg)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(DesignTokens.Spacing.medium)
-            .background(Color.gray.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Ink.card)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    /// 展开/折叠高级选项的按钮。点了就切换。
-    private var advancedToggleButton: some View {
+    /// 副选项行:工地 chip + 照片 chip(总数 summary)+ 更多选项 chevron。
+    private var secondaryOptionsRow: some View {
+        HStack(spacing: 8) {
+            siteChipSummary
+            photoSummaryChip
+            Spacer()
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    showsAdvanced.toggle()
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(String(
+                        localized: showsAdvanced ? "收起" : "更多选项",
+                        locale: AppLanguageManager.currentLocale
+                    ))
+                        .font(.system(size: 12))
+                    Image(systemName: showsAdvanced ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundStyle(Ink.fgDim)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// 单 chip 表示当前选中工地;点开 menu 切换。
+    /// 空 tags 时仍显示一个 disabled 占位 chip,保持行视觉对齐,提示用户去 settings 建工地。
+    @ViewBuilder
+    private var siteChipSummary: some View {
+        if availableTags.isEmpty {
+            HStack(spacing: 5) {
+                Image(systemName: "building.2")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(String(localized: "未建工地", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 12, weight: .medium))
+            }
+            .foregroundStyle(Ink.fgDim)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(Ink.bg))
+            .overlay(Capsule().stroke(Ink.line, lineWidth: 1))
+        } else {
+            Menu {
+                Button {
+                    selectedSiteTag = nil
+                } label: {
+                    if selectedSiteTag == nil {
+                        Label(String(localized: "未分类", locale: AppLanguageManager.currentLocale), systemImage: "checkmark")
+                    } else {
+                        Text(String(localized: "未分类", locale: AppLanguageManager.currentLocale))
+                    }
+                }
+                Divider()
+                ForEach(availableTags, id: \.self) { tag in
+                    Button {
+                        selectedSiteTag = tag
+                    } label: {
+                        if selectedSiteTag == tag {
+                            Label(tag, systemImage: "checkmark")
+                        } else {
+                            Text(tag)
+                        }
+                    }
+                }
+            } label: {
+                let isPicked = selectedSiteTag != nil
+                HStack(spacing: 5) {
+                    Image(systemName: "building.2")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(selectedSiteTag ?? String(localized: "选工地", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(isPicked ? Ink.bg : Ink.fg)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(isPicked ? Ink.fg : Ink.bg))
+                .overlay(Capsule().stroke(isPicked ? Color.clear : Ink.line, lineWidth: 1))
+            }
+        }
+    }
+
+    /// 显示当前照片数量的 chip(点开 = 展开 advanced 让用户加 / 改照片)。
+    @ViewBuilder
+    private var photoSummaryChip: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.25)) {
-                showsAdvanced.toggle()
+                showsAdvanced = true
             }
         } label: {
-            HStack {
-                Image(systemName: showsAdvanced ? "chevron.up.circle" : "chevron.down.circle")
-                Text(showsAdvanced ? "收起高级选项" : "更多选项(隐患 / 条款 / 平面图)")
-                    .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                Spacer()
+            HStack(spacing: 5) {
+                Image(systemName: "photo")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(images.isEmpty
+                    ? String(localized: "加照片", locale: AppLanguageManager.currentLocale)
+                    : String(localized: "\(images.count) 张照片", locale: AppLanguageManager.currentLocale)
+                )
+                .font(.system(size: 12, weight: .medium))
             }
-            .foregroundStyle(.secondary)
-            .padding(.vertical, 8)
+            .foregroundStyle(Ink.fg)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(Ink.bg))
+            .overlay(Capsule().stroke(Ink.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -392,54 +478,42 @@ struct DeadlineSheet: View {
         suggestedDeadline ?? .threeDays
     }
 
-    private func styleFor(_ deadline: Deadline) -> ButtonStyleKind {
-        if deadline == primaryDeadline { return .primary }
-        if deadline == .archive { return .tertiary }
-        return .secondary
-    }
-
-    private var deadlineButtons: some View {
-        VStack(spacing: DesignTokens.Spacing.small) {
+    /// 4 个 deadline 主操作并排,推荐项 = 黑底白字。
+    private var deadlineButtonRow: some View {
+        VStack(spacing: 10) {
             if let suggestedDeadline {
-                Text("💡 语音里提到「\(suggestedDeadline.displayName)」,已预选")
-                    .font(.system(size: DesignTokens.FontSize.body))
-                    .foregroundStyle(Color.accentColor)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, 4)
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(String(localized: "语音里提到「\(suggestedDeadline.displayName)」,已预选",
+                                locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundStyle(Ink.fgDim)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            deadlineButton(.today, style: styleFor(.today))
-            deadlineButton(.threeDays, style: styleFor(.threeDays))
-            deadlineButton(.thisWeek, style: styleFor(.thisWeek))
-            deadlineButton(.archive, style: styleFor(.archive))
+            HStack(spacing: 8) {
+                deadlineMiniButton(.today, sub: deadlineSubLabel(for: .today))
+                deadlineMiniButton(.threeDays, sub: deadlineSubLabel(for: .threeDays))
+                deadlineMiniButton(.thisWeek, sub: deadlineSubLabel(for: .thisWeek))
+                deadlineMiniButton(.archive, sub: deadlineSubLabel(for: .archive))
+            }
         }
     }
 
-    private enum ButtonStyleKind {
-        case primary, secondary, tertiary
-
-        var backgroundColor: Color {
-            switch self {
-            case .primary: return Color.accentColor
-            case .secondary: return Color.gray.opacity(0.3)
-            case .tertiary: return Color.gray.opacity(0.15)
-            }
-        }
-
-        var textColor: Color {
-            switch self {
-            case .primary: return .white
-            case .secondary: return .primary
-            case .tertiary: return .secondary
-            }
-        }
-
-        var fontWeight: Font.Weight {
-            self == .primary ? .bold : .semibold
+    private func deadlineSubLabel(for deadline: Deadline) -> String {
+        switch deadline {
+        case .today: return String(localized: "18:00 前", locale: AppLanguageManager.currentLocale)
+        case .threeDays: return String(localized: "3 天内", locale: AppLanguageManager.currentLocale)
+        case .thisWeek: return String(localized: "本周日前", locale: AppLanguageManager.currentLocale)
+        case .archive: return String(localized: "不提醒", locale: AppLanguageManager.currentLocale)
+        case .inbox: return ""
         }
     }
 
-    private func deadlineButton(_ deadline: Deadline, style: ButtonStyleKind) -> some View {
-        Button {
+    private func deadlineMiniButton(_ deadline: Deadline, sub: String) -> some View {
+        let isPrimary = deadline == primaryDeadline
+        return Button {
             let result = DeadlineSheetResult(
                 deadline: deadline,
                 photos: images,
@@ -452,14 +526,26 @@ struct DeadlineSheet: View {
             )
             onCommit(result)
         } label: {
-            Text(deadline.displayName + (deadline == primaryDeadline ? String(localized: " (默认)", locale: AppLanguageManager.currentLocale) : ""))
-                .font(.system(size: DesignTokens.FontSize.large, weight: style.fontWeight))
-                .foregroundStyle(style.textColor)
-                .frame(maxWidth: .infinity)
-                .frame(height: DesignTokens.ButtonSize.minTap)
-                .background(style.backgroundColor)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            VStack(spacing: 3) {
+                Text(deadline.displayName)
+                    .font(.system(size: 15, weight: .semibold))
+                Text(sub)
+                    .font(.system(size: 11))
+                    .opacity(0.65)
+            }
+            .foregroundStyle(isPrimary ? Ink.bg : Ink.fg)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isPrimary ? Ink.fg : Ink.bg)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isPrimary ? Color.clear : Ink.line, lineWidth: 1)
+            )
         }
+        .buttonStyle(.plain)
         .accessibilityLabel(deadline.displayName)
     }
 }

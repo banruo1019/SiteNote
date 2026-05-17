@@ -2,55 +2,62 @@
 //  EngineerSettingsRoot.swift
 //  SiteNote
 //
-//  Engineer 角色专属设置主页(极简,5 sections / ~15 rows)。
-//
-//  设计动机:
-//  - 原 SettingsView 是 PM-leaning,Engineer 用着 80% rows 是 PM 才需要的(日报提醒、AI tag、Obsidian 同步等)。
-//  - 工程师常用配置 = 公司抬头(出现在 PDF) + 工地资源(工地/平面图/预设/建造商) + 报告免责声明 + 默认日程提醒 + 数据导出/语言。
-//  - 这页是 Engineer 主屏 "我"/Settings tab 的根。完整 PDF 高级配置(Logo 宽高比、Obsidian) 留在 PM 版,不在这里展开。
-//
-//  风格约束:Form + .industrialForm() + SectionHeader/Footer。字符串走 String(localized:, locale:)。
+//  统一设置主页(PM / Engineer 共用)。M1 卡片布局:
+//  - 顶部黑底大卡:当前角色 + "切换" 胶囊
+//  - 灰小段头 + 白底圆角矩形 row(描边 + 内嵌图标方块)
+//  - 工地 + 建造商联系簿 在同一张卡里(中间 hairline)
+//  - 通知段 3 行也在同一张卡里(默认提醒 / 每日汇总 / 早上推送)
+//  - 数据和关于段沿用旧 row,但视觉对齐
 //
 
 import SwiftUI
 import SwiftData
 import UIKit
-import PhotosUI
 
-/// Engineer 角色的设置首页。5 section、~15 row,刻意保持薄。
 struct EngineerSettingsRoot: View {
-    // 我和公司:内容搬到 CompanyInfoSettingsView 子页。
-    // 工作资源:工地内容搬到 SitePresetEditorView 子页。
 
-    // MARK: - 日程默认提醒
-    /// 取值:1440(1 天) / 60(1 小时) / 30(30 分钟) / 0(关闭)。
+    // 日程默认提醒(分钟)
     @AppStorage("engineer.scheduleDefaultReminderMinutes") private var defaultReminderMinutes: Int = 60
 
-    // MARK: - 语言
+    // 早上推送 + 每日汇总(合并自 RemindersSettingsView)
+    @AppStorage(SettingsKeys.morningReminderHour) private var morningHour: Int = 7
+    @AppStorage(SettingsKeys.morningReminderMinute) private var morningMinute: Int = 30
+    @AppStorage(SettingsKeys.dailyDigestEnabled) private var dailyDigestEnabled: Bool = false
+
+    // 语言
     @State private var languageManager = AppLanguageManager.shared
     @State private var showLanguageRestartHint = false
     @State private var showICloudRestartHint = false
 
-    // MARK: - 数据导出 / 反馈
+    // 数据导出 / 反馈
     @State private var backupShareURL: URL?
     @State private var backupError: String?
     @State private var feedbackShareItems: [Any]?
 
+    @State private var profileManager = UserProfileManager.shared
+
+    @Environment(\.modelContext) private var modelContext
+
     private var locale: Locale { AppLanguageManager.currentLocale }
 
     var body: some View {
-        Form {
-            roleSection
-            meAndCompanySection
-            teamSection
-            workResourcesSection
-            reportSection
-            scheduleSection
-            dataAndAboutSection
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                roleCard
+                companyGroup
+                teamGroup
+                siteGroup
+                reportGroup
+                notificationsGroup
+                dataAndAboutGroup
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 32)
         }
+        .background(Ink.bg.ignoresSafeArea())
         .navigationTitle(String(localized: "设置", locale: locale))
         .navigationBarTitleDisplayMode(.inline)
-        .industrialForm()
         .sheet(item: Binding(
             get: { backupShareURL.map { EngineerSettingsBackupItem(url: $0) } },
             set: { _ in backupShareURL = nil }
@@ -94,296 +101,563 @@ struct EngineerSettingsRoot: View {
         }
     }
 
-    // MARK: - Section 0: 角色(v1.3 统一 settings 顶部)
+    // MARK: - 角色卡(黑底大卡)
 
-    private var roleSection: some View {
-        Section {
-            NavigationLink {
-                ProfileSettingsView()
-            } label: {
-                HStack(spacing: DesignTokens.Spacing.medium) {
-                    Image(systemName: UserProfileManager.shared.current.sfSymbol)
-                        .font(.system(size: 20))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(UserProfileManager.shared.current == .pm ? Color.orange : Color.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(localized: "我是 \(UserProfileManager.shared.current.displayName)", locale: locale))
-                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                        Text(LocalizedStringKey(UserProfileManager.shared.current.subtitle))
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
+    private var roleCard: some View {
+        NavigationLink {
+            ProfileSettingsView()
+        } label: {
+            HStack(spacing: 12) {
+                Text(roleGlyph)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Ink.bg)
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "当前角色", locale: locale))
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.5)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color.white.opacity(0.55))
+                    Text(profileManager.current.displayName)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Ink.bg)
+                    Text(profileManager.current.subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.white.opacity(0.6))
                 }
+                Spacer(minLength: 4)
+                HStack(spacing: 4) {
+                    Text(String(localized: "切换", locale: locale))
+                        .font(.system(size: 12, weight: .semibold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundStyle(Ink.bg)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.white.opacity(0.14))
+                .clipShape(Capsule())
             }
-        } header: {
-            SectionHeader(String(localized: "角色", locale: locale))
-        } footer: {
-            SectionFooter(String(localized: "决定 PDF 默认模板和 AI 识别重点。可随时切换。", locale: locale))
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Ink.fg)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 角色的 1 字 emoji-glyph(PM = "P",Engineer = "工")。
+    private var roleGlyph: String {
+        switch profileManager.current {
+        case .pm: return "P"
+        case .engineer: return "工"
         }
     }
 
-    // MARK: - Section 1: 我和公司
+    // MARK: - 公司段
 
-    private var meAndCompanySection: some View {
-        Section {
-            NavigationLink {
-                CompanyInfoSettingsView()
-            } label: {
-                HStack(spacing: DesignTokens.Spacing.medium) {
-                    Image(systemName: "building.columns")
-                        .font(.system(size: 20))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(Color.purple)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(localized: "我和公司", locale: locale))
-                            .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
-                        Text(String(localized: "公司名 / ABN / Logo", locale: locale))
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
+    private var companyGroup: some View {
+        groupBlock(
+            header: String(localized: "公司", locale: locale),
+            footer: String(localized: "这些会出现在 PDF 报告封面。", locale: locale)
+        ) {
+            cardContainer {
+                navRow(
+                    icon: "doc.text",
+                    title: String(localized: "公司信息", locale: locale),
+                    sub: String(localized: "公司名 · ABN · Logo", locale: locale),
+                    isLast: true
+                ) {
+                    CompanyInfoSettingsView()
                 }
             }
-        } header: {
-            SectionHeader(String(localized: "我和公司", locale: locale))
-        } footer: {
-            SectionFooter(String(localized: "这些会出现在 PDF 报告封面。", locale: locale))
         }
     }
 
-    // MARK: - Section: 团队
+    // MARK: - 团队段
 
-    private var teamSection: some View {
-        Section {
-            NavigationLink {
-                TeamManagementView()
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "person.3.fill")
-                        .foregroundStyle(Ink.accent)
-                        .frame(width: 28, height: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(localized: "我的团队", locale: AppLanguageManager.currentLocale))
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(String(localized: "和工程师 / 老板协作 · 最多 10 人", locale: AppLanguageManager.currentLocale))
-                            .font(.system(size: 11))
-                            .foregroundStyle(Ink.fgDim)
-                    }
+    private var teamGroup: some View {
+        groupBlock(
+            header: String(localized: "团队", locale: locale),
+            footer: String(localized: "第一版免费;创建团队后可邀请最多 9 个成员协作。", locale: locale)
+        ) {
+            cardContainer {
+                navRow(
+                    icon: "person.3",
+                    title: String(localized: "我的团队", locale: locale),
+                    sub: String(localized: "最多 10 人 · 第一版免费", locale: locale),
+                    isLast: true
+                ) {
+                    TeamManagementView()
                 }
             }
-        } header: {
-            SectionHeader(String(localized: "团队", locale: AppLanguageManager.currentLocale))
-        } footer: {
-            SectionFooter(String(localized: "第一版免费;创建团队后可邀请最多 9 个成员协作。", locale: AppLanguageManager.currentLocale))
         }
     }
 
-    // MARK: - Section 2: 工作资源
+    // MARK: - 工地段(工地 + 建造商联系簿 同一张卡)
 
-    private var workResourcesSection: some View {
-        // 工地资源:工地 / 平面图 / 联系簿 都是跨工地的"资源",同一层级。
-        // 工地的"实例"管理在 SitePresetEditorView 子页内(包含新建 + 删除 + 编辑预设)。
-        Section {
-            NavigationLink {
-                SitePresetEditorView()
-            } label: {
-                HStack {
-                    Image(systemName: "building.2.fill")
-                        .foregroundStyle(.green)
-                    Text(String(localized: "工地", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
+    private var siteGroup: some View {
+        groupBlock(
+            header: String(localized: "工地", locale: locale),
+            footer: String(localized: "工地内部包含 平面图 / 工地预设 / 子标签。建造商联系簿独立管理。", locale: locale)
+        ) {
+            cardContainer {
+                navRow(
+                    icon: "building.2",
+                    title: String(localized: "工地", locale: locale),
+                    sub: String(localized: "含 平面图、巡检模板", locale: locale),
+                    isLast: false
+                ) {
+                    SitePresetEditorView()
+                }
+                cardDivider
+                navRow(
+                    icon: "person.text.rectangle",
+                    title: String(localized: "建造商联系簿", locale: locale),
+                    sub: String(localized: "Inspection PDF 收件人", locale: locale),
+                    isLast: true
+                ) {
+                    BuildersEditorView()
                 }
             }
-
-            NavigationLink {
-                FloorPlanManageView()
-            } label: {
-                HStack {
-                    Image(systemName: "map")
-                        .foregroundStyle(.secondary)
-                    Text(String(localized: "平面图", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
-                }
-            }
-
-            NavigationLink {
-                BuildersEditorView()
-            } label: {
-                HStack {
-                    Image(systemName: "person.text.rectangle")
-                        .foregroundStyle(.secondary)
-                    Text(String(localized: "建造商联系簿", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
-                }
-            }
-        } header: {
-            SectionHeader(String(localized: "工地资源", locale: locale))
-        } footer: {
-            SectionFooter(String(localized: "首次使用建议先建工地 + 上传平面图。", locale: locale))
         }
     }
 
-    // MARK: - Section 3: 报告
+    // MARK: - 报告段
 
-    private var reportSection: some View {
-        Section {
-            NavigationLink {
-                DisclaimerEditorView()
-            } label: {
-                HStack {
-                    Image(systemName: "doc.plaintext")
-                        .foregroundStyle(.secondary)
-                    Text(String(localized: "默认免责声明", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
+    private var reportGroup: some View {
+        groupBlock(
+            header: String(localized: "报告", locale: locale),
+            footer: String(localized: "PDF 封面会用这段免责声明。", locale: locale)
+        ) {
+            cardContainer {
+                navRow(
+                    icon: "doc.plaintext",
+                    title: String(localized: "默认免责声明", locale: locale),
+                    sub: nil,
+                    isLast: true
+                ) {
+                    DisclaimerEditorView()
                 }
             }
-        } header: {
-            SectionHeader(String(localized: "报告", locale: locale))
-        } footer: {
-            SectionFooter(String(localized: "PDF 封面会用这段免责声明。", locale: locale))
         }
     }
 
-    // MARK: - Section 4: 日程
+    // MARK: - 通知段(3 行同卡:默认提醒 / 每日汇总 / 早上推送)
 
-    private var scheduleSection: some View {
-        Section {
-            Picker(selection: $defaultReminderMinutes) {
-                Text(String(localized: "1 天", locale: locale)).tag(1440)
-                Text(String(localized: "1 小时", locale: locale)).tag(60)
-                Text(String(localized: "30 分钟", locale: locale)).tag(30)
-                Text(String(localized: "关闭", locale: locale)).tag(0)
-            } label: {
-                HStack {
-                    Image(systemName: "bell")
-                        .foregroundStyle(Ink.fg)
+    private var notificationsGroup: some View {
+        groupBlock(
+            header: String(localized: "通知", locale: locale),
+            footer: String(localized: "默认提醒会带进新建日程,可单独覆盖。每日汇总用上方时间推送。", locale: locale)
+        ) {
+            cardContainer {
+                defaultReminderRow
+                cardDivider
+                dailyDigestRow
+                cardDivider
+                morningTimeRow
+            }
+        }
+    }
+
+    /// 默认提醒提前时间:点开 Menu 选择,右侧显示当前值 + chevron。
+    private var defaultReminderRow: some View {
+        Menu {
+            Button { defaultReminderMinutes = 1440 } label: {
+                rowLabel(String(localized: "1 天", locale: locale),
+                         checked: defaultReminderMinutes == 1440)
+            }
+            Button { defaultReminderMinutes = 60 } label: {
+                rowLabel(String(localized: "1 小时", locale: locale),
+                         checked: defaultReminderMinutes == 60)
+            }
+            Button { defaultReminderMinutes = 30 } label: {
+                rowLabel(String(localized: "30 分钟", locale: locale),
+                         checked: defaultReminderMinutes == 30)
+            }
+            Button { defaultReminderMinutes = 0 } label: {
+                rowLabel(String(localized: "关闭", locale: locale),
+                         checked: defaultReminderMinutes == 0)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(String(localized: "默认提醒提前时间", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Ink.fg)
+                    Text(String(localized: "新建日程时预填", locale: locale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
                 }
+                Spacer()
+                Text(defaultReminderLabel)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Ink.fg2)
+                    .monospacedDigit()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
             }
-        } header: {
-            SectionHeader(String(localized: "日程", locale: locale))
-        } footer: {
-            SectionFooter(String(localized: "新建日程时默认带上这个提醒,可单独覆盖。", locale: locale))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
         }
     }
 
-    // MARK: - Section 5: 数据和关于
+    private var defaultReminderLabel: String {
+        switch defaultReminderMinutes {
+        case 1440: return String(localized: "1 天", locale: locale)
+        case 60: return String(localized: "1 小时", locale: locale)
+        case 30: return String(localized: "30 分钟", locale: locale)
+        case 0: return String(localized: "关闭", locale: locale)
+        default: return "\(defaultReminderMinutes)m"
+        }
+    }
 
-    private var dataAndAboutSection: some View {
-        Section {
-            // iCloud 同步开关。首次开启需 Apple ID + iCloud 容器配置就位。
-            // 开关切换后**重启 App** 才完全生效(SwiftData 不支持 hot-swap ModelConfiguration)。
-            Toggle(isOn: Binding(
+    /// 每日汇总 toggle 行。
+    private var dailyDigestRow: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(localized: "每日汇总", locale: locale))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+                Text(String(localized: "每天早上推一条今日任务", locale: locale))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.fgDim)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { dailyDigestEnabled },
+                set: { newValue in
+                    dailyDigestEnabled = newValue
+                    NotificationService.shared.updateDailyDigest()
+                }
+            ))
+            .labelsHidden()
+            .tint(Ink.fg)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    /// 早上推送时间行 — DatePicker compact 样式贴右。
+    private var morningTimeRow: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(localized: "早上推送时间", locale: locale))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+            }
+            Spacer()
+            DatePicker(
+                "",
+                selection: morningTimeBinding,
+                displayedComponents: .hourAndMinute
+            )
+            .labelsHidden()
+            .onChange(of: morningHour) { _, _ in rescheduleAfterTimeChange() }
+            .onChange(of: morningMinute) { _, _ in rescheduleAfterTimeChange() }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    /// 早上时间的 Binding。
+    private var morningTimeBinding: Binding<Date> {
+        Binding(
+            get: {
+                var c = DateComponents()
+                c.hour = morningHour
+                c.minute = morningMinute
+                return Calendar.current.date(from: c) ?? Date()
+            },
+            set: { newValue in
+                let comps = Calendar.current.dateComponents([.hour, .minute], from: newValue)
+                morningHour = comps.hour ?? morningHour
+                morningMinute = comps.minute ?? morningMinute
+            }
+        )
+    }
+
+    private func rescheduleAfterTimeChange() {
+        let descriptor = FetchDescriptor<Note>(
+            predicate: #Predicate<Note> { $0.deletedAt == nil && $0.isDone == false }
+        )
+        let notes = (try? modelContext.fetch(descriptor)) ?? []
+        NotificationService.shared.rescheduleAll(notes: notes)
+    }
+
+    // MARK: - 数据和关于段
+
+    private var dataAndAboutGroup: some View {
+        groupBlock(
+            header: String(localized: "数据和关于", locale: locale),
+            footer: nil
+        ) {
+            cardContainer {
+                iCloudRow
+                cardDivider
+                exportBackupRow
+                cardDivider
+                navRow(
+                    icon: "folder",
+                    title: String(localized: "我的报告", locale: locale),
+                    sub: String(localized: "导出过的 PDF 巡检日志 / SVR 报告", locale: locale),
+                    isLast: false
+                ) {
+                    SavedReportsView()
+                }
+                cardDivider
+                navRow(
+                    icon: "trash",
+                    title: String(localized: "垃圾桶", locale: locale),
+                    sub: nil,
+                    isLast: false
+                ) {
+                    TrashView()
+                }
+                cardDivider
+                languageRow
+                cardDivider
+                feedbackRow
+                cardDivider
+                versionRow
+            }
+        }
+    }
+
+    private var iCloudRow: some View {
+        HStack(spacing: 12) {
+            iconBox(systemName: "icloud")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(localized: "iCloud 同步", locale: locale))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+                Text(String(localized: "跨设备同步 + 团队协作的前置条件,重启 App 生效", locale: locale))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.fgDim)
+            }
+            Spacer()
+            Toggle("", isOn: Binding(
                 get: { ICloudSyncConfig.shared.isEnabled },
                 set: { newValue in
                     ICloudSyncConfig.shared.isEnabled = newValue
                     showICloudRestartHint = true
                 }
-            )) {
-                HStack {
-                    Image(systemName: "icloud")
-                        .foregroundStyle(.blue)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(localized: "iCloud 同步", locale: locale))
-                            .font(.system(size: DesignTokens.FontSize.body))
-                        Text(String(localized: "跨设备同步 + 团队协作的前置条件,重启 App 生效", locale: locale))
-                            .font(.system(size: 11))
-                            .foregroundStyle(Ink.fgDim)
-                    }
-                }
-            }
+            ))
+            .labelsHidden()
+            .tint(Ink.fg)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
 
-            Button {
-                exportBackup()
-            } label: {
-                HStack {
-                    Image(systemName: "square.and.arrow.up")
-                        .foregroundStyle(Ink.fg)
-                    Text(String(localized: "导出全部数据 ZIP", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
-                        .foregroundStyle(Ink.fg)
-                }
+    private var exportBackupRow: some View {
+        Button {
+            exportBackup()
+        } label: {
+            HStack(spacing: 12) {
+                iconBox(systemName: "square.and.arrow.up")
+                Text(String(localized: "导出全部数据 ZIP", locale: locale))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
 
-            NavigationLink {
-                SavedReportsView()
-            } label: {
-                HStack {
-                    Image(systemName: "folder")
-                        .foregroundStyle(Ink.accent)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(String(localized: "我的报告", locale: locale))
-                            .font(.system(size: DesignTokens.FontSize.body))
-                        Text(String(localized: "导出过的 PDF 巡检日志 / SVR 报告", locale: locale))
-                            .font(.system(size: 11))
-                            .foregroundStyle(Ink.fgDim)
-                    }
-                }
-            }
-
-            NavigationLink {
-                TrashView()
-            } label: {
-                HStack {
-                    Image(systemName: "trash")
-                        .foregroundStyle(.secondary)
-                    Text(String(localized: "垃圾桶", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
-                }
-            }
-
-            Picker(selection: Binding(
-                get: { languageManager.current },
-                set: { newValue in
+    private var languageRow: some View {
+        Menu {
+            ForEach(AppLanguage.allCases) { lang in
+                Button {
                     let oldId = languageManager.current.localeIdentifier
-                    languageManager.current = newValue
-                    if oldId != newValue.localeIdentifier {
+                    languageManager.current = lang
+                    if oldId != lang.localeIdentifier {
                         showLanguageRestartHint = true
                     }
-                }
-            )) {
-                ForEach(AppLanguage.allCases) { lang in
-                    Text(lang.displayName).tag(lang)
-                }
-            } label: {
-                HStack {
-                    Image(systemName: "globe")
-                        .foregroundStyle(.indigo)
-                    Text(String(localized: "语言", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
+                } label: {
+                    rowLabel(lang.displayName, checked: languageManager.current == lang)
                 }
             }
+        } label: {
+            HStack(spacing: 12) {
+                iconBox(systemName: "globe")
+                Text(String(localized: "语言", locale: locale))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+                Spacer()
+                Text(languageManager.current.displayName)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Ink.fg2)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+    }
 
-            Button {
-                openFeedback()
-            } label: {
-                HStack {
-                    Image(systemName: "envelope")
-                        .foregroundStyle(Ink.fg)
+    private var feedbackRow: some View {
+        Button {
+            openFeedback()
+        } label: {
+            HStack(spacing: 12) {
+                iconBox(systemName: "envelope")
+                VStack(alignment: .leading, spacing: 2) {
                     Text(String(localized: "反馈与建议", locale: locale))
-                        .font(.system(size: DesignTokens.FontSize.body))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(Ink.fg)
-                    Spacer()
                     Text("banruostudio@gmail.com")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11))
                         .foregroundStyle(Ink.fgDim)
                 }
-            }
-
-            HStack {
-                Text(String(localized: "版本", locale: locale))
-                    .font(.system(size: DesignTokens.FontSize.body))
                 Spacer()
-                Text(appVersion)
-                    .font(.system(size: DesignTokens.FontSize.body))
-                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
             }
-        } header: {
-            SectionHeader(String(localized: "数据和关于", locale: locale))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var versionRow: some View {
+        HStack(spacing: 12) {
+            iconBox(systemName: "info.circle")
+            Text(String(localized: "版本", locale: locale))
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Ink.fg)
+            Spacer()
+            Text(appVersion)
+                .font(.system(size: 12))
+                .foregroundStyle(Ink.fgDim)
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    // MARK: - 通用 building blocks
+
+    /// 一段 group:tiny header + 卡片内容 + 可选 tiny footer。
+    @ViewBuilder
+    private func groupBlock<Content: View>(
+        header: String,
+        footer: String?,
+        @ViewBuilder _ content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(header)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.4)
+                .foregroundStyle(Ink.fgDim)
+                .padding(.horizontal, 4)
+            content()
+            if let footer {
+                Text(footer)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Ink.fgDim)
+                    .padding(.horizontal, 4)
+                    .lineSpacing(2)
+            }
+        }
+    }
+
+    /// 白底圆角卡片容器。
+    @ViewBuilder
+    private func cardContainer<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 0) {
+            content()
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Ink.bg)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Ink.line, lineWidth: 1)
+        )
+    }
+
+    /// 卡内行间分隔线 — 左缩进让 icon 列连贯。
+    private var cardDivider: some View {
+        Rectangle()
+            .fill(Ink.line)
+            .frame(height: 1)
+            .padding(.leading, 14)
+    }
+
+    /// 标准 navigation row(icon + title + sub + chevron),整行可点。
+    @ViewBuilder
+    private func navRow<Destination: View>(
+        icon: String,
+        title: String,
+        sub: String?,
+        isLast: Bool,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: 12) {
+                iconBox(systemName: icon)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Ink.fg)
+                    if let sub {
+                        Text(sub)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 行首小图标方块 — 灰描边 + 黑 icon。
+    private func iconBox(systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Ink.fg)
+            .frame(width: 28, height: 28)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Ink.line2, lineWidth: 1)
+            )
+    }
+
+    /// Menu 内的勾选行 — checkmark + 文本。
+    private func rowLabel(_ text: String, checked: Bool) -> some View {
+        HStack {
+            Text(text)
+            if checked {
+                Image(systemName: "checkmark")
+            }
         }
     }
 
@@ -392,7 +666,7 @@ struct EngineerSettingsRoot: View {
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
-        return "\(version) (build: \(build))"
+        return "\(version) (\(build))"
     }
 
     private func exportBackup() {
@@ -404,8 +678,7 @@ struct EngineerSettingsRoot: View {
         }
     }
 
-    /// 反馈入口:有最新 crash JSON 走 ShareSheet 带附件,否则降级 mailto:。
-    /// 行为与 DataAboutSettingsView.openFeedbackMail 保持一致。
+    /// 反馈入口:有最新 crash JSON 走 ShareSheet,否则 mailto:。
     private func openFeedback() {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
@@ -433,8 +706,7 @@ struct EngineerSettingsRoot: View {
     }
 }
 
-/// 包装备份 URL 以满足 `.sheet(item:)` 的 Identifiable 要求。
-/// 用单独的 struct 避免与 SettingsView 里同名的 `private struct BackupShareItem` 冲突。
+/// 包装备份 URL 以满足 `.sheet(item:)` 的 Identifiable。
 private struct EngineerSettingsBackupItem: Identifiable {
     let id: UUID = UUID()
     let url: URL

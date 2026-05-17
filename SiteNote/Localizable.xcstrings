@@ -175,6 +175,9 @@
     "· %@" : {
 
     },
+    "· 今天" : {
+
+    },
     "(不绑定)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1402,6 +1405,9 @@
         }
       }
     },
+    "18:00 前" : {
+
+    },
     "30 分钟" : {
       "localizations" : {
         "en" : {
@@ -2017,6 +2023,9 @@
     "iCloud 邮箱" : {
 
     },
+    "Inspection PDF 收件人" : {
+
+    },
     "Inspection PDF 末页打印的 “This inspection does not include …” 段落。空则用 QDE 那套标准 5 条。" : {
       "localizations" : {
         "en" : {
@@ -2146,6 +2155,9 @@
         }
       }
     },
+    "Logo" : {
+
+    },
     "M 月 d 日" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2252,6 +2264,9 @@
           }
         }
       }
+    },
+    "PDF 报告封面左上角显示。建议透明背景 PNG。" : {
+
     },
     "PDF 报告封面用主照片;caption 一句话总结现场状态。" : {
       "extractionState" : "manual",
@@ -2626,7 +2641,13 @@
     "TrashView (E3.1)" : {
       "extractionState" : "manual"
     },
+    "v1.2 后报告 Tab 只保留 PDF 巡检日志一个入口。" : {
+
+    },
     "v1.2 起仅使用本地 Apple Intelligence(无 OpenAI),数据不离开设备。Apple Intelligence 不可用时直接显示语音识别原文。" : {
+
+    },
+    "zh + en" : {
 
     },
     "一" : {
@@ -2792,6 +2813,9 @@
         }
       }
     },
+    "下滑取消" : {
+
+    },
     "不利天气日" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2846,6 +2870,9 @@
           }
         }
       }
+    },
+    "不提醒" : {
+
     },
     "不设分类" : {
       "extractionState" : "manual",
@@ -3218,6 +3245,9 @@
           }
         }
       }
+    },
+    "从地址自动生成" : {
+
     },
     "从联系簿" : {
       "extractionState" : "manual",
@@ -3718,6 +3748,9 @@
         }
       }
     },
+    "公司信息" : {
+
+    },
     "公司名" : {
       "localizations" : {
         "en" : {
@@ -3727,6 +3760,9 @@
           }
         }
       }
+    },
+    "公司名 · ABN · Logo" : {
+
     },
     "六" : {
       "extractionState" : "manual",
@@ -3849,6 +3885,9 @@
         }
       }
     },
+    "最多 10 人 · 第一版免费" : {
+
+    },
     "最多 200 个。空 email 拒收。这些联系人会出现在 Inspection 表单的「Attn」字段和「一键发邮件」。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3892,9 +3931,6 @@
           }
         }
       }
-    },
-    "决定 PDF 默认模板和 AI 识别重点。可随时切换。" : {
-
     },
     "决定主屏分组、AI 识别重点、默认导出 PDF 模板。可随时切换。" : {
       "extractionState" : "manual",
@@ -3940,6 +3976,9 @@
         }
       }
     },
+    "出 PDF 巡检日志" : {
+
+    },
     "出勤合计 %lld 人 · 待处理问题 %lld 条" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3962,7 +4001,7 @@
         }
       }
     },
-    "出巡检报告" : {
+    "出现在 PDF 报告封面。" : {
 
     },
     "出错了" : {
@@ -4179,6 +4218,9 @@
           }
         }
       }
+    },
+    "切换" : {
+
     },
     "切换到 %@ 模式" : {
       "extractionState" : "manual",
@@ -4721,6 +4763,9 @@
         }
       }
     },
+    "后续录音、打标签都用这个名字 · 可随时改" : {
+
+    },
     "否" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4731,6 +4776,9 @@
           }
         }
       }
+    },
+    "含 平面图、巡检模板" : {
+
     },
     "含隐患" : {
       "extractionState" : "manual",
@@ -4766,9 +4814,6 @@
       }
     },
     "和你的工程师 / 老板一起协作" : {
-
-    },
-    "和工程师 / 老板协作 · 最多 10 人" : {
 
     },
     "四" : {
@@ -4862,6 +4907,9 @@
         }
       }
     },
+    "圆" : {
+
+    },
     "在 iPhone 的「文件」App → 「我的 iPhone」→「SiteNote」可以看到所有录音和照片文件。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4949,6 +4997,9 @@
           }
         }
       }
+    },
+    "地址会一起存到工地预设,导出 Inspection PDF 时 Header 自动填项目地址,不用再录一遍。" : {
+
     },
     "垃圾桶" : {
       "extractionState" : "manual",
@@ -5667,6 +5718,9 @@
         }
       }
     },
+    "工地内部包含 平面图 / 工地预设 / 子标签。建造商联系簿独立管理。" : {
+
+    },
     "工地名" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5699,6 +5753,9 @@
           }
         }
       }
+    },
+    "工地地址" : {
+
     },
     "工地平面图" : {
       "extractionState" : "manual",
@@ -6090,6 +6147,9 @@
         }
       }
     },
+    "已提交" : {
+
+    },
     "已提交(\\(submitted.count))" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6187,6 +6247,9 @@
           }
         }
       }
+    },
+    "已记录" : {
+
     },
     "已达 %lld 人上限" : {
 
@@ -6567,6 +6630,9 @@
         }
       }
     },
+    "当前角色" : {
+
+    },
     "当前设备不支持发送短信(可能是 iPad 或模拟器)" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6677,9 +6743,6 @@
         }
       }
     },
-    "当日报告" : {
-
-    },
     "当日无报告" : {
 
     },
@@ -6716,6 +6779,9 @@
         }
       }
     },
+    "当日巡检报告" : {
+
+    },
     "当日巡检日程" : {
 
     },
@@ -6742,6 +6808,12 @@
       }
     },
     "录音、位置和分类都在你设备本地处理。可选 OpenAI Key 提升 AI 质量。" : {
+
+    },
+    "录音中  ·  ~1.2 MB" : {
+
+    },
+    "录音可在图上标记位置,比 GPS 的地址精度高 10 倍。" : {
 
     },
     "录音已自动结束(超过 3 分钟)。" : {
@@ -6912,9 +6984,6 @@
         }
       }
     },
-    "想要的格式不在这里?进设置 → 高级 → 数据导出" : {
-
-    },
     "成员" : {
 
     },
@@ -7007,6 +7076,7 @@
       }
     },
     "我的角色" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -7212,9 +7282,6 @@
         }
       }
     },
-    "把这段时间的速记拼成 PDF 巡检日志,给上级/业主/法律存档" : {
-
-    },
     "报告" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7360,9 +7427,6 @@
           }
         }
       }
-    },
-    "按截止日期看待办,点开看当天的速记。" : {
-
     },
     "按日期或工地导出" : {
 
@@ -7914,7 +7978,11 @@
         }
       }
     },
+    "新建日程时预填" : {
+
+    },
     "新建日程时默认带上这个提醒,可单独覆盖。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8393,6 +8461,7 @@
       }
     },
     "更多选项(隐患 / 条款 / 平面图)" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -8724,6 +8793,9 @@
         }
       }
     },
+    "本周日前" : {
+
+    },
     "本周有 %lld 天天气异常" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8911,6 +8983,9 @@
         }
       }
     },
+    "松手保存" : {
+
+    },
     "查看原文" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8976,6 +9051,9 @@
           }
         }
       }
+    },
+    "标注隐患位置,GPS 匹配 10 倍精度" : {
+
     },
     "标记为隐患" : {
       "extractionState" : "manual",
@@ -9064,6 +9142,9 @@
           }
         }
       }
+    },
+    "框" : {
+
     },
     "检查设置" : {
       "extractionState" : "manual",
@@ -9230,6 +9311,9 @@
         }
       }
     },
+    "每天早上推一条今日任务" : {
+
+    },
     "每日工种/机械,不提醒" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9240,6 +9324,9 @@
           }
         }
       }
+    },
+    "每日汇总" : {
+
     },
     "每日汇总提醒" : {
       "extractionState" : "manual",
@@ -10925,6 +11012,9 @@
         }
       }
     },
+    "语音里提到「%@」,已预选" : {
+
+    },
     "说「XX 走了」或点结束" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11164,6 +11254,9 @@
           }
         }
       }
+    },
+    "转写 · 实时" : {
+
     },
     "轻点放针 · 双指缩放放大后再点精准 · 双击复位" : {
       "extractionState" : "manual",
@@ -11580,6 +11673,9 @@
     "这天没有待办的速记" : {
 
     },
+    "这天没有日程" : {
+
+    },
     "这条 AI 识别记录会软删,不影响原始速记。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11777,6 +11873,9 @@
         }
       }
     },
+    "选日期 + 工地 + 速记,生成可直接发给业主的 PDF。" : {
+
+    },
     "选标签" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11809,6 +11908,9 @@
           }
         }
       }
+    },
+    "通知" : {
+
     },
     "通知未授权,提醒不会响" : {
       "localizations" : {
@@ -12368,6 +12470,7 @@
       }
     },
     "首次使用建议先建工地 + 上传平面图。" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -12429,6 +12532,9 @@
           }
         }
       }
+    },
+    "默认提醒会带进新建日程,可单独覆盖。每日汇总用上方时间推送。" : {
+
     },
     "默认提醒提前时间" : {
       "localizations" : {

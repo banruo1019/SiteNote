@@ -54,7 +54,6 @@ struct PMCalendarView: View {
                     titleRow
                     ScrollView {
                         VStack(spacing: 0) {
-                            headerHint
                             monthHeader
                             calendarGrid
                             divider
@@ -97,172 +96,27 @@ struct PMCalendarView: View {
         .padding(.bottom, 12)
     }
 
-    /// 工地过滤 menu。默认显示"全部工地",用户可切换看单工地。
+    /// 工地过滤 menu — 共享组件 `SiteFilterMenu`。
     private var siteFilterMenu: some View {
-        Menu {
-            Button {
-                siteFilter = nil
-            } label: {
-                if siteFilter == nil {
-                    Label(
-                        String(localized: "全部工地", locale: AppLanguageManager.currentLocale),
-                        systemImage: "checkmark"
-                    )
-                } else {
-                    Text(String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
-                }
-            }
-            Divider()
-            ForEach(allSiteTags, id: \.self) { tag in
-                Button {
-                    siteFilter = tag
-                } label: {
-                    if siteFilter == tag {
-                        Label(tag, systemImage: "checkmark")
-                    } else {
-                        Text(tag)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "building.2")
-                    .font(.system(size: 11, weight: .semibold))
-                Text(siteFilter ?? String(localized: "全部工地", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-            }
-            .foregroundStyle(Ink.fg)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule().fill(Ink.card)
-            )
-        }
-    }
-
-    // MARK: - Header hint
-
-    private var headerHint: some View {
-        Text(String(localized: "按截止日期看待办,点开看当天的速记。", locale: AppLanguageManager.currentLocale))
-            .font(.system(size: 12))
-            .foregroundStyle(Ink.fgDim)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 16)
+        SiteFilterMenu(allTags: allSiteTags, selection: $siteFilter)
     }
 
     // MARK: - Month header
 
     private var monthHeader: some View {
-        HStack(spacing: 0) {
-            Button {
-                if let prev = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        currentMonth = prev
-                    }
-                }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Ink.fg2)
-                    .frame(width: 40, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Text(monthLabel)
-                .font(.system(size: 18, weight: .semibold))
-                .tracking(-0.2)
-                .foregroundStyle(Ink.fg)
-                .monospacedDigit()
-
-            Spacer()
-
-            Button {
-                if let next = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
-                        currentMonth = next
-                    }
-                }
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(Ink.fg2)
-                    .frame(width: 40, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 12)
-    }
-
-    private var monthLabel: String {
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        f.setLocalizedDateFormatFromTemplate("yMMMM")
-        return f.string(from: currentMonth)
+        MonthNavigationHeader(currentMonth: $currentMonth)
     }
 
     // MARK: - Calendar grid
 
-    /// 当月的 cell 列表(含为对齐第一行的占位 cell)。
-    /// 用 Calendar.current.firstWeekday 决定第一列是星期几,跟系统设置一致。
-    private var calendarCells: [CalendarDayCell] {
-        let cal = Calendar.current
-        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: currentMonth)) ?? currentMonth
-        let range = cal.range(of: .day, in: .month, for: monthStart) ?? 1..<2
-        let firstWeekdayOfMonth = cal.component(.weekday, from: monthStart) // 1...7
-        let leadingEmpty = (firstWeekdayOfMonth - cal.firstWeekday + 7) % 7
-
-        var cells: [CalendarDayCell] = []
-        for _ in 0..<leadingEmpty {
-            cells.append(CalendarDayCell(date: nil))
-        }
-        for day in range {
-            if let d = cal.date(byAdding: .day, value: day - 1, to: monthStart) {
-                cells.append(CalendarDayCell(date: d))
-            }
-        }
-        // 末尾占位到 42(6 行)— 固定高度,避免月切换时高度跳变。
-        while cells.count < 42 {
-            cells.append(CalendarDayCell(date: nil))
-        }
-        return cells
-    }
-
-    private var weekdayLabels: [String] {
-        let cal = Calendar.current
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        let symbols = f.veryShortStandaloneWeekdaySymbols ?? [] // index 0 = Sunday
-        guard symbols.count == 7 else { return [] }
-        let offset = cal.firstWeekday - 1
-        return (0..<7).map { symbols[(offset + $0) % 7] }
-    }
-
     private var calendarGrid: some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
         return VStack(spacing: 6) {
-            HStack(spacing: 4) {
-                ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { _, label in
-                    Text(label)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Ink.fgDim)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.horizontal, 16)
+            WeekdayHeaderRow()
 
             LazyVGrid(columns: columns, spacing: 4) {
-                ForEach(Array(calendarCells.enumerated()), id: \.offset) { _, cell in
-                    cellView(cell)
+                ForEach(Array(CalendarHelpers.monthCells(for: currentMonth).enumerated()), id: \.offset) { _, date in
+                    cellView(for: date)
                 }
             }
             .padding(.horizontal, 16)
@@ -279,66 +133,63 @@ struct PMCalendarView: View {
     }
 
     @ViewBuilder
-    private func cellView(_ cell: CalendarDayCell) -> some View {
-        if let date = cell.date {
+    private func cellView(for cellDate: Date?) -> some View {
+        if let date = cellDate {
             let cal = Calendar.current
             let isToday = cal.isDateInToday(date)
             let isSelected = cal.isDate(date, inSameDayAs: selectedDate)
             let dayNotes = notes(on: date)
-            let hasItems = !dayNotes.isEmpty
             let hasHazard = dayNotes.contains(where: { $0.isHazard })
+            let dotCount = min(dayNotes.count, 3)
             let day = cal.component(.day, from: date)
+            // M1:今天 = 黑圆填充;选中(非今天)= 1px Ink.fg 描边圆,对比更明确;否则透明
+            let bgFill: Color = isToday ? Ink.fg : .clear
+            let textColor: Color = isToday ? Ink.bg : Ink.fg
+            let selectedBorder: Bool = isSelected && !isToday
 
             Button {
                 withAnimation(.easeInOut(duration: 0.12)) {
                     selectedDate = cal.startOfDay(for: date)
                 }
             } label: {
-                ZStack {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Ink.fg)
-                    } else if isToday {
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Ink.fg, lineWidth: 1)
+                VStack(spacing: 3) {
+                    ZStack {
+                        Circle()
+                            .fill(bgFill)
+                            .frame(width: 26, height: 26)
+                        if selectedBorder {
+                            Circle()
+                                .stroke(Ink.fg, lineWidth: 1.5)
+                                .frame(width: 26, height: 26)
+                        }
+                        Text("\(day)")
+                            .font(.system(size: 13, weight: isToday || selectedBorder ? .semibold : .medium))
+                            .monospacedDigit()
+                            .foregroundStyle(textColor)
                     }
-                    Text("\(day)")
-                        .font(.system(size: 14, weight: isToday || isSelected ? .semibold : .regular))
-                        .monospacedDigit()
-                        .foregroundStyle(cellTextColor(isSelected: isSelected, isToday: isToday))
-                    if hasItems {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Circle()
-                                    .fill(dotColor(isSelected: isSelected, isHazard: hasHazard))
-                                    .frame(width: 4, height: 4)
-                                    .padding(.trailing, 6)
-                                    .padding(.bottom, 4)
-                            }
+                    HStack(spacing: 2.5) {
+                        ForEach(0..<dotCount, id: \.self) { idx in
+                            Circle()
+                                .fill(dotColorAt(index: idx, hasHazard: hasHazard, isToday: isToday))
+                                .frame(width: 4, height: 4)
                         }
                     }
+                    .frame(height: 4)
                 }
-                .frame(height: 38)
+                .frame(height: 42)
+                .frame(maxWidth: .infinity)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         } else {
-            Color.clear.frame(height: 38)
+            Color.clear.frame(height: 42)
         }
     }
 
-    private func cellTextColor(isSelected: Bool, isToday: Bool) -> Color {
-        if isSelected { return Ink.bg }
-        if isToday { return Ink.fg }
-        return Ink.fg
-    }
-
-    /// 选中态优先反白成背景色,否则隐患红 / 普通 Ink.fg。
-    private func dotColor(isSelected: Bool, isHazard: Bool) -> Color {
-        if isSelected { return Ink.bg }
-        return isHazard ? Ink.red : Ink.fg
+    /// 每颗 dot 的颜色:第一颗如果有 hazard 用红,其他用 Ink.fg(今天的反白处理)。
+    private func dotColorAt(index: Int, hasHazard: Bool, isToday: Bool) -> Color {
+        if index == 0 && hasHazard { return Ink.red }
+        return isToday ? Ink.bg : Ink.fg.opacity(0.55)
     }
 
     // MARK: - 当日列表
@@ -358,19 +209,22 @@ struct PMCalendarView: View {
     }
 
     private var dayDetailSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(selectedDateLabel)
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.5)
-                    .textCase(.uppercase)
-                    .foregroundStyle(Ink.fgDim)
+                    .font(.system(size: 15, weight: .semibold))
+                    .tracking(-0.2)
+                    .foregroundStyle(Ink.fg)
+                if Calendar.current.isDateInToday(selectedDate) {
+                    Text(String(localized: "· 今天", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                }
                 Spacer()
-                Text(String(localized: "\(notesOnSelectedDate.count) 项", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.dim)
-                    .monospacedDigit()
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
 
             if !monthHasAnyNote {
                 emptyMonthState
@@ -384,16 +238,12 @@ struct PMCalendarView: View {
                 }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
         .padding(.bottom, 20)
     }
 
+    /// 选中日的友好标签 — 例如 "周三 5 月 17"。
     private var selectedDateLabel: String {
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        f.setLocalizedDateFormatFromTemplate("yMMMd")
-        return f.string(from: selectedDate)
+        Formatters.weekdayMonthDay.string(from: selectedDate)
     }
 
     private var emptyDayState: some View {
@@ -414,49 +264,35 @@ struct PMCalendarView: View {
 
     private func noteRow(_ note: Note) -> some View {
         NavigationLink(value: note) {
-            HStack(alignment: .top, spacing: 12) {
-                // 左侧 vertical bar — 隐患红,其他 fg
-                RoundedRectangle(cornerRadius: 1.5)
+            HStack(spacing: 12) {
+                Circle()
                     .fill(note.isHazard ? Ink.red : Ink.fg)
-                    .frame(width: 3)
-                    .frame(maxHeight: .infinity)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        if let tag = note.siteTag, !tag.isEmpty {
-                            Text(tag)
-                                .font(.system(size: 11, weight: .semibold))
-                                .tracking(0.3)
-                                .textCase(.uppercase)
-                                .foregroundStyle(Ink.fgDim)
-                        }
-                        if note.isHazard {
-                            Text(String(localized: "隐患", locale: AppLanguageManager.currentLocale))
-                                .font(.system(size: 10, weight: .semibold))
-                                .tracking(0.5)
-                                .textCase(.uppercase)
-                                .foregroundStyle(Ink.red)
-                        }
-                        Spacer()
-                        Text(timeLabel(note.dueDate))
+                    .frame(width: 6, height: 6)
+                Text(timeLabel(note.dueDate))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.fgDim)
+                    .monospacedDigit()
+                    .frame(width: 44, alignment: .leading)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(noteSummary(note))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(note.isHazard ? Ink.red : Ink.fg)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.leading)
+                    if let site = note.siteTag, !site.isEmpty {
+                        Text(site)
                             .font(.system(size: 11))
                             .foregroundStyle(Ink.fgDim)
-                            .monospacedDigit()
+                            .lineLimit(1)
                     }
-                    Text(noteSummary(note))
-                        .font(.system(size: 14))
-                        .foregroundStyle(Ink.fg)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 11))
+                    .font(.system(size: 12))
                     .foregroundStyle(Ink.dim)
-                    .padding(.top, 4)
             }
-            .padding(.vertical, 12)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 11)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -475,10 +311,7 @@ struct PMCalendarView: View {
     }
 
     private func timeLabel(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = AppLanguageManager.currentLocale
-        f.dateFormat = "HH:mm"
-        return f.string(from: date)
+        Formatters.hourMinute.string(from: date)
     }
 
     // v1.3:删整段 "即将到来" — 用户只想看当日。
@@ -488,12 +321,6 @@ struct PMCalendarView: View {
     private var divider: some View {
         Rectangle().fill(Ink.line).frame(height: 1)
     }
-}
-
-// MARK: - Helpers
-
-private struct CalendarDayCell {
-    let date: Date?
 }
 
 #Preview {

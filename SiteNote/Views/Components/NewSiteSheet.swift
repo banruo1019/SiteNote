@@ -45,72 +45,175 @@ struct NewSiteSheet: View {
         !trimmedAddress.isEmpty && !trimmedName.isEmpty
     }
 
+    /// 当前 focus 的字段(决定 input box 是否高亮 Ink.fg 描边)。
+    @FocusState private var focusedField: FocusField?
+    private enum FocusField: Hashable { case address, name }
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    TextField(
-                        String(localized: "如 38 FORSYTH ST NORTH WILLOUGHBY", locale: locale),
-                        text: $address,
-                        axis: .vertical
-                    )
-                    .font(.system(size: 15))
-                    .lineLimit(2...4)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
-                    .onChange(of: address) { _, newAddr in
-                        guard !userEditedName else { return }
-                        siteName = Self.extractSiteName(from: newAddr)
-                    }
-                } header: {
-                    Text(String(localized: "地址", locale: locale))
-                } footer: {
-                    Text(String(
-                        localized: "输入地址后,工地名会自动派生。地址会一起存到这个工地的预设里,导出 Inspection 报告时 Header 自动填。",
-                        locale: locale
-                    ))
-                    .font(.system(size: 12))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    addressSection
+                    nameSection
+                    hintCard
+                    Spacer(minLength: 0)
                 }
-
-                Section {
-                    TextField(
-                        String(localized: "自动从地址生成", locale: locale),
-                        text: $siteName
-                    )
-                    .font(.system(size: 15))
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .onChange(of: siteName) { _, newValue in
-                        // 只有用户输入和"自动派生值"不一致时,才判定为人为编辑。
-                        let derived = Self.extractSiteName(from: address)
-                        if newValue != derived {
-                            userEditedName = true
-                        }
-                    }
-                } header: {
-                    Text(String(localized: "工地名", locale: locale))
-                } footer: {
-                    Text(String(
-                        localized: "工地名是后续录音/打标签用的简短标识。可以随时改。",
-                        locale: locale
-                    ))
-                    .font(.system(size: 12))
-                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 32)
             }
-            .industrialForm()
+            // 键盘弹起时拖动滚动收起键盘,hint card 可见
+            .scrollDismissesKeyboard(.interactively)
+            // ScrollView 内部 contentInset 跟随 keyboard,让被遮的部分能滚出来
+            .scrollContentBackground(.hidden)
+            .background(Ink.bg)
             .navigationTitle(String(localized: "新建工地", locale: locale))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "取消", locale: locale)) { dismiss() }
+                        .foregroundStyle(Ink.fg)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "保存", locale: locale)) { save() }
-                        .disabled(!canSave)
-                        .fontWeight(.semibold)
+                    Button {
+                        save()
+                    } label: {
+                        Text(String(localized: "保存", locale: locale))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(canSave ? Ink.bg : Ink.fgDim)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 7)
+                                    .fill(canSave ? Ink.fg : Ink.card)
+                            )
+                    }
+                    .disabled(!canSave)
                 }
             }
+            .onAppear {
+                // 进入页面默认 focus 地址,光标可见。
+                focusedField = .address
+            }
         }
+    }
+
+    /// 地址 section:icon + label + input box(可多行)+ footer hint。
+    private var addressSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "mappin.and.ellipse")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.fg)
+                Text(String(localized: "工地地址", locale: locale))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Ink.fg)
+            }
+            .padding(.horizontal, 4)
+
+            TextField(
+                String(localized: "如 38 FORSYTH ST NORTH WILLOUGHBY", locale: locale),
+                text: $address,
+                axis: .vertical
+            )
+            .focused($focusedField, equals: .address)
+            .font(.system(size: 15))
+            .tint(Ink.fg)
+            .lineLimit(2...4)
+            .textInputAutocapitalization(.characters)
+            .autocorrectionDisabled()
+            .onChange(of: address) { _, newAddr in
+                guard !userEditedName else { return }
+                siteName = Self.extractSiteName(from: newAddr)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .background(Ink.bg)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        focusedField == .address ? Ink.fg : Ink.line,
+                        lineWidth: focusedField == .address ? 1.5 : 1
+                    )
+            )
+        }
+    }
+
+    /// 工地名 section:label + "从地址自动生成" hint chip + input + footer。
+    private var nameSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "tag")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.fg)
+                Text(String(localized: "工地名", locale: locale))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Ink.fg)
+                Spacer()
+                if !userEditedName && !siteName.isEmpty {
+                    Text(String(localized: "从地址自动生成", locale: locale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                }
+            }
+            .padding(.horizontal, 4)
+
+            TextField(
+                String(localized: "自动从地址生成", locale: locale),
+                text: $siteName
+            )
+            .focused($focusedField, equals: .name)
+            .font(.system(size: 15))
+            .tint(Ink.fg)
+            .textInputAutocapitalization(.words)
+            .autocorrectionDisabled()
+            .onChange(of: siteName) { _, newValue in
+                let derived = Self.extractSiteName(from: address)
+                if newValue != derived {
+                    userEditedName = true
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Ink.bg)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        focusedField == .name ? Ink.fg : Ink.line,
+                        lineWidth: focusedField == .name ? 1.5 : 1
+                    )
+            )
+
+            Text(String(
+                localized: "后续录音、打标签都用这个名字 · 可随时改",
+                locale: locale
+            ))
+            .font(.system(size: 11))
+            .foregroundStyle(Ink.fgDim)
+            .padding(.horizontal, 4)
+        }
+    }
+
+    private var hintCard: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "doc.text")
+                .font(.system(size: 13))
+                .foregroundStyle(Ink.fgDim)
+                .padding(.top, 1)
+            Text(String(
+                localized: "地址会一起存到工地预设,导出 Inspection PDF 时 Header 自动填项目地址,不用再录一遍。",
+                locale: locale
+            ))
+            .font(.system(size: 12))
+            .foregroundStyle(Ink.fg2)
+            .lineSpacing(3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Ink.card)
+        )
     }
 
     private func save() {

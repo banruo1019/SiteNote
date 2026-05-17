@@ -228,8 +228,7 @@ struct TeamManagementView: View {
                 }
             }
         } footer: {
-            Text(String(localized: "第一版免费;最大 10 人;member 默认可看团队全部;离队数据归公司。", locale: locale))
-                .font(.system(size: 11))
+            SectionFooter(String(localized: "第一版免费;最大 10 人;member 默认可看团队全部;离队数据归公司。", locale: locale))
         }
     }
 
@@ -253,10 +252,9 @@ struct TeamManagementView: View {
                 }
             }
         } header: {
-            Text(String(localized: "你还没有团队", locale: locale))
+            SectionHeader(String(localized: "你还没有团队", locale: locale))
         } footer: {
-            Text(String(localized: "第一版免费。创建后可邀请最多 9 个成员(共 10 人,含你自己)。通过 iCloud 邀请,需要双方都登录 iCloud。", locale: locale))
-                .font(.system(size: 11))
+            SectionFooter(String(localized: "第一版免费。创建后可邀请最多 9 个成员(共 10 人,含你自己)。通过 iCloud 邀请,需要双方都登录 iCloud。", locale: locale))
         }
     }
 
@@ -428,11 +426,10 @@ private struct CreateTeamSheet: View {
                     TextField(String(localized: "如 ABC Engineering", locale: AppLanguageManager.currentLocale), text: $name)
                 }
                 Section {} footer: {
-                    Text(String(
+                    SectionFooter(String(
                         localized: "创建后会立刻弹出系统邀请页,可通过 Mail / Messages 发链接邀请成员。需要你和成员都登录 iCloud。",
                         locale: AppLanguageManager.currentLocale
                     ))
-                    .font(.system(size: 11))
                 }
             }
             .navigationTitle(String(localized: "新建团队", locale: AppLanguageManager.currentLocale))
@@ -474,8 +471,7 @@ private struct InviteMemberSheet: View {
                         .autocapitalization(.none)
                 }
                 Section {} footer: {
-                    Text(String(localized: "添加后会再次弹出系统邀请页,你可以把链接通过 Messages/Mail 发给该成员(系统会自动 lookup 对应 iCloud 账户)。当前 \(currentCount) / \(Team.maxMembers) 成员。", locale: AppLanguageManager.currentLocale))
-                        .font(.system(size: 11))
+                    SectionFooter(String(localized: "添加后会再次弹出系统邀请页,你可以把链接通过 Messages/Mail 发给该成员(系统会自动 lookup 对应 iCloud 账户)。当前 \(currentCount) / \(Team.maxMembers) 成员。", locale: AppLanguageManager.currentLocale))
                 }
             }
             .navigationTitle(String(localized: "邀请成员", locale: AppLanguageManager.currentLocale))

@@ -52,13 +52,12 @@ struct SitePresetEditorView: View {
                     }
                     .onMove(perform: movePresets)
                 } header: {
-                    Text(String(localized: "工地预设 (\(presets.count))", locale: locale))
+                    SectionHeader(String(localized: "工地预设 (\(presets.count))", locale: locale))
                 } footer: {
-                    Text(String(
+                    SectionFooter(String(
                         localized: "工程师专用。导出 Inspection 报告时,Header 字段从这里自动填入。每个工地一条预设。",
                         locale: locale
                     ))
-                    .font(.system(size: 12))
                 }
             }
         }
@@ -302,6 +301,7 @@ private struct SitePresetEditSheet: View {
                 siteSection
                 projectInfoSection
                 defaultsSection
+                floorPlansSection
                 assignmentSection
                 notesSection
 
@@ -399,13 +399,12 @@ private struct SitePresetEditSheet: View {
             }
             .buttonStyle(.plain)
         } header: {
-            Text(String(localized: "工地", locale: locale))
+            SectionHeader(String(localized: "工地", locale: locale))
         } footer: {
-            Text(String(
+            SectionFooter(String(
                 localized: "工地标签必填且唯一。同一个工地标签已有预设时,保存会覆盖旧的。",
                 locale: locale
             ))
-            .font(.system(size: 12))
         }
     }
 
@@ -447,13 +446,12 @@ private struct SitePresetEditSheet: View {
                 userEditedAddress = true
             }
         } header: {
-            Text(String(localized: "项目信息", locale: locale))
+            SectionHeader(String(localized: "项目信息", locale: locale))
         } footer: {
-            Text(String(
+            SectionFooter(String(
                 localized: "导出 Inspection PDF 时,这些会自动填到 Header。",
                 locale: locale
             ))
-            .font(.system(size: 12))
         }
     }
 
@@ -494,13 +492,12 @@ private struct SitePresetEditSheet: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
         } header: {
-            Text(String(localized: "默认值", locale: locale))
+            SectionHeader(String(localized: "默认值", locale: locale))
         } footer: {
-            Text(String(
+            SectionFooter(String(
                 localized: "选 Builder 后自动填「收件人」=builder.name。导出报告时巡检类型仍可单独改。",
                 locale: locale
             ))
-            .font(.system(size: 12))
         }
     }
 
@@ -537,13 +534,42 @@ private struct SitePresetEditSheet: View {
                 }
             }
         } header: {
-            Text(String(localized: "分配", locale: locale))
+            SectionHeader(String(localized: "分配", locale: locale))
         } footer: {
-            Text(String(
+            SectionFooter(String(
                 localized: "团队 Owner 可把工地分配给具体成员;未分配则团队公用。Phase 0 用 mock 数据,Phase 2 接通真实团队成员。",
                 locale: locale
             ))
-            .font(.system(size: 12))
+        }
+    }
+
+    /// 平面图段:从 settings 主页搬下来 — 平面图是 per-site 资源,工地详情页才是它的归属。
+    /// 进入后是全局 FloorPlanManageView(暂不按 siteTag 过滤;v1.4 再按 site 视图过滤)。
+    private var floorPlansSection: some View {
+        Section {
+            NavigationLink {
+                FloorPlanManageView()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "map")
+                        .foregroundStyle(Ink.fg)
+                        .frame(width: 22)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "平面图", locale: locale))
+                            .font(.system(size: DesignTokens.FontSize.body))
+                        Text(String(localized: "标注隐患位置,GPS 匹配 10 倍精度", locale: locale))
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                }
+            }
+        } header: {
+            SectionHeader(String(localized: "平面图", locale: locale))
+        } footer: {
+            SectionFooter(String(
+                localized: "录音可在图上标记位置,比 GPS 的地址精度高 10 倍。",
+                locale: locale
+            ))
         }
     }
 
@@ -556,7 +582,7 @@ private struct SitePresetEditSheet: View {
             )
             .lineLimit(2...5)
         } header: {
-            Text(String(localized: "备注", locale: locale))
+            SectionHeader(String(localized: "备注", locale: locale))
         }
     }
 

@@ -69,13 +69,12 @@ struct DisclaimerEditorView: View {
                 }
                 .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
             } header: {
-                Text(String(localized: "免责声明 (\(items.count))", locale: locale))
+                SectionHeader(String(localized: "免责声明 (\(items.count))", locale: locale))
             } footer: {
-                Text(String(
+                SectionFooter(String(
                     localized: "导出 Inspection PDF 时用到。空表示用默认 5 条。",
                     locale: locale
                 ))
-                .font(.system(size: 12))
             }
 
             Section {
@@ -100,11 +99,9 @@ struct DisclaimerEditorView: View {
                     }
                 }
             } footer: {
-                Text(hasCustom
+                SectionFooter(hasCustom
                      ? String(localized: "当前生效:自定义。", locale: locale)
                      : String(localized: "当前生效:默认 5 条。", locale: locale))
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
             }
         }
         .industrialForm()

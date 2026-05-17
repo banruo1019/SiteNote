@@ -83,8 +83,7 @@ struct TrashView: View {
                             row(note: note)
                         }
                     } footer: {
-                        Text("左滑永久删除 · 右滑恢复。永久删除不可撤销。\n超过 30 天的会在下次启动时自动永久删除。")
-                            .font(.system(size: DesignTokens.FontSize.body))
+                        SectionFooter("左滑永久删除 · 右滑恢复。永久删除不可撤销。\n超过 30 天的会在下次启动时自动永久删除。")
                     }
                 }
             }

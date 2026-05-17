@@ -193,31 +193,33 @@ struct EngineerReportsView: View {
     // MARK: - 顶部大按钮
 
     private var exportButtonLabel: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             Image(systemName: "plus")
                 .font(.system(size: 22, weight: .semibold))
                 .foregroundStyle(Color.white)
-                .frame(width: 36, height: 36)
-                .background(Color.white.opacity(0.18))
-                .clipShape(Circle())
-            VStack(alignment: .leading, spacing: 4) {
+                .frame(width: 40, height: 40)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.white.opacity(0.35), lineWidth: 1.5)
+                )
+            VStack(alignment: .leading, spacing: 3) {
                 Text(String(localized: "导出报告", locale: AppLanguageManager.currentLocale))
                     .font(.system(size: 18, weight: .semibold))
+                    .tracking(-0.2)
                     .foregroundStyle(Color.white)
                 Text(String(localized: "新建一份巡检报告并导出 PDF", locale: AppLanguageManager.currentLocale))
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.white.opacity(0.7))
+                    .foregroundStyle(Color.white.opacity(0.65))
             }
             Spacer()
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.7))
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 18)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Ink.fg)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: - Row
@@ -241,9 +243,13 @@ struct EngineerReportsView: View {
     @ViewBuilder
     private func reportRow(_ report: InspectionReport) -> some View {
         HStack(spacing: 12) {
-            statusIcon(for: report)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
+            // 左侧状态色条:草稿蓝、已提交灰
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(report.status == .draft ? Ink.accentBlue : Ink.dim)
+                .frame(width: 3, height: 36)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
                     Text(report.reportNo.isEmpty
                          ? String(localized: "(无编号)", locale: AppLanguageManager.currentLocale)
                          : report.reportNo)
@@ -255,9 +261,23 @@ struct EngineerReportsView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(Ink.fgDim)
                         Text(report.inspectionType)
-                            .font(.system(size: 12))
+                            .font(.system(size: 11))
                             .foregroundStyle(Ink.fgDim)
                             .lineLimit(1)
+                    }
+                    Spacer(minLength: 6)
+                    if report.status == .submitted {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.seal")
+                                .font(.system(size: 10))
+                            Text(String(localized: "已提交", locale: AppLanguageManager.currentLocale))
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .foregroundStyle(Ink.fgDim)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Ink.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
                     }
                 }
                 Text(report.project.isEmpty
@@ -273,15 +293,14 @@ struct EngineerReportsView: View {
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 3) {
                 Text(dateLabel(for: report.reportDate))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Ink.fgDim)
                     .monospacedDigit()
                 Text(
                     String(
-                        localized: "\(report.noteIDs.count) 条记录",
+                        localized: "\(report.noteIDs.count) 条",
                         locale: AppLanguageManager.currentLocale
                     )
                 )
@@ -292,28 +311,8 @@ struct EngineerReportsView: View {
         .padding(.vertical, 4)
     }
 
-    private func statusIcon(for report: InspectionReport) -> some View {
-        let symbol: String
-        let color: Color
-        switch report.status {
-        case .draft:
-            symbol = "doc.text"
-            color = Ink.accentBlue
-        case .submitted:
-            symbol = "checkmark.seal.fill"
-            color = Ink.fgDim
-        }
-        return Image(systemName: symbol)
-            .font(.system(size: 18, weight: .regular))
-            .foregroundStyle(color)
-            .frame(width: 28, height: 28)
-    }
-
     private func dateLabel(for date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale.current
-        f.dateFormat = "d MMM"
-        return f.string(from: date)
+        Formatters.dayMonthShort.string(from: date)
     }
 
     // MARK: - 空态(列表段为空时显示在"我的报告"section 里)

@@ -100,16 +100,17 @@ struct RecordView: View {
                     } else {
                         idleTopArea
                     }
-                    if viewModel.lastSave == nil {
-                        heroButtons
-                            .padding(.bottom, 20)
-                    }
+                    heroButtons
+                        .padding(.bottom, 20)
+                        // toast 显示时大按钮浅化但不消失,避免用户没法继续录
+                        .opacity(viewModel.lastSave != nil ? 0.92 : 1)
                 }
 
                 if viewModel.lastSave != nil {
                     undoToastOverlay
                         .padding(.horizontal, 12)
-                        .padding(.bottom, 16)
+                        // 上浮覆盖在 mic+camera 大按钮上方
+                        .padding(.bottom, 168)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -260,42 +261,22 @@ struct RecordView: View {
     private var engineerSiteFilteredList: some View {
         VStack(spacing: 0) {
             searchBar
-            engineerSiteChipRow
+            EngineerSiteFilterBar(
+                allTags: engineerAllSiteTags,
+                selection: $engineerSiteFilter,
+                countFor: { tag in
+                    if let tag {
+                        return liveNotes.filter { $0.siteTag == tag }.count
+                    }
+                    return liveNotes.count
+                }
+            )
             if engineerFilteredNotes.isEmpty {
                 emptyHint
             } else {
                 engineerTimelineList
             }
         }
-    }
-
-    /// Engineer 视角顶部 chip 行(水平滚动,单选工地)。
-    private var engineerSiteChipRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                engineerChip(nil, label: String(localized: "全部", locale: AppLanguageManager.currentLocale))
-                ForEach(engineerAllSiteTags, id: \.self) { tag in
-                    engineerChip(tag, label: tag)
-                }
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 12)
-        }
-    }
-
-    private func engineerChip(_ tag: String?, label: String) -> some View {
-        let isOn = engineerSiteFilter == tag
-        return Button {
-            engineerSiteFilter = tag
-        } label: {
-            Text(label)
-                .font(.system(size: 12, weight: isOn ? .semibold : .medium))
-                .foregroundStyle(isOn ? Ink.bg : Ink.fg)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(isOn ? Ink.fg : Ink.card))
-        }
-        .buttonStyle(.plain)
     }
 
     private var engineerTimelineList: some View {
@@ -309,7 +290,7 @@ struct RecordView: View {
         .environment(\.defaultMinListRowHeight, 0)
     }
 
-    /// 顶部常驻 Search bar。
+    /// 顶部常驻 Search bar。M1 细描边风格(非填充)。
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
@@ -319,7 +300,7 @@ struct RecordView: View {
                 String(localized: "搜索记录", locale: AppLanguageManager.currentLocale),
                 text: $searchText
             )
-            .font(.system(size: 14))
+            .font(.system(size: 13))
             .foregroundStyle(Ink.fg)
             .tint(Ink.fg)
             .autocorrectionDisabled()
@@ -336,11 +317,14 @@ struct RecordView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(Ink.card)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Ink.line, lineWidth: 1)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Ink.bg))
+        )
         .padding(.horizontal, 24)
-        .padding(.bottom, 16)
+        .padding(.bottom, 14)
     }
 
     /// 两段列表:待办(常显) + 已完成(可折叠)。
@@ -386,10 +370,11 @@ struct RecordView: View {
     }
 
     /// 单条 Note row + swipe actions。
+    /// 视觉本体在 `NoteTimelineRow`,这里只包 NavigationLink + swipe / list inset。
     @ViewBuilder
     private func noteRowItem(_ note: Note) -> some View {
         NavigationLink(value: note) {
-            timelineRow(note)
+            NoteTimelineRow(note: note)
         }
         .listRowInsets(EdgeInsets())
         .listRowSeparator(.hidden)
@@ -415,7 +400,7 @@ struct RecordView: View {
         }
     }
 
-    /// Section header(待办不可折叠,已完成可折叠)。
+    /// Section header — 标题左 + 计数 chip + (可选)折叠 chevron。
     private func sectionHeader(
         title: String,
         count: Int,
@@ -432,106 +417,32 @@ struct RecordView: View {
             HStack(spacing: 8) {
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.5)
+                    .tracking(0.6)
                     .textCase(.uppercase)
                     .foregroundStyle(Ink.fgDim)
-                Spacer()
                 Text("\(count)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.dim)
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Ink.fg2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Ink.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                Spacer()
                 if foldable {
                     Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Ink.dim)
                 }
             }
             .padding(.horizontal, 24)
-            .padding(.top, 14)
-            .padding(.bottom, 4)
+            .padding(.top, 6)
+            .padding(.bottom, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!foldable)
         .textCase(nil)
-    }
-
-    /// 时间线 row:HH:MM 左 / 摘要 + 副信息右。
-    private func timelineRow(_ note: Note) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(timeOfDay(note.createdAt))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Ink.fgDim)
-                .monospacedDigit()
-                .frame(width: 44, alignment: .leading)
-                .padding(.top, 2)
-            Rectangle()
-                .fill(Ink.line)
-                .frame(width: 1)
-                .padding(.vertical, 2)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(noteSummary(note))
-                    .font(.system(size: 14, weight: note.isDone ? .regular : .medium))
-                    .foregroundStyle(note.isHazard ? Ink.red : Ink.fg)
-                    .strikethrough(note.isDone, color: Ink.fgDim)
-                    .lineLimit(2)
-                metaLine(note)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 10)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Ink.line.opacity(0.5)).frame(height: 1)
-                .padding(.leading, 80)
-        }
-        .contentShape(Rectangle())
-    }
-
-    /// 副信息:工地 · 分类 · 录音/照片/隐患 icon
-    @ViewBuilder
-    private func metaLine(_ note: Note) -> some View {
-        HStack(spacing: 6) {
-            if let site = note.siteTag, !site.isEmpty {
-                Text(site)
-            }
-            if let tag = note.otherTags.first {
-                if note.siteTag != nil { Text("·") }
-                Text(tag)
-            }
-            if note.audioFilePath != nil {
-                Image(systemName: "waveform")
-                    .font(.system(size: 10))
-            }
-            if !note.photoPaths.isEmpty {
-                Image(systemName: "photo")
-                    .font(.system(size: 10))
-                if note.photoPaths.count > 1 {
-                    Text("\(note.photoPaths.count)")
-                        .font(.system(size: 10))
-                }
-            }
-            if note.isHazard {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(Ink.red)
-            }
-        }
-        .font(.system(size: 11))
-        .foregroundStyle(Ink.fgDim)
-    }
-
-    private func timeOfDay(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.locale = Locale.current
-        f.dateFormat = "HH:mm"
-        return f.string(from: date)
-    }
-
-    /// 转写文本的摘要(空时给占位)。
-    private func noteSummary(_ note: Note) -> String {
-        let t = note.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !t.isEmpty { return t }
-        return String(localized: "(仅录音/照片)", locale: AppLanguageManager.currentLocale)
     }
 
     /// 空态
@@ -569,141 +480,21 @@ struct RecordView: View {
     // MARK: - Recording top area
 
     private var recordingTopArea: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
-                        PulsingDot(color: Ink.red)
-                        Text("REC")
-                            .font(.system(size: 12, weight: .semibold))
-                            .tracking(0.3)
-                            .foregroundStyle(Ink.red)
-                    }
-                    TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
-                        Text(recordingDurationLabel(now: ctx.date))
-                            .font(.system(size: 40, weight: .medium))
-                            .tracking(-1.2)
-                            .foregroundStyle(Ink.fg)
-                            .monospacedDigit()
-                    }
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(allNotes.first?.siteTag ?? "SiteNote")
-                        .foregroundStyle(Ink.fgDim)
-                    Text("双通道 · zh+en")
-                        .foregroundStyle(Ink.fgDim)
-                }
-                .font(.system(size: 12))
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 32)
-
-            AudioWaveformView(level: viewModel.currentAudioLevel)
-                .frame(height: 48)
-                .padding(.horizontal, 24)
-                .padding(.top, 40)
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("转写")
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.5)
-                    .textCase(.uppercase)
-                    .foregroundStyle(Ink.fgDim)
-                HStack(alignment: .top, spacing: 2) {
-                    Text(viewModel.partialTranscription.isEmpty ? "…" : viewModel.partialTranscription)
-                        .font(.system(size: 18, weight: .regular))
-                        .tracking(-0.2)
-                        .lineSpacing(4)
-                        .foregroundStyle(Ink.fg)
-                    if !viewModel.partialTranscription.isEmpty {
-                        BlinkingCursor()
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 40)
-            .padding(.bottom, 24)
-
-            Spacer()
-        }
-    }
-
-    private func recordingDurationLabel(now: Date) -> String {
-        guard let start = viewModel.recordingStartTime else { return "●:●●" }
-        let elapsed = max(0, now.timeIntervalSince(start))
-        let total = Int(elapsed)
-        let mm = total / 60
-        let ss = total % 60
-        return String(format: "%02d:%02d", mm, ss)
+        RecordingTopArea(
+            isRecording: viewModel.isRecording,
+            audioLevel: viewModel.currentAudioLevel,
+            partialTranscription: viewModel.partialTranscription,
+            recordingStartTime: viewModel.recordingStartTime,
+            siteTag: allNotes.first?.siteTag
+        )
     }
 
     // MARK: - Hero (常驻,MIC 按钮节点稳定)
 
     private var heroButtons: some View {
-        HStack(spacing: 16) {
-            cameraButton
-                .opacity(viewModel.isRecording ? 0 : 1)
-                .allowsHitTesting(!viewModel.isRecording)
-            micButton
+        HeroButtons(viewModel: viewModel) {
+            isShowingCamera = true
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 12)
-    }
-
-    private var micButton: some View {
-        ZStack {
-            Circle()
-                .fill(circleColor)
-                .frame(width: 132, height: 132)
-            if viewModel.isRecording {
-                Circle()
-                    .stroke(circleColor.opacity(0.12), lineWidth: 10)
-                    .frame(width: 142, height: 142)
-            }
-            Image(systemName: "mic.fill")
-                .font(.system(size: 38, weight: .medium))
-                .foregroundStyle(Color.white)
-        }
-        .frame(width: 132, height: 132)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    if !viewModel.isRecording { viewModel.startRecording() }
-                }
-                .onEnded { _ in
-                    guard viewModel.isRecording else { return }
-                    Task { await viewModel.stopAndSave() }
-                }
-        )
-        .sensoryFeedback(.impact(weight: .heavy), trigger: viewModel.isRecording)
-        .frame(maxWidth: .infinity)
-        .accessibilityLabel("录音")
-        .accessibilityHint("长按开始录音,松手保存")
-    }
-
-    private var circleColor: Color {
-        viewModel.isRecording ? Ink.red : Ink.fg
-    }
-
-    private var cameraButton: some View {
-        Circle()
-            .fill(Ink.bg)
-            .overlay(Circle().strokeBorder(Ink.fg, lineWidth: 1.5))
-            .frame(width: 132, height: 132)
-            .overlay(
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 36, weight: .medium))
-                    .foregroundStyle(Ink.fg)
-            )
-            .onTapGesture {
-                isShowingCamera = true
-            }
-            .sensoryFeedback(.impact(weight: .medium), trigger: isShowingCamera)
-            .frame(maxWidth: .infinity)
-            .accessibilityLabel("拍照")
     }
 
     // MARK: - Undo toast
@@ -720,23 +511,6 @@ struct RecordView: View {
             },
             onUndo: { viewModel.undoLastSave() }
         )
-    }
-}
-
-// MARK: - 光标闪烁
-
-private struct BlinkingCursor: View {
-    @State private var on = true
-    var body: some View {
-        Text("|")
-            .font(.system(size: 18, weight: .regular))
-            .foregroundStyle(Ink.fgDim)
-            .opacity(on ? 1 : 0)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.5).repeatForever()) {
-                    on.toggle()
-                }
-            }
     }
 }
 

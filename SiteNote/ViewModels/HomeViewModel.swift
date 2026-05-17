@@ -480,19 +480,8 @@ final class HomeViewModel {
     }
 
     /// UndoToast 上用户点 🚨 标隐患后调用:把 note.isHazard 置 true,重排推送(hazard schedule),关 toast。
-    func markLastSaveAsHazard() {
-        guard let snapshot = lastSave, let ctx = modelContext else { return }
-        let id = snapshot.noteID
-        let descriptor = FetchDescriptor<Note>(predicate: #Predicate<Note> { $0.id == id })
-        if let note = try? ctx.fetch(descriptor).first {
-            note.isHazard = true
-            try? ctx.save() // B6:用户主动操作的字段必须立即落盘。
-            NotificationService.shared.schedule(for: note)
-        }
-        dismissUndoToast()
-    }
-
     // v1.2 大减负:convertLastSaveToDiary() 已删 —— 日志模式整体下架。
+    // v1.3 后续清理:markLastSaveAsHazard() 0 callers,删 — toast 简化为只保留 撤销 + 进详情。
 
     /// 用户点 toast 顶行时调用:返回当前已保存的 note,让 RecordView 跳详情页。
     /// 注意:不再删除 note,不再弹 DeadlineSheet。详情页里用户自己改。

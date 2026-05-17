@@ -15,6 +15,8 @@ enum PhotoEditTool {
     case eraser
     case text
     case line
+    case circle
+    case rect
 }
 
 /// 一个可拖动的文字标注。位置以 canvasBounds 坐标系(左上原点)为准。
@@ -68,6 +70,7 @@ struct PhotoEditorView: View {
                         )
                         .frame(width: geo.size.width, height: geo.size.height)
                         lineOverlay(size: geo.size)
+                        shapeOverlay(size: geo.size)
                         textOverlay(size: geo.size)
                     }
                     .onAppear { canvasBounds = CGRect(origin: .zero, size: geo.size) }
@@ -129,6 +132,117 @@ struct PhotoEditorView: View {
         }
         .frame(width: size.width, height: size.height)
         .allowsHitTesting(toolMode == .line)
+    }
+
+    /// 圆 / 框工具叠加层。drag 时显示预览,松手 commit 成 PKDrawing 多点 stroke。
+    @ViewBuilder
+    private func shapeOverlay(size: CGSize) -> some View {
+        let isShapeMode = toolMode == .circle || toolMode == .rect
+        ZStack {
+            if isShapeMode {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                            .onChanged { value in
+                                if lineStart == nil { lineStart = value.startLocation }
+                                lineCurrent = value.location
+                            }
+                            .onEnded { value in
+                                let start = lineStart ?? value.startLocation
+                                let end = value.location
+                                if toolMode == .circle {
+                                    commitEllipse(from: start, to: end)
+                                } else if toolMode == .rect {
+                                    commitRect(from: start, to: end)
+                                }
+                                lineStart = nil
+                                lineCurrent = nil
+                            }
+                    )
+            }
+            if isShapeMode, let s = lineStart, let c = lineCurrent {
+                let r = boundingRect(from: s, to: c)
+                if toolMode == .circle {
+                    Ellipse()
+                        .stroke(selectedColor, style: StrokeStyle(lineWidth: penWidth, lineCap: .round))
+                        .frame(width: r.width, height: r.height)
+                        .position(x: r.midX, y: r.midY)
+                } else {
+                    Rectangle()
+                        .stroke(selectedColor, style: StrokeStyle(lineWidth: penWidth, lineCap: .round, lineJoin: .round))
+                        .frame(width: r.width, height: r.height)
+                        .position(x: r.midX, y: r.midY)
+                }
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(isShapeMode)
+    }
+
+    /// 两点的轴对齐外接矩形,保证 w/h > 0。
+    private func boundingRect(from a: CGPoint, to b: CGPoint) -> CGRect {
+        CGRect(
+            x: min(a.x, b.x),
+            y: min(a.y, b.y),
+            width: abs(b.x - a.x),
+            height: abs(b.y - a.y)
+        )
+    }
+
+    /// 把一个椭圆采样成多点 stroke,合并进 canvas.drawing。
+    private func commitEllipse(from start: CGPoint, to end: CGPoint) {
+        let r = boundingRect(from: start, to: end)
+        guard r.width > 2, r.height > 2 else { return }
+        let cx = r.midX, cy = r.midY, rx = r.width / 2, ry = r.height / 2
+        let steps = 64
+        var points: [PKStrokePoint] = []
+        for i in 0...steps {
+            let t = Double(i) / Double(steps)
+            let angle = t * 2 * .pi
+            let x = cx + rx * cos(angle)
+            let y = cy + ry * sin(angle)
+            points.append(strokePoint(at: CGPoint(x: x, y: y), timeOffset: t * 0.5))
+        }
+        appendStroke(points: points)
+    }
+
+    /// 把一个矩形采样成 4 段直线 stroke。
+    private func commitRect(from start: CGPoint, to end: CGPoint) {
+        let r = boundingRect(from: start, to: end)
+        guard r.width > 2, r.height > 2 else { return }
+        let corners = [
+            CGPoint(x: r.minX, y: r.minY),
+            CGPoint(x: r.maxX, y: r.minY),
+            CGPoint(x: r.maxX, y: r.maxY),
+            CGPoint(x: r.minX, y: r.maxY),
+            CGPoint(x: r.minX, y: r.minY)
+        ]
+        var points: [PKStrokePoint] = []
+        for (i, c) in corners.enumerated() {
+            points.append(strokePoint(at: c, timeOffset: Double(i) * 0.05))
+        }
+        appendStroke(points: points)
+    }
+
+    private func strokePoint(at p: CGPoint, timeOffset: TimeInterval) -> PKStrokePoint {
+        PKStrokePoint(
+            location: p,
+            timeOffset: timeOffset,
+            size: CGSize(width: penWidth, height: penWidth),
+            opacity: 1,
+            force: 1,
+            azimuth: 0,
+            altitude: 0
+        )
+    }
+
+    private func appendStroke(points: [PKStrokePoint]) {
+        let ink = PKInk(.pen, color: UIColor(selectedColor))
+        let path = PKStrokePath(controlPoints: points, creationDate: Date())
+        let stroke = PKStroke(ink: ink, path: path)
+        let merged = PKDrawing(strokes: canvas.drawing.strokes + [stroke])
+        canvas.drawing = merged
     }
 
     /// 把一条直线 commit 成 PKDrawing 的单笔 stroke,合并进 canvas.drawing。
@@ -303,8 +417,10 @@ struct PhotoEditorView: View {
             HStack(spacing: 8) {
                 toolButton(icon: "pencil.tip", label: "画笔", mode: .pen)
                 toolButton(icon: "line.diagonal", label: "直线", mode: .line)
-                toolButton(icon: "eraser", label: "橡皮", mode: .eraser)
+                toolButton(icon: "circle", label: "圆", mode: .circle)
+                toolButton(icon: "rectangle", label: "框", mode: .rect)
                 toolButton(icon: "textformat", label: "文字", mode: .text)
+                toolButton(icon: "eraser", label: "橡皮", mode: .eraser)
                 Spacer()
                 actionIconButton(systemName: "arrow.uturn.backward", labelText: String(localized: "撤销", locale: AppLanguageManager.currentLocale)) {
                     performUndo()
@@ -388,18 +504,20 @@ struct PhotoEditorView: View {
         return Button {
             // 切到非文字模式时,退出文字编辑。
             if mode != .text { focusedTextID = nil; pruneEmptyTexts() }
-            // 切走 line 时清掉残留预览(避免下次进入 line 看见旧线段)。
-            if mode != .line { lineStart = nil; lineCurrent = nil }
+            // 切走 shape 类工具时清掉残留预览(避免下次进入再看见旧形状)。
+            if mode != .line && mode != .circle && mode != .rect {
+                lineStart = nil; lineCurrent = nil
+            }
             toolMode = mode
         } label: {
             VStack(spacing: 2) {
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                 Text(label)
-                    .font(.system(size: 11))
+                    .font(.system(size: 10))
             }
             .foregroundStyle(active ? Color.black : Color.white)
-            .frame(width: 56, height: 48)
+            .frame(width: 46, height: 46)
             .background(active ? Color.white : Color.white.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
@@ -489,10 +607,10 @@ struct PencilCanvas: UIViewRepresentable {
         uiView.isUserInteractionEnabled = isInteractive(mode)
     }
 
-    /// 文字 / 直线模式下让事件穿透给上层 overlay。
+    /// 文字 / 直线 / 圆 / 框 模式下让事件穿透给上层 overlay。
     private func isInteractive(_ mode: PhotoEditTool) -> Bool {
         switch mode {
-        case .text, .line: return false
+        case .text, .line, .circle, .rect: return false
         case .pen, .eraser: return true
         }
     }
@@ -505,7 +623,7 @@ struct PencilCanvas: UIViewRepresentable {
             // **bitmap 模式 = 按像素擦,能擦局部**。原来用 .vector 是"碰到笔画就整条删",
             // 用户想擦半笔擦不掉。bitmap 默认有合适粗细,跟着手指走。
             view.tool = PKEraserTool(.bitmap)
-        case .text, .line:
+        case .text, .line, .circle, .rect:
             // 用上层 overlay 接手势,canvas 这边不需要工具。保持当前 tool 不动。
             break
         }

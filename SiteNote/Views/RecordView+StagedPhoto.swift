@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 extension RecordView {
 
