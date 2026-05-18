@@ -11,9 +11,22 @@
 
 ## TL;DR
 
-**Status: READY TO SUBMIT after the manual TODOs.** Code is ready. App Store metadata is drafted. Legal docs are written. Privacy Manifest is bundled. The remaining work is account-level + asset-level steps that only the developer can do (Apple Developer login, signing certificates, screenshot capture on a Mac, hosting privacy/terms HTML at a real URL).
+**Status: READY TO SUBMIT after the manual TODOs.** Code is ready. App Store metadata is drafted. Legal docs are written. Privacy Manifest is bundled. Simulator E2E in en-AU locale verified — title, search, empty state, tab bar, onboarding, and the location permission dialog all render the new English copy. Three screenshots in `docs/screenshots/` as evidence. The remaining work is account-level + asset-level steps that only the developer can do (Apple Developer login, signing certificates, screenshot capture on a Mac, hosting privacy/terms HTML at a real URL).
 
 **Start here:** `RELEASE_CHECKLIST.md` is the single ordered list of every manual step.
+
+## E2E verification (post-push polish)
+
+After the initial push at 01:56 AEST, a second pass surfaced two real issues that were fixed and re-pushed:
+
+1. **Tab bar was dual-language (zh+en stacked).** By design — for an English release this looked broken. Fixed: `IndustrialTabBar` now renders a single localized title via xcstrings catalog lookup. (commit `0308a93`)
+2. **`.accessibilityLabel("中文")` literals** were not guaranteed to route through the xcstrings catalog (depended on SwiftUI's overload resolution). VoiceOver on en-AU could have read Chinese. Fixed: wrapped 13 sites with `String(localized:)` for deterministic translation. (commit `9f8d069`)
+
+Screenshots from the en-AU simulator run are in `docs/screenshots/`:
+
+- `01_main_en_locale_with_permission.png` — title "Log", search "Search notes", empty state "No notes yet · Press and hold the mic below to start a new note.", permission dialog "Allow 'SiteNotes' to use your location?" with the new English description copy.
+- `02_main_after_tabbar_fix.png` — single-line "Log / Calendar / Reports" tab bar.
+- `03_onboarding_step0_with_dialog.png` — 5-step onboarding pagination visible (welcome step) with the same English permission dialog overlay.
 
 ---
 
