@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SiteNotes Support</title>
+<meta name="description" content="Support, FAQs, and contact for SiteNotes — an iOS construction site logging app by Manifoldx.">
+<style>
+  :root {
+    --fg: #1d1d1f;
+    --fg-dim: #6e6e73;
+    --bg: #ffffff;
+    --accent: #0066cc;
+    --line: #e5e5ea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #f5f5f7;
+      --fg-dim: #a1a1a6;
+      --bg: #000;
+      --line: #2c2c2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    margin: 0;
+    line-height: 1.6;
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+  }
+  article {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  h1 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+  h2 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 40px 0 12px;
+  }
+  h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 24px 0 8px;
+  }
+  p { margin: 0 0 16px; }
+  ul { padding-left: 24px; margin: 0 0 16px; }
+  li { margin-bottom: 6px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .lede {
+    font-size: 19px;
+    color: var(--fg-dim);
+    margin-bottom: 28px;
+  }
+  .contact-card {
+    background: rgba(0, 102, 204, 0.07);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 28px 0;
+  }
+  .contact-card h2 { margin-top: 0; }
+  details {
+    border-top: 1px solid var(--line);
+    padding: 16px 0;
+  }
+  details summary {
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+    position: relative;
+    padding-right: 28px;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::after {
+    content: "+";
+    position: absolute;
+    right: 0;
+    top: 0;
+    font-size: 22px;
+    color: var(--fg-dim);
+    line-height: 1;
+    transition: transform 0.2s;
+  }
+  details[open] summary::after { content: "−"; }
+  details p { margin-top: 12px; }
+  footer {
+    border-top: 1px solid var(--line);
+    margin-top: 48px;
+    padding-top: 16px;
+    color: var(--fg-dim);
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<article>
+
+<h1>SiteNotes Support</h1>
+<p class="lede">Voice-first site logging for foremen, supervisors, project managers, and engineers. Built in Sydney, Australia.</p>
+
+<div class="contact-card">
+  <h2>Need help right now?</h2>
+  <p>Email <a href="mailto:support@manifoldx.com">support@manifoldx.com</a> with a short description of what you were doing when the issue happened, your iOS version, and a screenshot if relevant. We reply within one business day in Sydney time.</p>
+  <p>For privacy questions, write to <a href="mailto:privacy@manifoldx.com">privacy@manifoldx.com</a>.</p>
+</div>
+
+<h2>Frequently asked questions</h2>
+
+<details open>
+  <summary>Do I need an account to use SiteNotes?</summary>
+  <p>No. SiteNotes does not run any servers and does not create an account. Your data is stored on this device and, if you choose, in your own iCloud through your Apple ID — the same iCloud that holds your Notes and Photos. We never see it.</p>
+</details>
+
+<details>
+  <summary>Where are my recordings, photos, and notes stored?</summary>
+  <p>Everything is stored locally on your iPhone. If iCloud sync is enabled in <em>Settings → Data &amp; About → iCloud sync</em>, your data is mirrored into your iCloud account (Apple's encrypted private container), which lets you read it from another device signed in to the same Apple ID. Nothing is ever uploaded to a Manifoldx server.</p>
+</details>
+
+<details>
+  <summary>How do I export my logs as a PDF?</summary>
+  <p>Tap the <em>Reports</em> tab → <em>PDF</em> → pick a date range and site → tap <em>Generate</em>. You can email the PDF, save it to Files, or share via AirDrop. PDFs are also archived in <em>Settings → My Reports</em> for re-sending later.</p>
+</details>
+
+<details>
+  <summary>Why does SiteNotes ask for my location?</summary>
+  <p>When you tap the microphone, SiteNotes captures your location <em>once</em> so the log entry can be tagged with the nearest jobsite and the current weather. There is no background tracking and no continuous location collection. You can decline the prompt and SiteNotes will still work — your logs just won't have automatic site detection or weather.</p>
+</details>
+
+<details>
+  <summary>Is my voice sent to a cloud AI?</summary>
+  <p>No. Transcription happens on this device using Apple's Speech framework. SiteNotes does not send your voice to OpenAI or any cloud transcription service.</p>
+</details>
+
+<details>
+  <summary>How do I switch between Site Team and Engineer modes?</summary>
+  <p>Tap the gear icon → <em>Current role</em> card at the top → pick the role. The home screen, AI behaviour, and PDF defaults adjust to that role. You can switch any time and your existing notes are filtered to match the active role.</p>
+</details>
+
+<details>
+  <summary>Can I switch the app's language?</summary>
+  <p>Yes. Settings → <em>Data &amp; About → Language</em> → pick <em>English</em>, <em>简体中文</em>, or <em>Follow system</em>. The change takes effect immediately. A few error messages and PDF text need an app restart to fully switch.</p>
+</details>
+
+<details>
+  <summary>How do I delete my data?</summary>
+  <p>Settings → <em>Data &amp; About → Erase All Content</em>. This wipes your notes, reports, sites, contacts, recordings, photos, and PDF archives from this device and from your iCloud zone. It cannot be undone. If you are part of a team, dissolve the team first to remove the cloud share.</p>
+</details>
+
+<details>
+  <summary>How do I get my data back to another device?</summary>
+  <p>Enable <em>iCloud sync</em> in Settings on both devices. Your notes, sites, and contacts sync automatically through your Apple ID. Recordings and photos sync too. You can also export everything as a ZIP via Settings → <em>Export All Data ZIP</em>.</p>
+</details>
+
+<details>
+  <summary>The audio sounds wrong / transcript is incorrect</summary>
+  <p>Tap the note → <em>Re-transcribe</em>. SiteNotes will rerun the on-device speech recognition. If the transcript is still wrong, you can tap the text and edit it manually. Add your trade terms via Settings → <em>Custom Terms</em> to improve future recognition.</p>
+</details>
+
+<details>
+  <summary>I found a bug — how do I report it?</summary>
+  <p>Settings → <em>Feedback &amp; Suggestions</em> opens a pre-filled email to <a href="mailto:support@manifoldx.com">support@manifoldx.com</a>. It attaches a diagnostic bundle (no personal content — only crash logs, app version, and device model) so we can reproduce the issue.</p>
+</details>
+
+<details>
+  <summary>Where can I read the legal documents?</summary>
+  <p><a href="../privacy/">Privacy Policy</a> · <a href="../terms/">Terms of Service</a></p>
+</details>
+
+<h2>System requirements</h2>
+<ul>
+  <li>iPhone or iPad running iOS 17.0 or later</li>
+  <li>For iCloud sync: signed in to iCloud with iCloud Drive enabled</li>
+  <li>For voice features: microphone and speech-recognition permissions granted</li>
+  <li>For site detection: location-when-in-use permission granted (optional)</li>
+</ul>
+
+<h2>About</h2>
+<p>SiteNotes is made by <strong>Manifoldx</strong>, based in New South Wales, Australia. It is built for the trades — designed to be usable one-handed, with gloves on, in the noise of a real site. The goal is fewer apps, less typing, and a clear PDF at the end of every day.</p>
+
+<footer>
+  <p>© 2026 Manifoldx · <a href="../privacy/">Privacy</a> · <a href="../terms/">Terms</a></p>
+</footer>
+
+</article>
+</body>
+</html>
