@@ -525,6 +525,38 @@ extension NotificationService {
         }
     }
 
+    /// 团队协作:Owner 给 Member 分配新工地时,Member 端 1 秒后弹 local notification 提醒。
+    /// 调用方:`TeamAssignmentNotifier.scanAndNotify(_:)` 内,已做"分给我 + 未通知过"过滤。
+    /// 用 UNTimeIntervalNotificationTrigger(1s) 是因为这是"探测时立即提醒",不需要业务时间排程,
+    /// 而 add(request) 本身要求 trigger ≥ now,所以给个最小的 1s。
+    /// identifier 用 "assign-<scheduleID>" 防同一条 schedule 重弹(系统层面 dedupe)。
+    func notifyNewAssignment(_ schedule: SiteVisitSchedule) {
+        let content = UNMutableNotificationContent()
+        content.title = String(
+            localized: "新工地分配",
+            locale: AppLanguageManager.currentLocale
+        )
+        let label: String = {
+            let title = schedule.title.trimmingCharacters(in: .whitespaces)
+            if !title.isEmpty { return title }
+            if let tag = schedule.siteTag, !tag.isEmpty { return tag }
+            return String(localized: "工地", locale: AppLanguageManager.currentLocale)
+        }()
+        content.body = String(
+            format: String(localized: "你被分配到「%@」", locale: AppLanguageManager.currentLocale),
+            label
+        )
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "assign-\(schedule.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        center.add(request, withCompletionHandler: nil)
+    }
+
     /// 把提前分钟数翻译成人话:1d / 2h / 30m。
     private static func leadTimeLabel(minutes: Int) -> String {
         if minutes <= 0 {

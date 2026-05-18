@@ -198,16 +198,16 @@ enum ReportArchiveService {
         let size = Int64(values?.fileSize ?? 0)
         let mirrorExists: Bool
         if let iCloudRoot {
-            // legacy 未分类 → 镜像放在 iCloud 根;有 project → 在子目录
-            let mirrorURL: URL
-            if projectFolder == unsortedFolderName {
-                mirrorURL = iCloudRoot.appendingPathComponent(url.lastPathComponent)
-            } else {
-                mirrorURL = iCloudRoot
-                    .appendingPathComponent(projectFolder, isDirectory: true)
-                    .appendingPathComponent(url.lastPathComponent)
-            }
-            mirrorExists = fm.fileExists(atPath: mirrorURL.path)
+            // **R6#5 关键修**:archive() 永远写到 `iCloudRoot/<folder>/<filename>`
+            // (folder = "未分类" 或具体 project)。之前 makeReport 在未分类时检测 iCloud 根
+            // → 永远查不到镜像 → UI 错显"未同步 iCloud"。
+            // 同时兼容老数据:先查规范路径,fallback 老根路径。
+            let canonical = iCloudRoot
+                .appendingPathComponent(projectFolder, isDirectory: true)
+                .appendingPathComponent(url.lastPathComponent)
+            let legacyRoot = iCloudRoot.appendingPathComponent(url.lastPathComponent)
+            mirrorExists = fm.fileExists(atPath: canonical.path) ||
+                (projectFolder == unsortedFolderName && fm.fileExists(atPath: legacyRoot.path))
         } else {
             mirrorExists = false
         }
@@ -224,19 +224,20 @@ enum ReportArchiveService {
     // MARK: - 删除
 
     /// 删除归档(本地 + iCloud 镜像)。
+    /// R6#5:未分类 PDF 在 iCloud 可能在 `<unsortedFolderName>/<filename>`(新)或根目录
+    /// `<filename>`(老 legacy)— 两条都删。
     static func delete(_ report: ArchivedReport) throws {
         try FileManager.default.removeItem(at: report.url)
         if let iCloudRoot = iCloudDocumentsDirectory() {
-            // 跟 listArchived/makeReport 里的 mirror 路径计算保持一致
-            let mirror: URL
+            let canonical = iCloudRoot
+                .appendingPathComponent(report.projectFolder, isDirectory: true)
+                .appendingPathComponent(report.filename)
+            try? FileManager.default.removeItem(at: canonical)
+            // 未分类 legacy 路径也清一遍(老用户残留)
             if report.projectFolder == unsortedFolderName {
-                mirror = iCloudRoot.appendingPathComponent(report.filename)
-            } else {
-                mirror = iCloudRoot
-                    .appendingPathComponent(report.projectFolder, isDirectory: true)
-                    .appendingPathComponent(report.filename)
+                let legacyRoot = iCloudRoot.appendingPathComponent(report.filename)
+                try? FileManager.default.removeItem(at: legacyRoot)
             }
-            try? FileManager.default.removeItem(at: mirror)
         }
     }
 

@@ -37,6 +37,7 @@ enum SiteNoteSchemaV2: VersionedSchema {
             ShareLog.self,
             InspectionReport.self,
             SiteVisitSchedule.self,
+            SitePreset.self,  // v1.6: struct + UserDefaults JSON → @Model class(团队 share 需要)
         ]
     }
 

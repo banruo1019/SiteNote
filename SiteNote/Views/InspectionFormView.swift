@@ -18,6 +18,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import os
 
 // MARK: - 内置 Inspection 类型选项
 
@@ -35,6 +36,7 @@ private enum InspectionTypePreset: String, CaseIterable, Identifiable {
 // MARK: - Main view
 
 struct InspectionFormView: View {
+    private static let logger = Logger(subsystem: "com.banruo.sitenote", category: "InspectionForm")
     @Bindable var report: InspectionReport
 
     @Environment(\.dismiss) private var dismiss
@@ -76,6 +78,9 @@ struct InspectionFormView: View {
     @State private var exportContext: ExportContext?
     @State private var errorMessage: String?
 
+    // 删除巡检确认对话框
+    @State private var showsDeleteConfirm = false
+
     private struct ExportContext: Identifiable {
         let id = UUID()
         let pdfURL: URL
@@ -92,12 +97,42 @@ struct InspectionFormView: View {
         .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(role: .destructive) {
+                        showsDeleteConfirm = true
+                    } label: {
+                        Label(
+                            String(localized: "删除巡检", locale: AppLanguageManager.currentLocale),
+                            systemImage: "trash"
+                        )
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .accessibilityLabel(String(localized: "更多", locale: AppLanguageManager.currentLocale))
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button(String(localized: "保存草稿", locale: AppLanguageManager.currentLocale)) {
                     saveDraft()
                 }
                 .font(.system(size: 15, weight: .semibold))
             }
+        }
+        .alert(
+            String(localized: "删除这次巡检?", locale: AppLanguageManager.currentLocale),
+            isPresented: $showsDeleteConfirm
+        ) {
+            Button(String(localized: "取消", locale: AppLanguageManager.currentLocale), role: .cancel) { }
+            Button(String(localized: "删除", locale: AppLanguageManager.currentLocale), role: .destructive) {
+                deleteReport()
+            }
+        } message: {
+            Text(String(
+                localized: "报告会进垃圾桶,关联的日程会解除绑定。30 天内可恢复。",
+                locale: AppLanguageManager.currentLocale
+            ))
         }
         .onAppear {
             prefillEngineerNameIfNeeded()
@@ -113,11 +148,11 @@ struct InspectionFormView: View {
             guard !reportNoConfirmed else { return }
             recomputeReportNo()
         }
-        // Builder 选择
+        // 联系人选择(v1.5:picker 选 Contact,picked.id 是 Contact.id)
         .sheet(isPresented: $showsBuilderPicker) {
-            BuilderContactPickerSheet { picked in
-                report.attn = picked.name
-                report.builderID = picked.id.uuidString
+            BuilderContactPickerSheet { contact in
+                report.attn = contact.name
+                report.builderID = contact.id.uuidString
                 report.updatedAt = Date()
             }
         }
@@ -236,16 +271,29 @@ struct InspectionFormView: View {
                 .accessibilityLabel(String(localized: "选择常用类型", locale: AppLanguageManager.currentLocale))
             }
 
-            // Report No.(只读)
+            // Report No. — 可编辑。用户改后 reportNoConfirmed=true,后续 projectNo 变化不再覆盖。
+            // 团队场景下两人各自递增可能撞号,这里允许手动改成不冲突的编号。
             HStack {
                 Text(String(localized: "Report No.(报告号)", locale: AppLanguageManager.currentLocale))
                     .foregroundStyle(Ink.fgDim)
                     .font(.system(size: 14))
-                Spacer()
-                Text(reportNoDisplay)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(reportNoDisplayColor)
-                    .monospacedDigit()
+                TextField(
+                    reportNoPlaceholder,
+                    text: Binding(
+                        get: { report.reportNo },
+                        set: { newValue in
+                            report.reportNo = newValue
+                            reportNoConfirmed = true
+                            report.updatedAt = Date()
+                        }
+                    )
+                )
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(Ink.fg)
+                .monospacedDigit()
+                .multilineTextAlignment(.trailing)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.characters)
             }
 
             TextField(
@@ -324,32 +372,31 @@ struct InspectionFormView: View {
         report.project = preset.projectName
         report.projectNo = preset.projectNo
         report.client = preset.clientName
-        report.location = preset.address.isEmpty ? tag : preset.address
-        // attn 优先用 preset.defaultAttn;若 preset 没填但 builderID 存在 → 用 builder.name
+        report.location = preset.address.isEmpty ? "" : preset.address  // R6:不再用 tag 兜 location;真没地址就空(让用户填)
+        report.siteTag = tag  // **R8#2**:写 siteTag 字段(R6 新加,applyPreset 之前漏写)
+        // **R8#2**:attn 决策树需要**清旧值**,避免上个 preset 的 attn 残留。
+        // 优先级:preset.defaultAttn → preset.defaultBuilderID 对应 Contact.name → 清空
         if !preset.defaultAttn.isEmpty {
             report.attn = preset.defaultAttn
-        } else if let bid = preset.defaultBuilderID, let b = BuildersStorage.find(id: bid) {
-            report.attn = b.name
+        } else if let bid = preset.defaultBuilderID, let c = ContactsStorage.find(id: bid) {
+            report.attn = c.name
+        } else {
+            report.attn = ""
         }
-        if let bid = preset.defaultBuilderID {
-            report.builderID = bid.uuidString
-        }
+        // builderID 也要清,否则不匹配新 preset 收件人
+        report.builderID = preset.defaultBuilderID?.uuidString
         report.inspectionType = preset.defaultInspectionType
         report.updatedAt = Date()
         // 项目号变了 → 触发自动重算 reportNo(若未手动确认过)。
         // onChange(of: report.projectNo) 已注册,会自动跑;此处不显式调用。
     }
 
-    private var reportNoDisplay: String {
-        if !report.reportNo.isEmpty { return report.reportNo }
+    /// reportNo 为空时给 TextField 显示的占位提示。
+    private var reportNoPlaceholder: String {
         if report.projectNo.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return String(localized: "(待填项目号)", locale: AppLanguageManager.currentLocale)
         }
         return String(localized: "(自动生成中)", locale: AppLanguageManager.currentLocale)
-    }
-
-    private var reportNoDisplayColor: Color {
-        report.reportNo.isEmpty ? Ink.fgDim : Ink.fg
     }
 
     // MARK: - Section 2: 选 Note
@@ -599,6 +646,65 @@ struct InspectionFormView: View {
 
     private func saveDraft() {
         report.updatedAt = Date()
+        // P1 #194 + P2 #198 改:save 失败 + mirror 失败都走 logger,不静默
+        do {
+            try modelContext.save()
+        } catch {
+            Self.logger.error("saveDraft modelContext.save failed: \(error.localizedDescription)")
+        }
+        // 团队同步:之前 saveDraft 不 mirror,导致 InspectionFormView 里编辑的
+        // reportNo / project / location / noteIDs / captionOverrides 等通通**不上云**,
+        // Member 端永远只看到 report 刚 start 时的空版本 → 表现就像"报告没共享"。
+        // mirror 失败由 TeamDataMirrorService.lastMirrorStatus 暴露给"设置 → 团队 → 同步诊断"段。
+        let ctx = modelContext
+        let r = report
+        Task {
+            await TeamDataMirrorService.shared.mirrorReport(r, in: ctx)
+            // mirror 内部失败已经写 lastMirrorStatus + os.Logger。view 已 dismiss,这里不再额外 UI。
+        }
+        dismiss()
+    }
+
+    /// 软删 report → 解绑所有指向它的 schedule → cancel active session(如果它在跑)
+    /// → mirror 改动 → dismiss。30 天内 Trash 可恢复。
+    private func deleteReport() {
+        let reportID = report.id
+
+        // 1. session 在它身上 → 先 detach,避免 banner 卡 ghost
+        if InspectionSessionManager.shared.currentSessionID == reportID {
+            InspectionSessionManager.shared.cancel()
+        }
+
+        // 2. 解绑所有指向它的 schedule(防止后续看到 dangling linkedReportID)
+        let scheduleDesc = FetchDescriptor<SiteVisitSchedule>(
+            predicate: #Predicate<SiteVisitSchedule> { $0.linkedReportID == reportID }
+        )
+        let linked = (try? modelContext.fetch(scheduleDesc)) ?? []
+        for sch in linked {
+            sch.linkedReportID = nil
+        }
+
+        // 3. 软删 report
+        report.deletedAt = Date()
+        report.updatedAt = Date()
+
+        do {
+            try modelContext.save()
+        } catch {
+            Self.logger.error("deleteReport modelContext.save failed: \(error.localizedDescription)")
+        }
+
+        // 4. mirror — report + 所有解绑的 schedule
+        let ctx = modelContext
+        let r = report
+        let schedulesToMirror = linked
+        Task {
+            await TeamDataMirrorService.shared.mirrorReport(r, in: ctx)
+            for sch in schedulesToMirror {
+                await TeamDataMirrorService.shared.mirrorSchedule(sch, in: ctx)
+            }
+        }
+
         dismiss()
     }
 
@@ -644,39 +750,45 @@ struct InspectionFormView: View {
     }
 }
 
-// MARK: - Builder Picker(联系簿)
+// MARK: - Contact Picker(联系簿)
 
-/// 从 BuildersStorage 选一个联系人。当前不做"新建" — 那是 Settings 联系簿的事。
+/// 从 ContactsStorage 选一个联系人(v1.5 起 picker 返 Contact)。
+/// 当前不做"新建" — 那是 Settings 联系簿的事。
 private struct BuilderContactPickerSheet: View {
-    let onPick: (Builder) -> Void
+    let onPick: (Contact) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var query: String = ""
 
-    private var builders: [Builder] {
-        let all = BuildersStorage.load()
+    private var allContacts: [Contact] { ContactsStorage.load() }
+    private var allBuilders: [Builder] { BuildersStorage.load() }
+
+    private var contacts: [Contact] {
+        let all = allContacts
         let q = query.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return all }
         let lower = q.lowercased()
-        return all.filter {
-            $0.name.lowercased().contains(lower)
-                || $0.company.lowercased().contains(lower)
-                || $0.email.lowercased().contains(lower)
+        let byID = Dictionary(uniqueKeysWithValues: allBuilders.map { ($0.id, $0) })
+        return all.filter { c in
+            let companyName = byID[c.builderID]?.name.lowercased() ?? ""
+            return c.name.lowercased().contains(lower)
+                || companyName.contains(lower)
+                || c.email.lowercased().contains(lower)
         }
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if BuildersStorage.load().isEmpty {
+                if allContacts.isEmpty {
                     emptyState
                 } else {
                     List {
-                        ForEach(builders) { builder in
+                        ForEach(contacts) { contact in
                             Button {
-                                onPick(builder)
+                                onPick(contact)
                                 dismiss()
                             } label: {
-                                row(builder)
+                                row(contact)
                             }
                             .buttonStyle(.plain)
                             .listRowBackground(Ink.bg)
@@ -702,21 +814,26 @@ private struct BuilderContactPickerSheet: View {
         }
     }
 
-    private func row(_ b: Builder) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+    private func companyName(for contact: Contact) -> String {
+        allBuilders.first(where: { $0.id == contact.builderID })?.name ?? ""
+    }
+
+    private func row(_ c: Contact) -> some View {
+        let company = companyName(for: c)
+        return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(b.name)
+                Text(c.name)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Ink.fg)
-                if !b.company.isEmpty {
-                    Text("· \(b.company)")
+                if !company.isEmpty {
+                    Text("· \(company)")
                         .font(.system(size: 13))
                         .foregroundStyle(Ink.fgDim)
                 }
                 Spacer()
             }
-            if !b.email.isEmpty {
-                Text(b.email)
+            if !c.email.isEmpty {
+                Text(c.email)
                     .font(.system(size: 12))
                     .foregroundStyle(Ink.fgDim)
             }
@@ -732,7 +849,7 @@ private struct BuilderContactPickerSheet: View {
                 .foregroundStyle(Ink.fgDim)
             Text(String(localized: "联系簿还是空的", locale: AppLanguageManager.currentLocale))
                 .font(.system(size: 15, weight: .semibold))
-            Text(String(localized: "在 Settings → 联系人 里添加 Builder/Foreman。", locale: AppLanguageManager.currentLocale))
+            Text(String(localized: "在 Settings → 建造商联系簿 里先建公司,再加联系人。", locale: AppLanguageManager.currentLocale))
                 .font(.system(size: 12))
                 .foregroundStyle(Ink.fgDim)
                 .multilineTextAlignment(.center)

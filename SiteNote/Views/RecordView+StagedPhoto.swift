@@ -30,7 +30,14 @@ extension RecordView {
             }
             .padding(.horizontal, 24)
             .padding(.top, 20)
-            .padding(.bottom, 12)
+            .padding(.bottom, 4)
+
+            Text("点击相机继续拍 · 长按相机录音")
+                .font(.system(size: 12))
+                .foregroundStyle(Ink.fgDim)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 8)
 
             if let last = viewModel.stagedPhotos.last {
                 let lastIdx = viewModel.stagedPhotos.count - 1
@@ -91,42 +98,21 @@ extension RecordView {
 
             Spacer(minLength: 12)
 
-            // 主操作行:[+ 继续拍] [✓ 直接存]
-            // 工程师巡检场景一次现场常拍多张,"继续拍" 让用户连续触发 camera
-            // 不用绕回 hero 按钮。"直接存" 保存所有 staged → Engineer 巡检中自动跳详情(RecordView.onChange 监听)
-            HStack(spacing: 10) {
-                Button {
-                    isShowingCamera = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("继续拍")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
-                    .foregroundStyle(Ink.fg)
+            // 主操作:[直接存] 独占一排
+            // "继续拍" 已收敛为顶部文字提示 → 用户复用主屏相机按钮触发
+            // "直接存" 保存所有 staged → Engineer 巡检中自动跳详情(RecordView.onChange 监听)
+            Button {
+                viewModel.savePhotosOnly()
+            } label: {
+                Text("直接存")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Ink.fg, lineWidth: 1.5)
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    viewModel.savePhotosOnly()
-                } label: {
-                    Text("直接存")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Ink.fg)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-                .buttonStyle(.plain)
+                    .background(Ink.fg)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
+            .buttonStyle(.plain)
             .padding(.horizontal, 24)
             .padding(.bottom, 20)
         }

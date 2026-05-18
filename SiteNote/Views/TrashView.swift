@@ -18,7 +18,12 @@ struct TrashView: View {
         filter: #Predicate<Note> { $0.deletedAt != nil },
         sort: \Note.deletedAt,
         order: .reverse
-    ) private var trashedNotes: [Note]
+    ) private var trashedNotesAllRoles: [Note]
+
+    /// v1.5:只显示当前角色的 note(historical nil → PM)。
+    private var trashedNotes: [Note] {
+        trashedNotesAllRoles.filter { $0.belongsToCurrentRole }
+    }
 
     /// 软删后多少天自动永久删。
     static let retentionDays: Int = 30

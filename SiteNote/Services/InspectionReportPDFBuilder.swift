@@ -492,6 +492,7 @@ enum InspectionReportPDFBuilder {
             height: planH
         )
         drawFloorPlanPin(
+            planID: note.floorPlanID,
             planName: note.floorPlanRef ?? "",
             normalizedX: note.floorPlanX ?? 0.5,
             normalizedY: note.floorPlanY ?? 0.5,
@@ -665,14 +666,16 @@ enum InspectionReportPDFBuilder {
     /// 矩形 mini floor plan 缩略图,大尺寸 aspect-fit + 红色十字 + 双环高亮。
     /// 之前是 48pt 圆形 + 3pt 红点,用户反馈"图钉看不出位置";现在改成 110pt 矩形,
     /// aspect-fit 完整显示图纸(不裁切),并以 12pt 红色十字 + 16pt/24pt 双圈高亮标记位置。
+    /// **Codex#8**:优先按 planID(UUID)查找,改名后不丢图;无 ID 时 fallback name。
     private static func drawFloorPlanPin(
+        planID: UUID?,
         planName: String,
         normalizedX: Double,
         normalizedY: Double,
         in rect: CGRect,
         siteTag: String?
     ) {
-        guard let plan = FloorPlansStorage.find(name: planName, siteTag: siteTag),
+        guard let plan = FloorPlansStorage.resolve(id: planID, name: planName, siteTag: siteTag),
               let url = FloorPlansStorage.absoluteURL(forRelative: plan.imageRelativePath),
               let image = UIImage(contentsOfFile: url.path) else {
             return

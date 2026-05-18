@@ -229,10 +229,10 @@ extension NoteDetailView {
 
     @ViewBuilder
     var floorPlanContent: some View {
-        if let planName = note.floorPlanRef,
-           let x = note.floorPlanX,
+        // P2 #187:优先 floorPlanID,fallback floorPlanRef 名字
+        if let x = note.floorPlanX,
            let y = note.floorPlanY,
-           let plan = FloorPlansStorage.find(name: planName) {
+           let plan = FloorPlansStorage.resolve(id: note.floorPlanID, name: note.floorPlanRef) {
             VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
                 FloorPlanDisplayView(plan: plan, x: x, y: y, pinColor: pinColorForThisNote)
                     .frame(height: 220)

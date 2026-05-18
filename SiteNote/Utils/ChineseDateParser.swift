@@ -18,7 +18,7 @@ enum ChineseDateParser {
         guard !lower.isEmpty else { return nil }
 
         // 归档关键词(不需要提醒)
-        let archiveKeywords = ["记一下", "记下就行", "备忘", "以后再说", "不用提醒", "存一下", "just note", "fyi"]
+        let archiveKeywords = ["记一下", "记下就行", "备忘", "以后再说", "不用提醒", "存一下", "just note", "fyi", "随便记", "先记下", "不重要", "note this"]
         if archiveKeywords.contains(where: { lower.contains($0) }) {
             return .archive
         }
@@ -26,7 +26,8 @@ enum ChineseDateParser {
         // 今天关键词
         let todayKeywords = [
             "今天", "今晚", "今天之内", "今天前", "今天内", "下班前", "下班之前",
-            "eod", "end of day", "today", "tonight", "before 5", "before 6"
+            "eod", "end of day", "today", "tonight", "before 5", "before 6",
+            "今儿", "今儿个", "马上", "立刻", "等会儿", "傍晚", "晚点", "asap"
         ]
         if todayKeywords.contains(where: { lower.contains($0) }) {
             return .today
@@ -34,7 +35,8 @@ enum ChineseDateParser {
 
         // 本周关键词
         let weekKeywords = [
-            "本周", "这周", "这星期", "周末前", "周五前", "this week", "by friday", "eow"
+            "本周", "这周", "这星期", "周末前", "周五前", "this week", "by friday", "eow",
+            "这礼拜", "礼拜前", "礼拜五前", "end of week", "eow"
         ]
         if weekKeywords.contains(where: { lower.contains($0) }) {
             return .thisWeek
@@ -43,7 +45,8 @@ enum ChineseDateParser {
         // 3 天内关键词(含"明天""后天"也归到 threeDays 档)
         let threeDaysKeywords = [
             "3 天", "三天", "3天", "几天", "两三天", "2-3 天", "两天", "两天内",
-            "明天", "后天", "大后天", "近几天", "in 3 days", "by tomorrow", "couple days"
+            "明天", "后天", "大后天", "近几天", "in 3 days", "by tomorrow", "couple days",
+            "明早", "明儿", "明儿个", "过两天", "过几天", "这两天", "这几天", "礼拜内", "day after tomorrow"
         ]
         if threeDaysKeywords.contains(where: { lower.contains($0) }) {
             return .threeDays

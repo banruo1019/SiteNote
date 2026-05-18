@@ -257,9 +257,13 @@ final class VoiceCaptureService {
         do {
             try audioEngine.start()
         } catch {
+            // P1 #197:audioEngine.start 失败的清理路径必须释放所有已分配资源,
+            // 否则 recognitionRequest / audioFile 残留 → 下次 startCapturing 时 refreshRecognizer
+            // 覆盖前会撞一阵 leak,以及 audioFile 持有的临时文件句柄不释放。
             inputNode.removeTap(onBus: 0)
             self.audioFile = nil
             currentFileURL = nil
+            recognitionRequest = nil           // 清识别 request,避免悬空持有 buffers
             try? FileManager.default.removeItem(at: fileURL)
             try? audioSession.setActive(false, options: .notifyOthersOnDeactivation)
             throw VoiceError.audioSessionFailed

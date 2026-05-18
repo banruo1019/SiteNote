@@ -2,20 +2,30 @@
 //  SettingsView.swift
 //  SiteNote
 //
-//  v1.3:统一 Settings —— PM 和 Engineer 共用一个设置页。
-//  内容由 EngineerSettingsRoot 提供(名字保留为 legacy,实际作为统一设置 root)。
-//  顶部第 1 项是角色 picker,后续 sections 共用 + 内部按角色微调显示。
+//  v1.5:按 ProfileKind 分流 PM / Engineer。
+//  - PM → SiteTeamSettingsRoot(精简版,无建造商联系簿 + 无报告段)
+//  - Engineer → EngineerSettingsRoot(完整版,含建造商 + 免责声明 + 邮件模板)
 //
-//  v1.3 后续清理:原 InputAISettingsView / RemindersSettingsView /
-//  SiteResourcesSettingsView / DataAboutSettingsView 4 个 sub-view 是
-//  统一 settings 前的 legacy,**已全部删除**(0 caller)。需要这些设置项
-//  请在 EngineerSettingsRoot 里加,不要再开新 sub-view。
+//  共用 sub-view(ProfileSettings / CompanyInfo / Team / SitePreset /
+//  SavedReports / Trash)两个 root 都引用同一份 file。
+//  角色切换是 @Observable 驱动,无需重启。
+//
+//  v1.3 历史清理(保留):原 InputAISettingsView / RemindersSettingsView /
+//  SiteResourcesSettingsView / DataAboutSettingsView 4 个 sub-view 是统一
+//  settings 前的 legacy,**已全部删除**(0 caller)。
 //
 
 import SwiftUI
 
 struct SettingsView: View {
+    @State private var profileManager = UserProfileManager.shared
+
     var body: some View {
-        EngineerSettingsRoot()
+        switch profileManager.current {
+        case .siteTeam:
+            SiteTeamSettingsRoot()
+        case .engineer:
+            EngineerSettingsRoot()
+        }
     }
 }

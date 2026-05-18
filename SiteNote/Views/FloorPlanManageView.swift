@@ -14,8 +14,22 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct FloorPlanManageView: View {
+    /// 锁定工地。非 nil 时:只显示该 site 的楼层 + 上传按钮直接 attach 到此 site,
+    /// 不再弹"选哪个工地"的 Menu。从「工地详情」入口进来必传;
+    /// nil = 老的全局模式(总览/Settings 顶层入口用)。
+    let lockedSite: String?
+
+    init(lockedSite: String? = nil) {
+        self.lockedSite = lockedSite
+    }
+
     @Environment(\.modelContext) private var modelContext
-    @Query(filter: #Predicate<Note> { $0.deletedAt == nil }) private var allNotes: [Note]
+    @Query(filter: #Predicate<Note> { $0.deletedAt == nil }) private var allNotesAllRoles: [Note]
+
+    /// v1.5:只显示当前角色的 note(historical nil → PM)。
+    private var allNotes: [Note] {
+        allNotesAllRoles.filter { $0.belongsToCurrentRole }
+    }
     @State private var plans: [FloorPlan] = FloorPlansStorage.load()
     @State private var siteTags: [String] = SiteTagsStorage.load()
     @State private var pendingDelete: PendingDelete?
@@ -41,8 +55,13 @@ struct FloorPlanManageView: View {
     /// 所有带有楼层的工地 + "未分类"。
     /// 必须从 `@State plans` 派生,直接读 UserDefaults 的版本不会随上传后的 `plans = load()` 刷新,
     /// 因为 SwiftUI 不知道这个计算属性依赖存储。
+    /// lockedSite 模式下:只返回该工地的一段,屏蔽"未分类"和其它工地。
     private var groupedSections: [SiteGroup] {
         let grouped = Dictionary(grouping: plans, by: { $0.siteTag })
+        if let locked = lockedSite {
+            let onlyThis = grouped[locked] ?? []
+            return onlyThis.isEmpty ? [] : [SiteGroup(site: locked, plans: onlyThis)]
+        }
         var result: [SiteGroup] = []
         for site in siteTags {
             if let group = grouped[site], !group.isEmpty {
@@ -59,12 +78,18 @@ struct FloorPlanManageView: View {
         Form {
             if groupedSections.isEmpty {
                 Section {
-                    Text("还没有上传任何平面图。")
-                        .font(.system(size: DesignTokens.FontSize.body))
-                        .foregroundStyle(.secondary)
-                    Text("先在设置「工地标签」里建一个工地,再到这里上传该工地的楼层图纸。")
-                        .font(.system(size: DesignTokens.FontSize.body))
-                        .foregroundStyle(.secondary)
+                    if lockedSite != nil {
+                        Text("这个工地还没有上传平面图。")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("还没有上传任何平面图。")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                            .foregroundStyle(.secondary)
+                        Text("先在设置「工地标签」里建一个工地,再到这里上传该工地的楼层图纸。")
+                            .font(.system(size: DesignTokens.FontSize.body))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             } else {
                 ForEach(groupedSections) { group in
@@ -73,7 +98,20 @@ struct FloorPlanManageView: View {
             }
 
             Section {
-                if siteTags.isEmpty {
+                if let locked = lockedSite {
+                    // 工地内入口:直接 attach 到当前 site,免 picker。
+                    Button {
+                        uploadTarget = UploadTarget(siteTag: locked)
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle")
+                            Text("上传新平面图")
+                                .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
+                            Spacer()
+                        }
+                        .foregroundStyle(Color.accentColor)
+                    }
+                } else if siteTags.isEmpty {
                     Text("请先到「设置 → 工地资源 → 工地标签」建一个工地,然后才能上传它的平面图。")
                         .font(.system(size: DesignTokens.FontSize.body))
                         .foregroundStyle(Ink.red)
@@ -95,11 +133,11 @@ struct FloorPlanManageView: View {
                     }
                 }
             } footer: {
-                Text("支持图片和 PDF。PDF 会让你选其中一页作为楼层图。必须先建工地才能上传。")
+                Text("支持图片和 PDF。PDF 会让你选其中一页作为楼层图。")
                     .font(.system(size: DesignTokens.FontSize.body))
             }
         }
-        .navigationTitle("工地平面图")
+        .navigationTitle(lockedSite.map { String(localized: "\($0) 平面图", locale: AppLanguageManager.currentLocale) } ?? String(localized: "工地平面图", locale: AppLanguageManager.currentLocale))
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
         .onAppear {
@@ -166,7 +204,10 @@ struct FloorPlanManageView: View {
             .onDelete { offsets in
                 guard let idx = offsets.first else { return }
                 let plan = plans[idx]
-                let refs = allNotes.filter { $0.floorPlanRef == plan.name }.count
+                // P2 #187:引用计数按 ID 优先(老数据没 ID 走 name fallback)
+                let refs = allNotes.filter {
+                    $0.floorPlanID == plan.id || ($0.floorPlanID == nil && $0.floorPlanRef == plan.name)
+                }.count
                 if refs > 0 {
                     pendingDelete = PendingDelete(plan: plan, referencingCount: refs)
                 } else {
@@ -183,10 +224,12 @@ struct FloorPlanManageView: View {
         }
     }
 
-    /// 删图前清掉所有引用此图的 note 的 floorPlanRef + X/Y,避免 dangling 引用。
+    /// 删图前清掉所有引用此图的 note 的 floorPlanRef + ID + X/Y,避免 dangling 引用。
+    /// P2 #187:同时按 ID 和 name 匹配(老数据没 ID)。
     private func clearReferences(to plan: FloorPlan) {
-        for note in allNotes where note.floorPlanRef == plan.name {
+        for note in allNotes where note.floorPlanID == plan.id || (note.floorPlanID == nil && note.floorPlanRef == plan.name) {
             note.floorPlanRef = nil
+            note.floorPlanID = nil
             note.floorPlanX = nil
             note.floorPlanY = nil
         }

@@ -140,7 +140,7 @@ struct ProfileSelectorView: View {
 
     private func themeColor(_ kind: ProfileKind) -> Color {
         switch kind {
-        case .pm: return Ink.accent          // 工地橙
+        case .siteTeam: return Ink.accent          // 工地橙
         case .engineer: return Ink.accentBlue
         }
     }

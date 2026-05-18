@@ -28,8 +28,10 @@ import SwiftData
 import PDFKit
 import QuickLook
 import MessageUI
+import os
 
 struct InspectionReportDetailView: View {
+    private static let logger = Logger(subsystem: "com.banruo.sitenote", category: "InspectionReportDetail")
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
@@ -59,6 +61,8 @@ struct InspectionReportDetailView: View {
     @State private var showsDuplicateConfirm: Bool = false
     /// "删除"确认弹窗开关。
     @State private var showsDeleteConfirm: Bool = false
+    /// "标记为已发送"确认弹窗开关。
+    @State private var showsMarkSubmittedConfirm: Bool = false
     /// MFMail 用的附件占位(弹起前 prepare 一次)。
     @State private var pendingAttachment: MailComposeView.Attachment?
     /// 顶部错误提示(nil = 隐藏)。
@@ -83,6 +87,11 @@ struct InspectionReportDetailView: View {
             VStack(alignment: .leading, spacing: 22) {
                 if let errorMessage {
                     errorBanner(errorMessage)
+                }
+                // 草稿 + 当前没有别的 active session → 显示主 CTA「继续巡检」。
+                // 已经在巡检中(另一份 session)就藏起,避免用户误操作覆盖。
+                if report.status == .draft {
+                    continueInspectionCTA
                 }
                 reportInfoGroup
                 notesGroup
@@ -154,6 +163,20 @@ struct InspectionReportDetailView: View {
                 locale: locale
             ))
         }
+        .alert(
+            String(localized: "标记为已提交?", locale: locale),
+            isPresented: $showsMarkSubmittedConfirm
+        ) {
+            Button(String(localized: "取消", locale: locale), role: .cancel) { }
+            Button(String(localized: "标记", locale: locale)) {
+                markAsSubmitted()
+            }
+        } message: {
+            Text(String(
+                localized: "确认你已经发过邮件了。报告会从草稿切换为已提交,团队成员能看到这次更新。",
+                locale: locale
+            ))
+        }
     }
 
     // MARK: - 报告信息 section
@@ -180,6 +203,14 @@ struct InspectionReportDetailView: View {
                     label: String(localized: "日期", locale: locale),
                     value: dateTimeString(for: report.reportDate)
                 )
+                // 团队场景:显示巡检员(report 创建人)。自己的 report / 老数据(空 owner)不显示这一行。
+                if let creator = creatorDisplayName {
+                    cardDivider
+                    kvRow(
+                        label: String(localized: "巡检员", locale: locale),
+                        value: creator
+                    )
+                }
                 cardDivider
                 statusRow
                 if let mailDetail = mailStatusDetail {
@@ -188,6 +219,23 @@ struct InspectionReportDetailView: View {
                 }
             }
         }
+    }
+
+    /// 反查 report 创建人显示名(TeamMember 表 by userID)。
+    /// 自己的 / 老数据(空 owner) → nil(UI 不显示这一行)。
+    private var creatorDisplayName: String? {
+        let owner = report.createdByUserID
+        let me = ICloudSyncConfig.shared.currentUserRecordName ?? ""
+        guard !owner.isEmpty, owner != me else { return nil }
+        // fetch TeamMember by userID
+        let desc = FetchDescriptor<TeamMember>(
+            predicate: #Predicate<TeamMember> { $0.userID == owner }
+        )
+        if let member = try? modelContext.fetch(desc).first,
+           !member.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return member.displayName
+        }
+        return String(owner.prefix(6))
     }
 
     /// "状态"行:草稿/已提交 + 提交时间(submitted 才有)。
@@ -271,20 +319,42 @@ struct InspectionReportDetailView: View {
 
     // MARK: - Notes section
 
+    /// Notes 段。本地有 Note 实体 → 走 NoteTimelineRow + 详情链接;
+    /// 本地缺(团队场景:Owner 拉到 Foreman 的 report 但 Note 表跨账号不可见)→ 走
+    /// `teamSnapshots` 显示文字证据(transcription / siteTag / 照片计数)。
     private var notesGroup: some View {
-        groupBlock(
+        let snapshots = report.noteSnapshots()
+        let useSnapshots = noteList.isEmpty && !snapshots.isEmpty
+        return groupBlock(
             header: String(
-                localized: "包含的 Notes(\(noteList.count))",
+                localized: useSnapshots
+                    ? "团队成员的现场记录(\(snapshots.count))"
+                    : "包含的 Notes(\(noteList.count))",
                 locale: locale
             )
         ) {
             cardContainer {
-                if noteList.isEmpty {
+                if useSnapshots {
+                    VStack(spacing: 0) {
+                        ForEach(Array(snapshots.enumerated()), id: \.element.noteID) { idx, s in
+                            snapshotRow(s, isLast: idx == snapshots.count - 1)
+                        }
+                    }
+                } else if noteList.isEmpty {
                     emptyNotesHint
                 } else {
                     VStack(spacing: 0) {
                         ForEach(noteList) { note in
-                            NoteTimelineRow(note: note)
+                            // 用 destination-trailing-closure 而不是 NavigationLink(value:),
+                            // 后者走 value-based navigation,SwiftData @Model 重建 destination 时
+                            // note.modelContext 短暂为 nil → NoteDetailView 顶部 guard 立即 dismiss
+                            // → 看起来"跳进去又跳回来"。直接持有 note reference 不走 value 系统。
+                            NavigationLink {
+                                NoteDetailView(note: note)
+                            } label: {
+                                NoteTimelineRow(note: note)
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -309,6 +379,135 @@ struct InspectionReportDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// 团队 snapshot 行 — 跨账号 Owner 看到 Foreman 的文字证据。
+    /// 不可点(没本地 Note 实体可跳)— 文案明示"完整照片需要 Foreman 设备 / 联系 Foreman"。
+    @ViewBuilder
+    private func snapshotRow(_ s: NoteSnapshot, isLast: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(timeStringHourMinute(s.createdAt))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Ink.fgDim)
+                    .monospacedDigit()
+                if let tag = s.siteTag, !tag.isEmpty {
+                    Text(tag)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Ink.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
+                Spacer(minLength: 0)
+                if s.photoCount > 0 {
+                    Label("\(s.photoCount)", systemImage: "photo")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Ink.fgDim)
+                }
+            }
+            Text(s.transcription.isEmpty
+                 ? String(localized: "(空记录)", locale: locale)
+                 : s.transcription)
+                .font(.system(size: 13))
+                .foregroundStyle(Ink.fg)
+                .multilineTextAlignment(.leading)
+            if s.photoCount > 0 {
+                Text(String(localized: "照片在 Foreman 设备,需要看请联系对方导出 PDF。", locale: locale))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Ink.fgDim)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Rectangle().fill(Ink.line).frame(height: 1).padding(.leading, 14)
+            }
+        }
+    }
+
+    // MARK: - 继续巡检 CTA(草稿态独占)
+
+    /// 草稿 → 一键回到 session,继续录 notes。
+    /// 黑底白字大号按钮,跟 EndInspectionSheet 的"确认完成"主按钮视觉一致。
+    /// 当前另有 active session 时给灰色 hint(避免覆盖别的 in-progress 巡检)。
+    private var continueInspectionCTA: some View {
+        VStack(spacing: 8) {
+            Button {
+                resumeInspection()
+            } label: {
+                HStack(spacing: 8) {
+                    Spacer()
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(String(localized: "继续巡检", locale: locale))
+                        .font(.system(size: 15, weight: .semibold))
+                    Spacer()
+                }
+                .padding(.vertical, 16)
+                .foregroundStyle(Ink.bg)
+                .background(Ink.fg)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+
+            // 次按钮:已经在 app 外发过邮件的用户,可以手动把草稿标为已提交。
+            Button {
+                showsMarkSubmittedConfirm = true
+            } label: {
+                HStack(spacing: 6) {
+                    Spacer()
+                    Image(systemName: "checkmark.seal")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(String(localized: "已发完邮件 · 标为已提交", locale: locale))
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+                .foregroundStyle(Ink.fg)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Ink.fg, lineWidth: 1)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Ink.bg))
+                )
+            }
+            .buttonStyle(.plain)
+
+            Text(String(
+                localized: "回到「记」Tab 接着录,session 顶部 banner 会重新出现。完成后再点「完成巡检」决定是否发邮件。",
+                locale: locale
+            ))
+            .font(.system(size: 11))
+            .foregroundStyle(Ink.fgDim)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// 继续巡检:重新挂 session → 跳「记」Tab → 关详情页。
+    /// session manager.resume(...) 会把 currentSessionID 设回 report.id,
+    /// banner 重新出现,RecordView.task 的 validateOrCancel 一查 currentReport 在
+    /// 就不会被当 ghost 清掉。
+    private func resumeInspection() {
+        InspectionSessionManager.shared.resume(report: report, in: modelContext)
+        AppRouter.shared.requestTab(.record)
+        dismiss()
+    }
+
+    /// 手动把草稿标记为已提交 — 用户在 app 外发了邮件(直接 Mail.app / 截图分享 / 等)
+    /// 之后想把状态从草稿改为已提交。同 handleMailResult .sent 分支:
+    /// statusRaw → submitted,submittedAt = now,触发 mirror 让团队成员也看到。
+    private func markAsSubmitted() {
+        report.statusRaw = InspectionStatus.submitted.rawValue
+        report.submittedAt = Date()
+        report.updatedAt = Date()
+        try? modelContext.save()
+        let ctx = modelContext
+        let r = report
+        Task { await TeamDataMirrorService.shared.mirrorReport(r, in: ctx) }
+    }
+
     // MARK: - 操作 section
 
     private var actionsGroup: some View {
@@ -323,8 +522,11 @@ struct InspectionReportDetailView: View {
                     handlePreviewPDF()
                 }
                 actionRow(
+                    // 草稿 = 首发(发完 status → .submitted);已提交 = 再发一次(status 不变)。
                     icon: "paperplane",
-                    title: String(localized: "再发一次邮件", locale: locale),
+                    title: report.status == .draft
+                        ? String(localized: "发送邮件", locale: locale)
+                        : String(localized: "再发一次邮件", locale: locale),
                     isProcessing: isBuildingPDF && showsMailComposer == false && pendingAttachment != nil,
                     disabled: isBuildingPDF
                 ) {
@@ -480,12 +682,14 @@ struct InspectionReportDetailView: View {
         let attn = report.attn.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !attn.isEmpty, report.status == .submitted else { return nil }
 
-        // 拼"姓名 (公司)"风格;builderID 反查到才带公司
+        // 拼"姓名 (公司)"风格;v1.5:builderID 字段值经迁移后实际指向 Contact.id,
+        // 通过 Contact.builderID 反查到 Builder 拿公司名。
         var recipient = attn
         if let id = report.builderID,
-           let builder = BuildersStorage.find(idString: id),
-           !builder.company.isEmpty {
-            recipient = "\(attn) (\(builder.company))"
+           let contact = ContactsStorage.find(idString: id),
+           let builder = BuildersStorage.find(id: contact.builderID),
+           !builder.name.isEmpty {
+            recipient = "\(attn) (\(builder.name))"
         }
 
         // 时间用 submittedAt(近似认为提交时间 ≈ 邮件发送时间)
@@ -619,13 +823,31 @@ struct InspectionReportDetailView: View {
         showsMailComposer = true
     }
 
-    /// MFMail 回调。.sent → 刷新 submittedAt(再发也算一次提交);其他不变。
+    /// MFMail 回调。.sent → 刷新 submittedAt;若当前是 .draft 则同步切到 .submitted
+    /// (用户原话:发了邮件就不能叫草稿了)。其他不变。
     private func handleMailResult(_ result: MFMailComposeResult) {
         switch result {
         case .sent:
             report.submittedAt = Date()
             report.updatedAt = Date()
-            try? modelContext.save()
+            if report.status == .draft {
+                report.statusRaw = InspectionStatus.submitted.rawValue
+            }
+            // P1 #194:save 失败写日志 — 之前 try? 静默 → 发了邮件 UI 显示已提交但磁盘还是草稿
+            do {
+                try modelContext.save()
+                // **Codex#7**:save 成功后 mirror report,团队成员视图才能看到状态变化。
+                // 之前只 save 不 mirror → Member 端永远显示 draft。
+                let ctx = modelContext
+                let r = report
+                Task { await TeamDataMirrorService.shared.mirrorReport(r, in: ctx) }
+            } catch {
+                Self.logger.error("handleMailResult sent save failed: \(error.localizedDescription)")
+                errorMessage = String(
+                    localized: "保存提交状态失败,请稍后手动改为已提交。",
+                    locale: locale
+                )
+            }
         case .failed:
             errorMessage = String(
                 localized: "邮件发送失败,请检查邮箱设置或网络后重试。",
@@ -659,10 +881,15 @@ struct InspectionReportDetailView: View {
     }
 
     /// 软删 — 移入垃圾桶,关联 notes / 归档 PDF 都不动。
+    /// 团队场景:删 = 把 deletedAt 推 share zone,让团队其他成员看到该 report 被移走。
+    /// 不 mirror 的话本地软删但 share zone 还在,下次 fetchAndSyncAll 又拉回本地。
     private func performDelete() {
         report.deletedAt = Date()
         report.updatedAt = Date()
         try? modelContext.save()
+        let ctx = modelContext
+        let r = report
+        Task { await TeamDataMirrorService.shared.mirrorReport(r, in: ctx) }
         dismiss()
     }
 }

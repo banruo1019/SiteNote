@@ -22,6 +22,14 @@ struct RecordView: View {
         sort: \Note.createdAt,
         order: .reverse
     ) private var allNotes: [Note]
+    /// Engineer idle 主屏的"今日巡检"列表数据源。
+    /// @Query 拉所有 schedule(未软删),今天 + pending + 未挂 report 的过滤交给 `todayPendingSchedules`。
+    /// 不在 @Query 里写 today 范围:Calendar.startOfDay 不是 Predicate 友好的常量。
+    @Query(
+        filter: #Predicate<SiteVisitSchedule> { $0.deletedAt == nil },
+        sort: \SiteVisitSchedule.scheduledDate,
+        order: .forward
+    ) private var allSchedules: [SiteVisitSchedule]
     @State var viewModel = HomeViewModel()
 
     @State var isShowingCamera = false
@@ -36,6 +44,8 @@ struct RecordView: View {
     @State private var archivedSiteTags: Set<String> = SiteArchiveStorage.loadArchived()
     /// "已完成"段折叠状态(默认折叠 — 用户看的主要是待办)。
     @State private var doneSectionExpanded: Bool = false
+    /// v1.6:待办段也可折叠,默认展开。
+    @State private var pendingSectionExpanded: Bool = true
     /// Engineer 视角的工地 filter(nil = 全部工地)。PM 视角不用。
     @State private var engineerSiteFilter: String? = nil
 
@@ -53,9 +63,10 @@ struct RecordView: View {
 
     // MARK: - Derived data
 
-    /// 所有未删除的 Note。
+    /// 所有未删除的 Note,且属于当前角色(v1.5 同账号双世界)。
+    /// 历史 nil 归 PM(老用户基线,见 Note.effectiveRole)。
     private var liveNotes: [Note] {
-        allNotes.filter { $0.deletedAt == nil }
+        allNotes.filter { $0.deletedAt == nil && $0.belongsToCurrentRole }
     }
 
     /// 应用 search + 归档过滤后的 Note 池(待办 + 已完成共用基础)。
@@ -131,6 +142,13 @@ struct RecordView: View {
                 headerProvider.ensureFresh()
                 // 回到主屏时重新拉归档列表(用户在 settings 里改过可能)。
                 archivedSiteTags = SiteArchiveStorage.loadArchived()
+                // 自愈 ghost session:UserDefaults 有 sessionID 但 SwiftData 没 report
+                // (上次清空数据 / 数据迁移 / App 被杀 → report 丢失);防止主屏卡在 active 态。
+                sessionManager.validateOrCancel(in: modelContext)
+                // 团队 mirror:进主屏拉一次 zone changes,把 owner/member 改的 preset/schedule/report 同步过来
+                await TeamDataMirrorService.shared.fetchAndSyncAll(in: modelContext)
+                // 团队协作:Owner 分配给我的新工地 → 弹 local notification + 标记已通知。
+                TeamAssignmentNotifier.shared.scanAndNotify(Array(allSchedules))
             }
             .sheet(isPresented: $isShowingCamera) {
                 CameraPicker(image: $cameraCapturedImage)
@@ -201,12 +219,13 @@ struct RecordView: View {
                 Text(viewModel.errorMessage ?? "")
             }
             .animation(.easeInOut(duration: 0.2), value: viewModel.lastSave?.noteID)
-            // 工程师巡检中:每条录音/拍照保存后自动跳详情(每条要详细记录,不是速记)
-            // PM / 自由速记不触发,保留主屏 Undo Toast 流程。
+            // 工程师:**录完一律自动跳详情**(每条都要仔细记录,不走主屏速记 toast 流程)。
+            // 不再以 sessionManager.isActive 守门 — Engineer idle 录音也走详情;
+            // session 中录音附带的 attachIfNeeded 在 commit 路径里另行处理,不依赖这里。
+            // PM 走 Undo Toast 流程(双行 deadline chip + 详情按钮),不触发自动跳。
             .onChange(of: viewModel.lastSave?.noteID) { _, newID in
                 guard newID != nil,
-                      profileManager.current == .engineer,
-                      sessionManager.isActive else { return }
+                      profileManager.current == .engineer else { return }
                 if let note = viewModel.fetchLastSavedNote() {
                     navPath.append(note)
                     viewModel.dismissToastManually()
@@ -229,9 +248,16 @@ struct RecordView: View {
 
     /// Engineer idle 态:大"开始巡检"CTA + 帮助文案 + Spacer 把 hero 顶下去。
     /// 不显示 search / site filter / 今日速记列表 — 没在巡检时这些都没意义。
+    /// 今天若有 pending 巡检日程,在 CTA **上方** 插一段"今日巡检"列表(空则整段 hidden)。
     private var engineerIdleContent: some View {
         VStack(spacing: 0) {
             titleBlockMinimal
+            if !todayPendingSchedules.isEmpty {
+                todaySchedulesSection
+                    .padding(.horizontal, 24)
+                    .padding(.top, 4)
+                    .padding(.bottom, 16)
+            }
             engineerStartInspectionCTA
                 .padding(.horizontal, 24)
                 .padding(.top, 8)
@@ -240,6 +266,142 @@ struct RecordView: View {
                 .padding(.top, 28)
             Spacer(minLength: 0)
         }
+    }
+
+    // MARK: - 今日巡检日程(idle 主屏快捷入口)
+
+    /// 今天日历日内,pending 且未关联任何已建 report 的 schedule。
+    /// 按 scheduledTime(无则 fireDate)升序。
+    private var todayPendingSchedules: [SiteVisitSchedule] {
+        let cal = Calendar.current
+        let startOfToday = cal.startOfDay(for: Date())
+        guard let startOfTomorrow = cal.date(byAdding: .day, value: 1, to: startOfToday) else {
+            return []
+        }
+        return allSchedules
+            .filter { s in
+                guard s.deletedAt == nil else { return false }
+                guard s.status != .completed, s.status != .cancelled else { return false }
+                guard s.linkedReportID == nil else { return false }
+                return s.scheduledDate >= startOfToday && s.scheduledDate < startOfTomorrow
+            }
+            .sorted { $0.fireDate < $1.fireDate }
+    }
+
+    /// "今日巡检" section:小段头(uppercase + count badge) + 卡片列表。
+    private var todaySchedulesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(String(localized: "今日巡检", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.6)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Ink.fgDim)
+                Text("\(todayPendingSchedules.count)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Ink.fg2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Ink.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                Spacer()
+            }
+            VStack(spacing: 0) {
+                ForEach(Array(todayPendingSchedules.enumerated()), id: \.element.id) { idx, s in
+                    Button {
+                        startSession(from: s)
+                    } label: {
+                        todayScheduleRow(s)
+                    }
+                    .buttonStyle(.plain)
+                    if idx < todayPendingSchedules.count - 1 {
+                        Rectangle().fill(Ink.line).frame(height: 1)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Ink.line, lineWidth: 1)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Ink.bg))
+            )
+        }
+    }
+
+    /// 单行:左 时间 + 工地 + 标题,右 chevron。
+    private func todayScheduleRow(_ s: SiteVisitSchedule) -> some View {
+        HStack(spacing: 12) {
+            Text(timeLabel(for: s))
+                .font(.system(size: 13, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(Ink.fg)
+                .frame(width: 52, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(siteLabel(for: s))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+                    .lineLimit(1)
+                if let subtitle = subtitleLabel(for: s) {
+                    Text(subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Ink.dim)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+    }
+
+    /// 行点击行为:有 siteTag → 直接 startFromSchedule 进 active;无 siteTag → 弹
+    /// StartInspectionSheet 让用户手动补工地。
+    private func startSession(from s: SiteVisitSchedule) {
+        let tag = s.siteTag?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !tag.isEmpty else {
+            showsStartSheet = true
+            return
+        }
+        let preset = SitePresetStorage.find(siteTag: tag)
+        _ = sessionManager.startFromSchedule(
+            s,
+            siteTag: tag,
+            preset: preset,
+            defaultAttn: preset?.defaultAttn ?? "",
+            in: modelContext
+        )
+    }
+
+    /// 时间标签:有 scheduledTime 显示 HH:mm,否则显示"全天"。
+    private func timeLabel(for s: SiteVisitSchedule) -> String {
+        if s.scheduledTime != nil {
+            let f = DateFormatter()
+            f.dateFormat = "HH:mm"
+            return f.string(from: s.fireDate)
+        }
+        return String(localized: "全天", locale: AppLanguageManager.currentLocale)
+    }
+
+    /// 工地标签:siteTag 优先;为空时回退 title;再空显示占位。
+    private func siteLabel(for s: SiteVisitSchedule) -> String {
+        let tag = s.siteTag?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !tag.isEmpty { return tag }
+        let t = s.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { return t }
+        return String(localized: "未指定工地", locale: AppLanguageManager.currentLocale)
+    }
+
+    /// 副标:有 siteTag 时显示 title;无 siteTag 时副标为 notes(避免与主标重复)。
+    private func subtitleLabel(for s: SiteVisitSchedule) -> String? {
+        let tag = s.siteTag?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let title = s.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !tag.isEmpty, !title.isEmpty { return title }
+        let notes = s.notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        return notes.isEmpty ? nil : notes
     }
 
     /// idle 态主 CTA — 黑底白字胶囊,宽满,圆角 12,内 18pt 600 主标 + 12pt 60% 副标。
@@ -312,7 +474,6 @@ struct RecordView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 14)
-            sessionSearchBar
             if currentSessionNotes.isEmpty {
                 engineerSessionEmptyHint
             } else {
@@ -346,60 +507,12 @@ struct RecordView: View {
     }
 
     /// 当前 session 关联的 notes(只显示绑到本 session 的)。
-    /// 搜索文本生效时,在已限定的子集里继续过滤。
+    /// 巡检中场景一次最多十几条记录,不需要搜索。
     private var currentSessionNotes: [Note] {
         guard let sid = sessionManager.currentSessionID else { return [] }
-        let scoped = liveNotes.filter { $0.inspectionSessionID == sid }
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let filtered: [Note]
-        if query.isEmpty {
-            filtered = scoped
-        } else {
-            filtered = scoped.filter { note in
-                if note.transcription.lowercased().contains(query) { return true }
-                if note.otherTags.contains(where: { $0.lowercased().contains(query) }) { return true }
-                return false
-            }
-        }
-        return filtered.sorted { $0.createdAt > $1.createdAt }
-    }
-
-    /// 巡检中专用 search bar — placeholder 改成"搜索本次巡检"。
-    /// 视觉与 searchBar 保持一致,只换 placeholder 文案。
-    private var sessionSearchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14))
-                .foregroundStyle(Ink.fgDim)
-            TextField(
-                String(localized: "搜索本次巡检", locale: AppLanguageManager.currentLocale),
-                text: $searchText
-            )
-            .font(.system(size: 13))
-            .foregroundStyle(Ink.fg)
-            .tint(Ink.fg)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(Ink.fgDim)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Ink.line, lineWidth: 1)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Ink.bg))
-        )
-        .padding(.horizontal, 24)
-        .padding(.bottom, 14)
+        return liveNotes
+            .filter { $0.inspectionSessionID == sid }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
     /// 巡检中 — 仅本 session notes 的 timeline 列表(复用 noteRowItem)。
@@ -584,18 +697,20 @@ struct RecordView: View {
     /// 两段列表:待办(常显) + 已完成(可折叠)。
     private var twoSectionList: some View {
         List {
-            // 待办段
+            // 待办段(v1.6:也可折叠,默认展开)
             if !pendingNotes.isEmpty {
                 Section {
-                    ForEach(pendingNotes) { note in
-                        noteRowItem(note)
+                    if pendingSectionExpanded {
+                        ForEach(pendingNotes) { note in
+                            noteRowItem(note)
+                        }
                     }
                 } header: {
                     sectionHeader(
                         title: String(localized: "待办", locale: AppLanguageManager.currentLocale),
                         count: pendingNotes.count,
-                        foldable: false,
-                        expanded: .constant(true)
+                        foldable: true,
+                        expanded: $pendingSectionExpanded
                     )
                 }
             }
@@ -623,16 +738,23 @@ struct RecordView: View {
         .environment(\.defaultMinListRowHeight, 0)
     }
 
-    /// 单条 Note row + swipe actions。
-    /// 视觉本体在 `NoteTimelineRow`,这里只包 NavigationLink + swipe / list inset。
+    /// 单条 Note row + swipe + 长按删除。
+    /// 视觉本体在 `NoteTimelineRow`,这里只包 Button(替代 NavigationLink 去 List 隐式 chevron)
+    /// + swipe(必须点 capsule 才生效 — allowsFullSwipe: false 防误触)+ contextMenu(长按删除)。
     @ViewBuilder
     private func noteRowItem(_ note: Note) -> some View {
-        NavigationLink(value: note) {
+        Button {
+            navPath.append(note)
+        } label: {
             NoteTimelineRow(note: note)
         }
+        .buttonStyle(.plain)
         .listRowInsets(EdgeInsets())
         .listRowSeparator(.hidden)
         .listRowBackground(Ink.bg)
+        // v1.6:右滑(leading)→ 完成 toggle;左滑(trailing)→ 删除(destructive)。
+        // 两个方向都允许 full swipe(滑到底直接触发),贴近 Apple Mail 习惯。
+        // contextMenu 长按删除保留作 backup 入口(防误触 + 维持发现性)。
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button {
                 toggleDone(note)
@@ -644,13 +766,19 @@ struct RecordView: View {
             }
             .tint(Ink.fg)
         }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 softDelete(note)
             } label: {
-                Label("删除", systemImage: "trash")
+                Label(String(localized: "删除", locale: AppLanguageManager.currentLocale), systemImage: "trash")
             }
-            .tint(Ink.red)
+        }
+        .contextMenu {
+            Button(role: .destructive) {
+                softDelete(note)
+            } label: {
+                Label(String(localized: "删除", locale: AppLanguageManager.currentLocale), systemImage: "trash")
+            }
         }
     }
 
@@ -739,26 +867,33 @@ struct RecordView: View {
             audioLevel: viewModel.currentAudioLevel,
             partialTranscription: viewModel.partialTranscription,
             recordingStartTime: viewModel.recordingStartTime,
-            siteTag: allNotes.first?.siteTag
+            siteTag: liveNotes.first?.siteTag
         )
     }
 
     // MARK: - Hero (常驻,MIC 按钮节点稳定)
 
     private var heroButtons: some View {
-        HeroButtons(viewModel: viewModel) {
-            // Engineer 在 idle 态点 camera → 先开 session(必须归属一次巡检)
-            if profileManager.current == .engineer && !sessionManager.isActive {
-                showsStartSheet = true
-            } else {
-                isShowingCamera = true
+        HeroButtons(
+            viewModel: viewModel,
+            onShowCamera: {
+                // Engineer 在 idle 态点 camera → 先开 session(必须归属一次巡检)
+                if profileManager.current == .engineer && !sessionManager.isActive {
+                    showsStartSheet = true
+                } else {
+                    isShowingCamera = true
+                }
+            },
+            canStartRecording: {
+                // Engineer 必须在巡检中才能录音 — idle 时拦截 + 弹 StartSheet
+                if profileManager.current == .engineer && !sessionManager.isActive {
+                    showsStartSheet = true
+                    return false
+                }
+                return true
             }
-        }
+        )
     }
-
-    // TODO: mic 按钮的拦截 — HeroButtons 用 DragGesture 实现录音,不走 callback。
-    // 现状:Engineer idle 态长按 mic 仍会录,note 因没 sessionID 不进当前 session 列表(也不显示在 idle 帮助页)。
-    // 短期上看是"丢失感",待 HeroButtons 暴露 onMicAttempt 拦截钩子后,改成弹 StartInspectionSheet。
 
     // MARK: - Undo toast
 
@@ -766,13 +901,20 @@ struct RecordView: View {
         UndoToast(
             message: viewModel.lastSave?.summary ?? "",
             secondsRemaining: viewModel.undoSecondsRemaining,
+            // v1.5:PM 走双行 4 按钮(deadline chip + 详情);Engineer 用单行整行 tap 详情。
+            showsDeadlineActions: profileManager.current == .siteTeam,
+            currentDeadline: viewModel.lastSave?.deadline ?? .threeDays,
             onDetail: {
                 if let note = viewModel.fetchLastSavedNote() {
                     navPath.append(note)
                 }
                 viewModel.dismissToastManually()
             },
-            onUndo: { viewModel.undoLastSave() }
+            onUndo: { viewModel.undoLastSave() },
+            onSetDeadline: { newDeadline in
+                viewModel.setLastSaveDeadline(newDeadline)
+                viewModel.dismissToastManually()
+            }
         )
     }
 }

@@ -59,9 +59,11 @@ final class ICloudSyncConfig {
     }
 
     /// 异步获取当前 user record(用于初次登录后缓存到 currentUserRecordName)。
-    /// 用 try await container.userRecordID()。仅在 isEnabled 时调用。
+    ///
+    /// 注意:这里不能受 `isEnabled` 限制。`isEnabled` 只控制 SwiftData private
+    /// CloudKit 自动同步,但团队协作使用 raw CKShare/sharedDB;即使用户没有打开
+    /// SwiftData iCloud 同步,团队 owner/member 身份判断仍然必须能拿到 userRecordID。
     func fetchAndCacheUserRecord() async throws {
-        guard isEnabled else { return }
         let recordID = try await ckContainer.userRecordID()
         await MainActor.run {
             self.currentUserRecordName = recordID.recordName

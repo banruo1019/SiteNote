@@ -114,7 +114,7 @@ final class LocationService: NSObject {
     }
 
     /// 反向地理编码：返回 "Suburb, State" 简名格式（工地场景只关心 "哪个区"）。
-    /// 例如 "Willoughby, NSW"。无法拼出时返回 nil。
+    /// 例如 "Sydney, NSW"。无法拼出时返回 nil。
     private func reverseGeocode(_ location: CLLocation) async throws -> String? {
         let placemarks = try await geocoder.reverseGeocodeLocation(location)
         guard let mark = placemarks.first else { return nil }

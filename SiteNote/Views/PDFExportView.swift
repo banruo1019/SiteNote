@@ -10,6 +10,13 @@ import SwiftUI
 import SwiftData
 
 struct PDFExportView: View {
+    /// R3#9:caller(PM ReportsView)可传入初始工地筛选,否则默认 nil。
+    let initialSiteTag: String?
+
+    init(initialSiteTag: String? = nil) {
+        self.initialSiteTag = initialSiteTag
+    }
+
     @Query(
         filter: #Predicate<Note> { $0.deletedAt == nil },
         sort: \Note.createdAt
@@ -44,6 +51,13 @@ struct PDFExportView: View {
             // 清理已删除的分类选择
             let validNames = Set(availableSubTags.map { $0.name })
             selectedSubTags = selectedSubTags.intersection(validNames)
+            // R3#9:caller(PM ReportsView)预选的工地 → 应用到本 view
+            // 仅在 selectedTag 还没被用户改过(nil)且 initialSiteTag 在 availableTags 里时生效
+            if selectedTag == nil,
+               let preset = initialSiteTag,
+               availableTags.contains(preset) {
+                selectedTag = preset
+            }
         }
         .sheet(isPresented: $showsPicker) {
             NoteSelectionSheet(

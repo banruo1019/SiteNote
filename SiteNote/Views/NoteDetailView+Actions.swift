@@ -106,11 +106,10 @@ extension NoteDetailView {
             }
         }
 
-        // 平面图带图钉(如果有)
-        if let planName = note.floorPlanRef,
-           let x = note.floorPlanX,
+        // 平面图带图钉(如果有)— P2 #187:优先 floorPlanID
+        if let x = note.floorPlanX,
            let y = note.floorPlanY,
-           let plan = FloorPlansStorage.find(name: planName),
+           let plan = FloorPlansStorage.resolve(id: note.floorPlanID, name: note.floorPlanRef),
            let url = FloorPlansStorage.absoluteURL(forRelative: plan.imageRelativePath),
            let planImage = UIImage(contentsOfFile: url.path),
            let composited = renderFloorPlanWithPin(planImage, normalizedX: x, normalizedY: y, color: pinColorForThisNote) {

@@ -12,8 +12,11 @@
 
 import SwiftUI
 import SwiftData
+import os
 
 struct ScheduleEditorSheet: View {
+    private static let logger = Logger(subsystem: "com.banruo.sitenote", category: "ScheduleEditor")
+
     /// nil = 新建模式;非 nil = 编辑模式。
     let schedule: SiteVisitSchedule?
 
@@ -36,12 +39,8 @@ struct ScheduleEditorSheet: View {
     @State private var reminder2Minutes: Int = 0
     @State private var assignedToUserID: String? = nil
 
-    // Phase 0 mock;Phase 2 改 @Query TeamMember。
-    private let mockMembers: [(userID: String, displayName: String)] = [
-        ("self", "我(Owner)"),
-        ("member-1", "工程师 A"),
-        ("member-2", "工程师 B"),
-    ]
+    /// 真团队成员(v1.6 接通,删 mock)。无团队时数组空 → picker 隐藏。
+    @Query private var teamMembers: [TeamMember]
 
     /// 提前时长选项(分钟)。0 = 关闭(只第二条用)。
     /// 设计:覆盖工地常见预约心智 — 1 天前 / 当天早上(隐式)/ 1 小时前临门一脚。
@@ -170,20 +169,43 @@ struct ScheduleEditorSheet: View {
         }
     }
 
-    // Phase 0 mock;Phase 2 改 @Query TeamMember。
+    /// Picker 显示的成员列表,**按 userID 去重**(同 userID 多条 stale 只显示一条)。
+    /// 老 zone 里 Jamie 端在 oscillation 修复前用 UUID() 多次推 TeamMember CKRecord,
+    /// 留下了多条同 userID 不同 memberID 的孤儿,SwiftData @Query 全拉进来 → picker
+    /// 里同一个人出现 N 次。zone 端清理由 Owner 端 fetchAndSyncAll 自动做,picker 层
+    /// dedup 是用户立即可见的保护。
+    private var uniqueTeamMembers: [TeamMember] {
+        var seen: Set<String> = []
+        var out: [TeamMember] = []
+        for m in teamMembers.sorted(by: { $0.joinedAt < $1.joinedAt }) {
+            let key = m.userID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty, !seen.contains(key) else { continue }
+            seen.insert(key)
+            out.append(m)
+        }
+        return out
+    }
+
     private var assignmentSection: some View {
         Section {
-            Picker(
-                String(localized: "分配给", locale: AppLanguageManager.currentLocale),
-                selection: $assignedToUserID
-            ) {
-                Text(String(localized: "未分配", locale: AppLanguageManager.currentLocale))
-                    .tag(String?.none)
-                ForEach(mockMembers, id: \.userID) { m in
-                    Text(m.displayName).tag(String?.some(m.userID))
+            if uniqueTeamMembers.isEmpty {
+                Text(String(localized: "还没有团队成员。先到 设置 → 团队 邀请成员。", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 13))
+                    .foregroundStyle(Ink.fgDim)
+            } else {
+                Picker(
+                    String(localized: "分配给", locale: AppLanguageManager.currentLocale),
+                    selection: $assignedToUserID
+                ) {
+                    Text(String(localized: "未分配", locale: AppLanguageManager.currentLocale))
+                        .tag(String?.none)
+                    ForEach(uniqueTeamMembers, id: \.id) { m in
+                        Text(m.displayName.isEmpty ? String(m.userID.prefix(8)) : m.displayName)
+                            .tag(String?.some(m.userID))
+                    }
                 }
+                .font(.system(size: 15))
             }
-            .font(.system(size: 15))
         } header: {
             SectionHeader(String(localized: "分配", locale: AppLanguageManager.currentLocale))
         }
@@ -265,6 +287,7 @@ struct ScheduleEditorSheet: View {
 
         let timeToStore: Date? = hasSpecificTime ? scheduledTime : nil
 
+        let target: SiteVisitSchedule
         if let existing = schedule {
             existing.title = trimmedTitle
             existing.notes = notes
@@ -275,8 +298,14 @@ struct ScheduleEditorSheet: View {
             existing.reminder1Minutes = reminder1Minutes
             existing.reminder2Minutes = reminder2Minutes
             existing.assignedToUserID = assignedToUserID
-            try? modelContext.save()
+            // P1 #194:save 失败写日志 — 失败时 UI 显示已改但磁盘没改,NotificationService 用脏数据
+            do {
+                try modelContext.save()
+            } catch {
+                Self.logger.error("save edit schedule failed: \(error.localizedDescription)")
+            }
             NotificationService.shared.scheduleVisit(existing)
+            target = existing
         } else {
             let new = SiteVisitSchedule(
                 scheduledDate: scheduledDate,
@@ -290,9 +319,18 @@ struct ScheduleEditorSheet: View {
                 assignedToUserID: assignedToUserID
             )
             modelContext.insert(new)
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                Self.logger.error("save new schedule failed: \(error.localizedDescription)")
+            }
             NotificationService.shared.scheduleVisit(new)
+            target = new
         }
+        // 团队 mirror:日历页新建/改 schedule 也得推到 share zone,member 才能收到分配。
+        // 之前忘加这条,Owner 在日历页分配 hh 的所有 schedule 都没上云 → hh 永远收不到。
+        let ctx = modelContext
+        Task { await TeamDataMirrorService.shared.mirrorSchedule(target, in: ctx) }
         dismiss()
     }
 }

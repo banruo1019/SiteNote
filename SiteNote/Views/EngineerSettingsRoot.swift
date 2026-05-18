@@ -34,6 +34,10 @@ struct EngineerSettingsRoot: View {
     @State private var backupError: String?
     @State private var feedbackShareItems: [Any]?
 
+    // 清空所有数据(危险操作)
+    @State private var showsNukeConfirm: Bool = false
+    @State private var nukeFinishedAt: Date?
+
     @State private var profileManager = UserProfileManager.shared
 
     @Environment(\.modelContext) private var modelContext
@@ -82,6 +86,29 @@ struct EngineerSettingsRoot: View {
             Button(String(localized: "知道了", locale: locale)) { backupError = nil }
         } message: {
             Text(backupError ?? "")
+        }
+        .confirmationDialog(
+            String(localized: "清空所有内容?", locale: locale),
+            isPresented: $showsNukeConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "确认清空(无法撤销)", locale: locale), role: .destructive) {
+                nukeAllData()
+            }
+            Button(String(localized: "取消", locale: locale), role: .cancel) {}
+        } message: {
+            Text(String(localized: "速记 / 巡检报告 / 工地预设 / 联系人 / 团队成员 / 平面图 / 录音 / 照片 / PDF 归档 全部删除。语言、角色、iCloud 开关保留。云端共享团队 zone 不删,如需删请先解散团队。无法撤销。", locale: locale))
+        }
+        .alert(
+            String(localized: "已清空", locale: locale),
+            isPresented: Binding(
+                get: { nukeFinishedAt != nil },
+                set: { if !$0 { nukeFinishedAt = nil } }
+            )
+        ) {
+            Button(String(localized: "好", locale: locale)) { nukeFinishedAt = nil }
+        } message: {
+            Text(String(localized: "所有用户内容已删除。", locale: locale))
         }
         .alert(
             String(localized: "已切换语言", locale: locale),
@@ -153,7 +180,7 @@ struct EngineerSettingsRoot: View {
     /// 角色的 1 字 emoji-glyph(PM = "P",Engineer = "工")。
     private var roleGlyph: String {
         switch profileManager.current {
-        case .pm: return "P"
+        case .siteTeam: return "S"
         case .engineer: return "工"
         }
     }
@@ -232,16 +259,25 @@ struct EngineerSettingsRoot: View {
     private var reportGroup: some View {
         groupBlock(
             header: String(localized: "报告", locale: locale),
-            footer: String(localized: "PDF 封面会用这段免责声明。", locale: locale)
+            footer: String(localized: "PDF 封面用免责声明,一键发邮件用邮件模板。", locale: locale)
         ) {
             cardContainer {
                 navRow(
                     icon: "doc.plaintext",
                     title: String(localized: "默认免责声明", locale: locale),
                     sub: nil,
-                    isLast: true
+                    isLast: false
                 ) {
                     DisclaimerEditorView()
+                }
+                cardDivider
+                navRow(
+                    icon: "envelope",
+                    title: String(localized: "邮件模板", locale: locale),
+                    sub: String(localized: "一键发邮件的主题与正文", locale: locale),
+                    isLast: true
+                ) {
+                    EmailTemplateEditorView()
                 }
             }
         }
@@ -425,9 +461,46 @@ struct EngineerSettingsRoot: View {
                 cardDivider
                 feedbackRow
                 cardDivider
+                nukeAllRow
+                cardDivider
                 versionRow
             }
         }
+    }
+
+    /// 危险操作:一键清空所有用户内容(SwiftData entities + 全部 UserDefaults 业务存储)。
+    /// 不删 App 设置(语言、iCloud toggle、Profile 角色),不删录音/照片实际文件
+    /// (Note 删后视为孤儿,下次启动顺其自然 — 不影响 UI 也不影响隐私)。
+    private var nukeAllRow: some View {
+        Button {
+            showsNukeConfirm = true
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Ink.red.opacity(0.12))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Ink.red)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "清空所有内容", locale: locale))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Ink.red)
+                    Text(String(localized: "速记 / 报告 / 工地 / 联系人 / 录音 / 照片 / PDF 全部删除", locale: locale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
     }
 
     private var iCloudRow: some View {
@@ -676,6 +749,99 @@ struct EngineerSettingsRoot: View {
         } catch {
             backupError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+
+    /// 一键清空所有用户内容。
+    ///
+    /// **保留**(App 设置 / 系统层):
+    /// - 语言(settings.appLanguage)
+    /// - 角色(settings.userProfile / .selected)
+    /// - iCloud 同步开关(icloud.syncEnabled.v1)
+    /// - 提醒时间偏好(morningReminderHour 等)
+    /// - AI 开关(aiMasterEnabled / aiPolishEnabled)
+    /// - Keychain(legacy OpenAI key 已在 SiteNoteApp 启动时清)
+    ///
+    /// **删除**:
+    /// - 全部 SwiftData @Model:Note / InspectionReport / SiteVisitSchedule / ShareLog /
+    ///   LogEntry / SitePreset / Team / TeamMember(本地副本)
+    /// - 全部业务 UserDefaults:builders / contacts / emailTemplate / 工地标签 / 平面图 /
+    ///   centroids / clauseRefs / 工地预设 legacy / 工程师公司信息 / 显示名 / 巡检 session 状态
+    /// - 全部团队本地缓存:token / sharedZoneOwnerName / selfMemberID / selfPushed
+    /// - 附件目录:Documents/photos、Documents/audio、Application Support/Reports
+    ///
+    /// **不删除**(只清本地副本):
+    /// - 云端 share zone(Owner 的 team zone 还在,如需删要先解散团队)
+    /// - iCloud Drive 里的 PDF 镜像(用户文件,App 不应越权)
+    private func nukeAllData() {
+        // 1. SwiftData @Model 全删
+        try? modelContext.delete(model: Note.self)
+        try? modelContext.delete(model: InspectionReport.self)
+        try? modelContext.delete(model: SiteVisitSchedule.self)
+        try? modelContext.delete(model: ShareLog.self)
+        try? modelContext.delete(model: LogEntry.self)
+        try? modelContext.delete(model: SitePreset.self)
+        try? modelContext.delete(model: Team.self)
+        try? modelContext.delete(model: TeamMember.self)
+        try? modelContext.save()
+
+        // 2. UserDefaults 业务存储(facade 已实现的走 facade)
+        BuildersStorage.clearAll()
+        ContactsStorage.clearAll()
+        SitePresetStorage.clearAll()
+        JargonStorage.clearAll()
+        SiteArchiveStorage.clearAll()
+        SiteCentroidsStorage.clearAll()
+
+        // 显式 key 清单(易审计):
+        let defaults = UserDefaults.standard
+        let businessKeys = [
+            "settings.siteTags",
+            "settings.floorPlans",
+            "settings.subTagsGlobalV1",
+            "settings.clauseRefs",
+            "settings.clauseRefs.seeded",
+            "settings.emailTemplate.v1",
+            "settings.engineerCompanyName",
+            "settings.engineerABN",
+            "settings.userProfile.displayName",
+            "settings.inspectorName",
+            "settings.obsidian.exportFolderPath",
+            "settings.sitePresets.v1",
+            "settings.sitePresets.migratedToSwiftData.v1",
+            "settings.contacts.migrationFromBuilderLegacy.done",
+            "settings.aiKeyHint.dismissed.v1",
+            "settings.onboarding.dismissed.v1",
+            "inspection.session.currentID.v1",
+            "inspection.session.counter",
+            "inspection.session.lastYear",
+        ]
+        for key in businessKeys { defaults.removeObject(forKey: key) }
+
+        // 团队相关 prefix 全清(token / sharedZoneOwnerName / selfMemberID / selfPushed)。
+        // 集中在 TeamDataMirrorService 知道这些 key 形状,但 nukeAllData 直接前缀扫更稳。
+        let teamPrefixes = [
+            "team.serverChangeToken.",
+            "team.sharedZoneOwnerName.",
+            "team.selfMemberID.",
+            "team.selfPushed.",
+        ]
+        for key in defaults.dictionaryRepresentation().keys {
+            if teamPrefixes.contains(where: { key.hasPrefix($0) }) {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        // 3. 附件目录全删(用户业务文件 — 用户既然要清空就该把磁盘也释放)
+        let fm = FileManager.default
+        if let docs = try? fm.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false) {
+            try? fm.removeItem(at: docs.appendingPathComponent("photos"))
+            try? fm.removeItem(at: docs.appendingPathComponent("audio"))
+        }
+        if let support = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) {
+            try? fm.removeItem(at: support.appendingPathComponent("Reports"))
+        }
+
+        nukeFinishedAt = Date()
     }
 
     /// 反馈入口:有最新 crash JSON 走 ShareSheet,否则 mailto:。

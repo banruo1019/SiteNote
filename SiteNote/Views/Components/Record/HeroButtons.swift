@@ -22,6 +22,10 @@ struct HeroButtons: View {
     @Bindable var viewModel: HomeViewModel
     /// 点击 camera 时回调 parent 弹 sheet。
     let onShowCamera: () -> Void
+    /// 真正开始录音前给 parent 一次拦截机会(默认总允许)。
+    /// 返回 false → 本次 mic 按下不开始录音(parent 应负责弹替代 UI 比如 StartInspectionSheet)。
+    /// 用例:Engineer 没在巡检中长按 mic → 弹「先选工地开巡检」。
+    var canStartRecording: () -> Bool = { true }
 
     /// 上滑取消阈值(pt)。向上拖超过这个距离 = 松手取消而非保存。
     private let cancelSwipeThreshold: CGFloat = 80
@@ -66,6 +70,8 @@ struct HeroButtons: View {
             DragGesture(minimumDistance: 0)
                 .onChanged { value in
                     if !viewModel.isRecording {
+                        // 给 parent 拦截机会(Engineer idle → 弹 StartSheet 而不是直接录)
+                        guard canStartRecording() else { return }
                         viewModel.startRecording()
                     }
                     dragOffsetY = value.translation.height

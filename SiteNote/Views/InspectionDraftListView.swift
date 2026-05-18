@@ -146,13 +146,18 @@ struct InspectionReportListView: View {
                             .lineLimit(1)
                     }
                 }
-                Text(report.project.isEmpty
-                     ? String(localized: "(未填项目)", locale: AppLanguageManager.currentLocale)
-                     : report.project)
+                // project 空 → fallback 到 location;再空 → fallback 到 reportNo
+                let trimmedProject = report.project.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedLocation = report.location.trimmingCharacters(in: .whitespacesAndNewlines)
+                let projectDisplay = trimmedProject.isEmpty
+                    ? (trimmedLocation.isEmpty ? report.reportNo : report.location)
+                    : report.project
+                Text(projectDisplay)
                     .font(.system(size: 13))
-                    .foregroundStyle(report.project.isEmpty ? Ink.fgDim : Ink.fg)
+                    .foregroundStyle(Ink.fg)
                     .lineLimit(1)
-                if !report.location.isEmpty {
+                // 只在 project 非空时再显示 location 作副行,避免和上面重复
+                if !trimmedProject.isEmpty, !trimmedLocation.isEmpty {
                     Text(report.location)
                         .font(.system(size: 11))
                         .foregroundStyle(Ink.fgDim)

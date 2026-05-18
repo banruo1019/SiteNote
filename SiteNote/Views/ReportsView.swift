@@ -14,7 +14,12 @@ struct ReportsView: View {
     @Query(
         filter: #Predicate<Note> { $0.deletedAt == nil },
         sort: \Note.createdAt
-    ) private var allNotes: [Note]
+    ) private var allNotesAllRoles: [Note]
+
+    /// v1.5:只显示当前角色的 note(historical nil → PM)。
+    private var allNotes: [Note] {
+        allNotesAllRoles.filter { $0.belongsToCurrentRole }
+    }
 
     /// 工地过滤器:nil = 全部工地。决定大卡片导 PDF 时预选哪些 Note。
     @State private var siteFilter: String? = nil
@@ -89,9 +94,10 @@ struct ReportsView: View {
 
     @ViewBuilder
     private var mainCard: some View {
-        if UserProfileManager.shared.current == .pm {
+        if UserProfileManager.shared.current == .siteTeam {
             NavigationLink {
-                PDFExportView()
+                // R3#9:PM 选了 siteFilter 后跳 PDFExportView,带过去预选工地
+                PDFExportView(initialSiteTag: siteFilter)
             } label: {
                 mainCardLabel
             }
@@ -219,7 +225,7 @@ struct PDFHubView: View {
             }
 
             // PM 视角:Inspection Report SVR 作为可选模板,放第二段不突出。
-            if profile.current == .pm {
+            if profile.current == .siteTeam {
                 Section {
                     NavigationLink {
                         InspectionReportListView()

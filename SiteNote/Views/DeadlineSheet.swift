@@ -558,7 +558,7 @@ private struct EditingImageIndex: Identifiable {
 #Preview {
     DeadlineSheet(
         transcription: "3 楼钢筋没到货下午 2 点前解决",
-        locationLabel: "Willoughby, NSW"
+        locationLabel: "Sydney, NSW"
     ) { result in
         _ = result  // preview no-op
     }
