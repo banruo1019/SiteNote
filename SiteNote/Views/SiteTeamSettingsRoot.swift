@@ -452,6 +452,12 @@ struct SiteTeamSettingsRoot: View {
                 cardDivider
                 languageRow
                 cardDivider
+                showOnboardingRow
+                cardDivider
+                privacyPolicyRow
+                cardDivider
+                termsOfServiceRow
+                cardDivider
                 feedbackRow
                 cardDivider
                 nukeAllRow
@@ -494,6 +500,71 @@ struct SiteTeamSettingsRoot: View {
             .padding(.vertical, 12)
         }
         .buttonStyle(.plain)
+    }
+
+    /// Show onboarding again — flips the dismissed flag so the welcome flow re-appears next launch.
+    private var showOnboardingRow: some View {
+        Button {
+            UserDefaults.standard.set(false, forKey: "settings.onboarding.dismissed.v1")
+            // 用户可以在下次启动时看到引导
+        } label: {
+            HStack(spacing: 12) {
+                iconBox(systemName: "sparkles")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "Show Onboarding Again", locale: locale))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Ink.fg)
+                    Text(String(localized: "Replays the 5-step welcome on next launch", locale: locale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                }
+                Spacer()
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Privacy policy — opens hosted policy in Safari.
+    private var privacyPolicyRow: some View {
+        Link(destination: URL(string: "https://manifoldx.com/sitenotes/privacy")!) {
+            HStack(spacing: 12) {
+                iconBox(systemName: "hand.raised")
+                Text(String(localized: "Privacy Policy", locale: locale))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+                Spacer()
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+    }
+
+    /// Terms of service — opens hosted ToS in Safari.
+    private var termsOfServiceRow: some View {
+        Link(destination: URL(string: "https://manifoldx.com/sitenotes/terms")!) {
+            HStack(spacing: 12) {
+                iconBox(systemName: "doc.text")
+                Text(String(localized: "Terms of Service", locale: locale))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Ink.fg)
+                Spacer()
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
     }
 
     private var iCloudRow: some View {
