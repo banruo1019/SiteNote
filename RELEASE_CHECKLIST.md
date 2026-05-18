@@ -30,7 +30,11 @@ Order matters — do them top to bottom.
 
 ## 4. App icon & launch screen
 
-- [ ] Confirm `SiteNote/Assets.xcassets/AppIcon.appiconset/Contents.json` has the 1024 × 1024 master image
+- [ ] Confirm `SiteNote/Assets.xcassets/AppIcon.appiconset/Contents.json` has the 1024 × 1024 master image ✓ (present)
+- [ ] **Optional but recommended:** the current icon set uses the *same* 1024 image for the Dark and Tinted slots. On iOS 18+ users who set their home screen to Dark or Tinted mode will see the white-background icon, which can look broken against a dark wallpaper.
+  - Dark variant: redraw with a dark background or set the icon to be transparent over a dark fill (matching the system dark home-screen background).
+  - Tinted variant: provide a monochrome silhouette (grayscale, transparent background) so iOS can tint it the user's chosen colour.
+  - Drop the new PNGs in place of `appstore 1.png` (dark) and `appstore 2.png` (tinted); the `Contents.json` already references them.
 - [ ] (Optional) Replace the empty launch screen — `Info.plist` has `UILaunchScreen` set to an empty dict, which renders as the system background. If you want a logo, set the dict's `UIImageName` to an asset name.
 
 ## 5. Hosted URLs
