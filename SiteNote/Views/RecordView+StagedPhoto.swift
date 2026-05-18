@@ -133,6 +133,6 @@ extension RecordView {
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("删除这张照片")
+        .accessibilityLabel(String(localized: "删除这张照片"))
     }
 }

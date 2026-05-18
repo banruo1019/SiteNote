@@ -422,7 +422,7 @@ struct DeadlineSheet: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("编辑第 \(idx + 1) 张照片")
+                    .accessibilityLabel(String(localized: "编辑第 \(idx + 1) 张照片", locale: AppLanguageManager.currentLocale))
                 }
                 if images.count < maxPhotos {
                     addPhotoButton
@@ -454,7 +454,7 @@ struct DeadlineSheet: View {
             .background(Color.accentColor)
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
-        .accessibilityLabel("加照片")
+        .accessibilityLabel(String(localized: "加照片"))
         .confirmationDialog("加照片", isPresented: $isShowingSourceDialog, titleVisibility: .hidden) {
             Button("📸 拍照") { isShowingCamera = true }
             Button("🖼 从相册选") { isShowingLibrary = true }

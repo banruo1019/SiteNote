@@ -103,7 +103,7 @@ struct FloorPlanLookupView: View {
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                     }
-                    .accessibilityLabel("复位缩放")
+                    .accessibilityLabel(String(localized: "复位缩放"))
                 }
             }
         }

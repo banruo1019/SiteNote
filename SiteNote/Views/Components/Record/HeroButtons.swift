@@ -92,8 +92,8 @@ struct HeroButtons: View {
         // 上滑超阈值时给一次反馈(让用户感知到"即将取消")
         .sensoryFeedback(.impact(weight: .light), trigger: willCancelOnRelease)
         .frame(maxWidth: .infinity)
-        .accessibilityLabel("录音")
-        .accessibilityHint("长按开始录音,松手保存,上划取消")
+        .accessibilityLabel(String(localized: "录音"))
+        .accessibilityHint(String(localized: "长按开始录音,松手保存,上划取消"))
     }
 
     private var circleColor: Color {
@@ -113,6 +113,6 @@ struct HeroButtons: View {
             .onTapGesture(perform: onShowCamera)
             .sensoryFeedback(.impact(weight: .medium), trigger: viewModel.isRecording)
             .frame(maxWidth: .infinity)
-            .accessibilityLabel("拍照")
+            .accessibilityLabel(String(localized: "拍照"))
     }
 }

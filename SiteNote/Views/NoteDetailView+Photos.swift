@@ -80,7 +80,7 @@ extension NoteDetailView {
                     .foregroundStyle(.white, Color.black.opacity(0.6))
                     .padding(8)
             }
-            .accessibilityLabel("标注此照片")
+            .accessibilityLabel(String(localized: "标注此照片"))
         }
     }
 
@@ -111,7 +111,7 @@ extension NoteDetailView {
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("添加照片")
+        .accessibilityLabel(String(localized: "添加照片"))
     }
 
     // MARK: - 缩略图
@@ -144,7 +144,7 @@ extension NoteDetailView {
                         .foregroundStyle(.white, Color.black.opacity(0.6))
                         .padding(4)
                 }
-                .accessibilityLabel("标注此照片")
+                .accessibilityLabel(String(localized: "标注此照片"))
             }
         } else {
             RoundedRectangle(cornerRadius: 12)

@@ -911,7 +911,7 @@ struct PhotoEditorView: View {
                                     .fill(selectedLineWidth == w ? Color.white.opacity(0.25) : Color.white.opacity(0.08))
                             )
                     }
-                    .accessibilityLabel("粗细")
+                    .accessibilityLabel(String(localized: "粗细"))
                 }
             }
         }

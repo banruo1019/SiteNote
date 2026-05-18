@@ -412,7 +412,7 @@ struct NoteDetailView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(Ink.fg)
                 }
-                .accessibilityLabel("完成")
+                .accessibilityLabel(String(localized: "完成"))
             }
         }
     }
