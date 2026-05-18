@@ -31,15 +31,15 @@
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>SiteNote 用相机拍工地现场照片附在速记里，照片只存在你的手机上。</string>
+	<string>SiteNotes uses the camera to capture site progress photos that you attach to your daily logs. Photos are stored only on this device unless you choose to export them.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>SiteNote 用位置在录音时关联当前工地，并发送坐标到 Open-Meteo 查询天气；不做后台追踪。</string>
+	<string>SiteNotes records your location once when you start a voice log, so the entry can be linked to the nearest jobsite and tagged with weather from Open-Meteo. No background tracking.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>SiteNote 用麦克风录下你的工地速记，录音文件只存在你的手机上。</string>
+	<string>SiteNotes uses the microphone so foremen and supervisors can dictate site logs hands-free. Recordings are stored only on this device unless you choose to share them.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>SiteNote 把巡检照片保存到你的相册以便分享。</string>
+	<string>SiteNotes saves your inspection photos to your Photos library so you can share them with clients and head office.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>SiteNote 把语音转成文字方便检索和导出，转写在设备本地完成。</string>
+	<string>SiteNotes transcribes your voice notes into text so they are searchable and exportable. Transcription happens on this device.</string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
 		<key>iCloud.com.banruo.SiteNote</key>
