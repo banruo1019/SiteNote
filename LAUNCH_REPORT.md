@@ -70,9 +70,9 @@ The remaining slow work — Privacy Policy, ToS, App Store listing copy — was 
 | 1 | Sign into Apple Developer Program (annual $99 USD) | Required to submit |
 | 2 | Confirm `DEVELOPMENT_TEAM = 45FG6W4U65` is *your* team in Xcode → Signing & Capabilities | Build won't sign otherwise |
 | 3 | In App Store Connect, create the app with bundle ID `com.banruoyang.sitenote` | One-time setup |
-| 4 | Publish `legal/PrivacyPolicy.html` at `https://manifoldx.com/sitenotes/privacy` | Apple's bot fetches this URL during review |
-| 5 | Publish `legal/TermsOfService.md` (render to HTML) at `https://manifoldx.com/sitenotes/terms` | App Store listing requires it |
-| 6 | (Optional) Publish a support page at `https://manifoldx.com/sitenotes/support` | App Store listing field |
+| 4 | Publish `legal/PrivacyPolicy.html` at `https://banruo1019.github.io/SiteNote/privacy/` | Apple's bot fetches this URL during review |
+| 5 | Publish `legal/TermsOfService.md` (render to HTML) at `https://banruo1019.github.io/SiteNote/terms/` | App Store listing requires it |
+| 6 | (Optional) Publish a support page at `https://banruo1019.github.io/SiteNote/support/` | App Store listing field |
 | 7 | Generate screenshots via `fastlane snapshot` (or capture manually per `RELEASE_CHECKLIST.md` § 6) | Apple requires for ≥ 1 device class |
 | 8 | In App Store Connect, fill App Privacy questionnaire using `APP_PRIVACY_LABEL.md` answers | Apple's privacy disclosure |
 | 9 | In App Store Connect, fill Age Rating using `APP_AGE_RATING.md` answers (all "None / No") | Sets the displayed rating |

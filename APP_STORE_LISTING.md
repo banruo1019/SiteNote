@@ -185,9 +185,9 @@ Word count: ~110 words. Character count: ~720 / 4,000.
 
 | Field | URL |
 | --- | --- |
-| Support URL | `https://manifoldx.com/sitenotes/support` |
-| Marketing URL | `https://manifoldx.com/sitenotes` |
-| Privacy Policy URL | `https://manifoldx.com/sitenotes/privacy` |
+| Support URL | `https://banruo1019.github.io/SiteNote/support/` |
+| Marketing URL | `https://banruo1019.github.io/SiteNote/` |
+| Privacy Policy URL | `https://banruo1019.github.io/SiteNote/privacy/` |
 
 Apple requires the Support URL and Privacy Policy URL to resolve before review. Confirm all three return a 200 before you hit Submit.
 

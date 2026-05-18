@@ -537,7 +537,7 @@ struct EngineerSettingsRoot: View {
 
     /// Privacy policy — opens hosted policy in Safari.
     private var privacyPolicyRow: some View {
-        Link(destination: URL(string: "https://manifoldx.com/sitenotes/privacy")!) {
+        Link(destination: URL(string: "https://banruo1019.github.io/SiteNote/privacy/")!) {
             HStack(spacing: 12) {
                 iconBox(systemName: "hand.raised")
                 Text(String(localized: "Privacy Policy", locale: locale))
@@ -556,7 +556,7 @@ struct EngineerSettingsRoot: View {
 
     /// Terms of service — opens hosted ToS in Safari.
     private var termsOfServiceRow: some View {
-        Link(destination: URL(string: "https://manifoldx.com/sitenotes/terms")!) {
+        Link(destination: URL(string: "https://banruo1019.github.io/SiteNote/terms/")!) {
             HStack(spacing: 12) {
                 iconBox(systemName: "doc.text")
                 Text(String(localized: "Terms of Service", locale: locale))

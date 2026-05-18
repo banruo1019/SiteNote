@@ -90,7 +90,7 @@ We reserve the right to introduce paid features, subscriptions, or other commerc
 
 Our handling of personal information is described in the SiteNotes Privacy Policy, available at:
 
-https://manifoldx.com/sitenotes/privacy
+https://banruo1019.github.io/SiteNote/privacy/
 
 The Privacy Policy is incorporated into these Terms by reference. In short: we do not operate servers that hold your SiteNotes data, and your notes stay on your device and in your own iCloud.
 
@@ -179,7 +179,7 @@ Nothing in this section limits any non-excludable right you may have under the A
 
 ## 16. Changes to these Terms
 
-We may update these Terms from time to time. When we do, we will update the "Last updated" date at the top of this page and post the new version at https://manifoldx.com/sitenotes/terms. For material changes, we will use reasonable means to notify users (for example, an in-app notice on the next launch after the change).
+We may update these Terms from time to time. When we do, we will update the "Last updated" date at the top of this page and post the new version at https://banruo1019.github.io/SiteNote/terms/. For material changes, we will use reasonable means to notify users (for example, an in-app notice on the next launch after the change).
 
 Your continued use of SiteNotes after a change takes effect constitutes acceptance of the updated Terms. If you do not accept the change, your remedy is to stop using the app and uninstall it.
 

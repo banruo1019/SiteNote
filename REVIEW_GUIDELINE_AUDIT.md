@@ -32,7 +32,7 @@ Source: https://developer.apple.com/app-store/review/guidelines
 
 These cannot be self-verified by xcodebuild — the user must confirm at the point of submission:
 
-- [ ] Privacy Policy URL is **publicly reachable** before submission (Apple's bot will fetch it). `https://manifoldx.com/sitenotes/privacy` must return 200 with `legal/PrivacyPolicy.html` content.
+- [ ] Privacy Policy URL is **publicly reachable** before submission (Apple's bot will fetch it). `https://banruo1019.github.io/SiteNote/privacy/` must return 200 with `legal/PrivacyPolicy.html` content.
 - [ ] App Review Information demo flow walkthrough (paste from `RELEASE_CHECKLIST.md` § 9) is included in App Store Connect → App Review Information → Notes.
 - [ ] Screenshots have been generated against the **English** locale of the build (not zh-Hans). The Fastlane `Snapfile` uses `languages(["en-AU"])`.
 - [ ] App Privacy questionnaire filled per `APP_PRIVACY_LABEL.md`. **Particularly:** "Do you collect Crash Data?" → **No** (MetricKit stays on device).

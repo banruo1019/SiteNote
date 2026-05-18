@@ -37,17 +37,30 @@ Order matters — do them top to bottom.
   - Drop the new PNGs in place of `appstore 1.png` (dark) and `appstore 2.png` (tinted); the `Contents.json` already references them.
 - [ ] (Optional) Replace the empty launch screen — `Info.plist` has `UILaunchScreen` set to an empty dict, which renders as the system background. If you want a logo, set the dict's `UIImageName` to an asset name.
 
-## 5. Hosted URLs
+## 5. Hosted URLs — GitHub Pages (already deployed to `gh-pages` branch)
 
-- [ ] Publish the privacy policy:
-  - Source: `legal/PrivacyPolicy.html`
-  - Hosted at: **https://manifoldx.com/sitenotes/privacy** (already linked from the in-app Settings)
-- [ ] Publish the terms of service:
-  - Source: `legal/TermsOfService.md` (render to HTML or paste into your CMS)
-  - Hosted at: **https://manifoldx.com/sitenotes/terms** (linked from in-app Settings)
-- [ ] Optional but recommended — publish a support page:
-  - Hosted at: **https://manifoldx.com/sitenotes/support**
-  - Content: short FAQ, support email `support@manifoldx.com`, link to PrivacyPolicy + Terms
+The legal + support pages are already built and pushed to the `gh-pages` branch of this repo. You just need to **enable Pages** in GitHub once. It's two clicks:
+
+1. Go to https://github.com/banruo1019/SiteNote/settings/pages
+2. Under "Source", pick **Deploy from a branch** → branch `gh-pages` → folder `/ (root)` → **Save**
+3. Wait ~1 min. GitHub will publish at `https://banruo1019.github.io/SiteNote/`.
+
+After enabling, these three URLs will be live and reachable by Apple's reviewer bot:
+
+- **Privacy Policy** → https://banruo1019.github.io/SiteNote/privacy/ (already linked from in-app Settings)
+- **Terms of Service** → https://banruo1019.github.io/SiteNote/terms/ (already linked from in-app Settings)
+- **Support page** → https://banruo1019.github.io/SiteNote/support/
+
+To re-deploy after editing the source markdown:
+
+```bash
+git worktree add /tmp/gh-pages-edit gh-pages
+# edit files in /tmp/gh-pages-edit
+cd /tmp/gh-pages-edit && git add -A && git commit -m "update" && git push
+git worktree remove /tmp/gh-pages-edit
+```
+
+The pages support `prefers-color-scheme: dark` and render cleanly on mobile.
 
 ## 6. Screenshots
 
