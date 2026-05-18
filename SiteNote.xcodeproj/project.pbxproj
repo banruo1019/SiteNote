@@ -99,7 +99,7 @@
 				};
 			};
 			buildConfigurationList = E0BDAACB2F96521D002B5C5B /* Build configuration list for PBXProject "SiteNote" */;
-			developmentRegion = "zh-Hans";
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
