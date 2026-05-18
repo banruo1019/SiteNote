@@ -1,0 +1,18 @@
+# Fastlane Snapshot configuration for SiteNotes screenshots.
+# Run:  fastlane snapshot
+
+devices([
+  "iPhone 16 Pro Max",      # 6.9" — 1320 × 2868
+  "iPhone 15 Pro Max",      # 6.7" — 1290 × 2796 (fallback)
+  "iPhone 11 Pro Max",      # 6.5" — 1242 × 2688
+  "iPhone 8 Plus",          # 5.5" — 1242 × 2208 (still requested by Apple for legacy)
+  "iPad Pro (12.9-inch) (6th generation)" # 12.9" — 2048 × 2732
+])
+
+languages(["en-AU"])
+
+scheme("SiteNote")
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+override_status_bar(true)
+launch_arguments(["-UITestingScreenshots YES"])
