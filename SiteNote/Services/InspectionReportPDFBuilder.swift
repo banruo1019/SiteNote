@@ -275,9 +275,19 @@ enum InspectionReportPDFBuilder {
             .font: valueFont, .foregroundColor: UIColor.black
         ]
 
-        // Site Rep 来源:优先用新字段 siteRepName/Title/Company(在 task #277 加),
-        // 当前还在用 siteRepStatus 作为兜底(task #277 后会替换)。
-        let siteRepValue = report.siteRepStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Site Rep 来源:优先用新字段 siteRepName + Title + Company(从邮件收件人 prefill),
+        // 空时兜底到 legacy siteRepStatus(老报告兼容)。
+        let siteRepValue: String = {
+            let name = report.siteRepName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = report.siteRepTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            let company = report.siteRepCompany.trimmingCharacters(in: .whitespacesAndNewlines)
+            var parts: [String] = []
+            if !name.isEmpty { parts.append(name) }
+            if !title.isEmpty { parts.append(title) }
+            if !company.isEmpty { parts.append(company) }
+            if !parts.isEmpty { return parts.joined(separator: " · ") }
+            return report.siteRepStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+        }()
 
         let rows: [(String, String)] = [
             (String(localized: "Project", locale: AppLanguageManager.currentLocale), report.project),

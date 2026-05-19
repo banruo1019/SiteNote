@@ -47,7 +47,15 @@ final class InspectionReport {
     /// 巡检员签字名(默认从 UserProfile / Settings 读)。
     var engineerName: String = ""
     /// Site Rep 状态(例如 "Emailed"、"Signed",自由文本)。
+    /// v1.6 (en-v1):legacy 字段,新代码请用 siteRepName / siteRepTitle / siteRepCompany。
     var siteRepStatus: String = ""
+
+    /// v1.6 (en-v1):Site Rep 姓名(从邮件收件人 prefill,可手改)。PDF 封面 "Site Rep" 一栏显示。
+    var siteRepName: String = ""
+    /// v1.6 (en-v1):Site Rep 职位(从邮件收件人的 title prefill,可空)。
+    var siteRepTitle: String = ""
+    /// v1.6 (en-v1):Site Rep 所属公司(从邮件收件人所在 Builder 公司 prefill,可空)。
+    var siteRepCompany: String = ""
 
     /// CloudKit 用户 ID(CKRecord.creatorUserRecordID 的 recordName)。
     /// 创建时由 InspectionSessionManager 填 = ICloudSyncConfig.shared.currentUserRecordName。

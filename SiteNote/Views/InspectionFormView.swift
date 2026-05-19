@@ -301,9 +301,18 @@ struct InspectionFormView: View {
                 text: $report.engineerName
             )
 
+            // v1.6 (en-v1):Site Rep 拆三栏(从邮件收件人 prefill,可手改)
             TextField(
-                String(localized: "Site Rep status(现场代表状态)", locale: AppLanguageManager.currentLocale),
-                text: $report.siteRepStatus
+                String(localized: "Site Rep name", locale: AppLanguageManager.currentLocale),
+                text: $report.siteRepName
+            )
+            TextField(
+                String(localized: "Site Rep title (optional)", locale: AppLanguageManager.currentLocale),
+                text: $report.siteRepTitle
+            )
+            TextField(
+                String(localized: "Site Rep company (optional)", locale: AppLanguageManager.currentLocale),
+                text: $report.siteRepCompany
             )
         } header: {
             SectionHeader(String(localized: "Header", locale: AppLanguageManager.currentLocale))
@@ -607,12 +616,20 @@ struct InspectionFormView: View {
 
     /// 默认填工程师名:首次进入且字段为空时,用 ProfileKind.displayName 占位
     /// (用户在 form 里能直接覆写)。
+    /// v1.6 (en-v1):同时把 legacy `siteRepStatus` 一次性迁到新 `siteRepName` 字段
+    /// (老报告打开 Form 编辑时迁移,新建报告 siteRepName 由用户手填)。
     private func prefillEngineerNameIfNeeded() {
-        guard report.engineerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        let role = UserProfileManager.shared.current.displayName
-        report.engineerName = role
-        if report.siteRepStatus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            report.siteRepStatus = "Emailed"
+        if report.engineerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let role = UserProfileManager.shared.current.displayName
+            report.engineerName = role
+        }
+        // legacy → new(只迁一次:siteRepName 还是空才迁)
+        if report.siteRepName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let legacy = report.siteRepStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !legacy.isEmpty {
+                report.siteRepName = legacy
+                report.siteRepStatus = ""  // 防止下次再迁
+            }
         }
     }
 
