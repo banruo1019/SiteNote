@@ -40,6 +40,10 @@ struct ReportsView: View {
                     ScrollView {
                         VStack(spacing: 0) {
                             mainCard
+                            // v1.6 (en-v1):Site Team Reports 加 Recent Reports list 段(用 archive 数据)
+                            if UserProfileManager.shared.current == .siteTeam {
+                                recentReportsSection
+                            }
                             footerHint
                         }
                     }
@@ -176,6 +180,113 @@ struct ReportsView: View {
                 .stroke(Ink.line, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+    }
+
+    // MARK: - Recent Reports (v1.6 en-v1)
+    //
+    // Site Team Reports Tab 的"已生成报告"列表。数据源:ReportArchiveService.listArchived()。
+    // 行点击 → share(用 ShareSheet)。没归档 → 空态 hint("Tap above to create your first")。
+
+    @State private var archivedReports: [ReportArchiveService.ArchivedReport] = []
+    @State private var shareReportURL: URL?
+
+    private var recentReportsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(String(localized: "RECENT REPORTS", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.6)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Ink.fgDim)
+                if !archivedReports.isEmpty {
+                    Text("\(archivedReports.count)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(Ink.fg2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Ink.card)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 28)
+            .padding(.bottom, 6)
+
+            if archivedReports.isEmpty {
+                Text(String(localized: "No reports yet. Tap above to create your first.", locale: AppLanguageManager.currentLocale))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Ink.fgDim)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(archivedReports.prefix(20)) { report in
+                        recentReportRow(report)
+                        if report.id != archivedReports.prefix(20).last?.id {
+                            Rectangle()
+                                .fill(Ink.line)
+                                .frame(height: 1)
+                                .padding(.leading, 24 + 32 + 12)  // align with text
+                        }
+                    }
+                }
+            }
+        }
+        .task {
+            archivedReports = ReportArchiveService.listArchived()
+        }
+        .sheet(isPresented: Binding(
+            get: { shareReportURL != nil },
+            set: { if !$0 { shareReportURL = nil } }
+        )) {
+            if let url = shareReportURL {
+                ShareSheet(items: [url])
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func recentReportRow(_ report: ReportArchiveService.ArchivedReport) -> some View {
+        Button {
+            shareReportURL = report.url
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Ink.fg2)
+                    .frame(width: 32, height: 32)
+                    .background(Ink.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(report.projectFolder.isEmpty ? "—" : report.projectFolder)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Ink.fg)
+                        .lineLimit(1)
+                    Text(recentReportSubtitle(report))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func recentReportSubtitle(_ report: ReportArchiveService.ArchivedReport) -> String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_AU")
+        df.dateStyle = .medium
+        let dateStr = df.string(from: report.createdAt)
+        return "\(dateStr) · \(report.sizeDescription)"
     }
 
     private var footerHint: some View {
