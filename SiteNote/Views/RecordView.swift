@@ -46,6 +46,8 @@ struct RecordView: View {
     @State private var doneSectionExpanded: Bool = false
     /// v1.6:待办段也可折叠,默认展开。
     @State private var pendingSectionExpanded: Bool = true
+    /// v1.6 (en-v1):Site Team 主屏「已逾期」段,默认展开(高优先级一打开就看见)。
+    @State private var overdueSectionExpanded: Bool = true
     /// Engineer 视角的工地 filter(nil = 全部工地)。PM 视角不用。
     @State private var engineerSiteFilter: String? = nil
 
@@ -88,10 +90,37 @@ struct RecordView: View {
         }
     }
 
+    /// v1.6 (en-v1):Site Team 主屏「已逾期」段 — 过 dueDate 但未完成、非归档、非 inbox。
+    /// 按 dueDate 升序(最久逾期最上)。Engineer 模式返回空(不分段)。
+    private var overdueNotes: [Note] {
+        guard profileManager.current == .siteTeam else { return [] }
+        let now = Date()
+        return basePool
+            .filter { note in
+                !note.isDone
+                && note.dueDate < now
+                && note.deadline != .archive
+                && note.deadline != .inbox
+            }
+            .sorted { $0.dueDate < $1.dueDate }
+    }
+
     /// 待办段:未完成,按 createdAt 倒序。
+    /// Site Team 模式排除逾期(归入 overdueNotes);Engineer 模式仍是全部未完成。
     private var pendingNotes: [Note] {
-        basePool
-            .filter { !$0.isDone }
+        let now = Date()
+        let isSiteTeam = profileManager.current == .siteTeam
+        return basePool
+            .filter { note in
+                guard !note.isDone else { return false }
+                if isSiteTeam
+                    && note.dueDate < now
+                    && note.deadline != .archive
+                    && note.deadline != .inbox {
+                    return false  // 归 overdueNotes
+                }
+                return true
+            }
             .sorted { $0.createdAt > $1.createdAt }
     }
 
@@ -597,7 +626,7 @@ struct RecordView: View {
         } else {
             VStack(spacing: 0) {
                 searchBar
-                if pendingNotes.isEmpty && doneNotes.isEmpty {
+                if overdueNotes.isEmpty && pendingNotes.isEmpty && doneNotes.isEmpty {
                     emptyHint
                 } else {
                     twoSectionList
@@ -694,9 +723,29 @@ struct RecordView: View {
         .padding(.bottom, 14)
     }
 
-    /// 两段列表:待办(常显) + 已完成(可折叠)。
+    /// 三段列表(Site Team)/ 两段(Engineer):已逾期 + 待办 + 已完成。
+    /// v1.6 (en-v1) 起 Site Team 多一个「已逾期」段,默认展开,red header。
     private var twoSectionList: some View {
         List {
+            // 已逾期段(只 Site Team,只在有逾期时渲染)
+            if !overdueNotes.isEmpty {
+                Section {
+                    if overdueSectionExpanded {
+                        ForEach(overdueNotes) { note in
+                            noteRowItem(note, isOverdue: true)
+                        }
+                    }
+                } header: {
+                    sectionHeader(
+                        title: String(localized: "已逾期", locale: AppLanguageManager.currentLocale),
+                        count: overdueNotes.count,
+                        foldable: true,
+                        expanded: $overdueSectionExpanded,
+                        tone: .danger
+                    )
+                }
+            }
+
             // 待办段(v1.6:也可折叠,默认展开)
             if !pendingNotes.isEmpty {
                 Section {
@@ -741,12 +790,13 @@ struct RecordView: View {
     /// 单条 Note row + swipe + 长按删除。
     /// 视觉本体在 `NoteTimelineRow`,这里只包 Button(替代 NavigationLink 去 List 隐式 chevron)
     /// + swipe(必须点 capsule 才生效 — allowsFullSwipe: false 防误触)+ contextMenu(长按删除)。
+    /// `isOverdue=true` 时(Site Team「已逾期」段)圆点染红。
     @ViewBuilder
-    private func noteRowItem(_ note: Note) -> some View {
+    private func noteRowItem(_ note: Note, isOverdue: Bool = false) -> some View {
         Button {
             navPath.append(note)
         } label: {
-            NoteTimelineRow(note: note)
+            NoteTimelineRow(note: note, isOverdue: isOverdue)
         }
         .buttonStyle(.plain)
         .listRowInsets(EdgeInsets())
@@ -783,13 +833,20 @@ struct RecordView: View {
     }
 
     /// Section header — 标题左 + 计数 chip + (可选)折叠 chevron。
+    /// v1.6 (en-v1):section header tone — default 走原 dim 灰色,danger 走 red(已逾期段)。
+    enum SectionTone { case `default`, danger }
+
     private func sectionHeader(
         title: String,
         count: Int,
         foldable: Bool,
-        expanded: Binding<Bool>
+        expanded: Binding<Bool>,
+        tone: SectionTone = .default
     ) -> some View {
-        Button {
+        let titleColor: Color = tone == .danger ? Ink.red : Ink.fgDim
+        let chipFg: Color = tone == .danger ? Ink.red : Ink.fg2
+        let chipBg: Color = tone == .danger ? Ink.red.opacity(0.12) : Ink.card
+        return Button {
             if foldable {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     expanded.wrappedValue.toggle()
@@ -801,14 +858,14 @@ struct RecordView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(0.6)
                     .textCase(.uppercase)
-                    .foregroundStyle(Ink.fgDim)
+                    .foregroundStyle(titleColor)
                 Text("\(count)")
                     .font(.system(size: 10, weight: .semibold))
                     .monospacedDigit()
-                    .foregroundStyle(Ink.fg2)
+                    .foregroundStyle(chipFg)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
-                    .background(Ink.card)
+                    .background(chipBg)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 Spacer()
                 if foldable {

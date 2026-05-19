@@ -693,16 +693,16 @@
     },
     "%@ / %@": {
       "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$@ / %2$@"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ / %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ / %2$@"
           }
         }
       }
@@ -784,32 +784,32 @@
     },
     "%lld / %lld": {
       "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$lld / %2$lld"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld / %lld"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld / %2$lld"
           }
         }
       }
     },
     "%lld / %lld 成员": {
       "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$lld / %2$lld 成员"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld / %lld members"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld / %2$lld 成员"
           }
         }
       }
@@ -1011,16 +1011,16 @@
     },
     "%lld 条 notes · %lld 张照片": {
       "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$lld 条 notes · %2$lld 张照片"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld notes · %lld photos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld 条 notes · %2$lld 张照片"
           }
         }
       }
@@ -3015,6 +3015,7 @@
         }
       }
     },
+    "Privacy Policy": {},
     "Project No.:": {
       "localizations": {
         "en": {
@@ -3089,6 +3090,7 @@
         }
       }
     },
+    "Replays the 5-step welcome on next launch": {},
     "Report No.:": {
       "localizations": {
         "en": {
@@ -3121,6 +3123,7 @@
         }
       }
     },
+    "Show Onboarding Again": {},
     "Site Diary 生成失败: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -3283,6 +3286,7 @@
         }
       }
     },
+    "Terms of Service": {},
     "to(自动替换为)": {
       "extractionState": "manual",
       "localizations": {
@@ -12271,16 +12275,16 @@
     },
     "添加后会再次弹出系统邀请页,你可以把链接通过 Messages/Mail 发给该成员(系统会自动 lookup 对应 iCloud 账户)。当前 %lld / %lld 成员。": {
       "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "添加后会再次弹出系统邀请页,你可以把链接通过 Messages/Mail 发给该成员(系统会自动 lookup 对应 iCloud 账户)。当前 %1$lld / %2$lld 成员。"
-          }
-        },
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "After adding, the system share sheet reopens so you can send the invite via Messages or Mail (iOS resolves the iCloud account automatically). Currently %lld / %lld members."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "添加后会再次弹出系统邀请页,你可以把链接通过 Messages/Mail 发给该成员(系统会自动 lookup 对应 iCloud 账户)。当前 %1$lld / %2$lld 成员。"
           }
         }
       }
@@ -16096,6 +16100,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Default inspection type (e.g. level 1 reo)"
+          }
+        }
+      }
+    },
+    "已逾期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdue"
+          }
+        }
+      }
+    },
+    "OVERDUE %lldd": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OVERDUE %lldd"
+          }
+        }
+      }
+    },
+    "%lld overdue · %lld due today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld overdue · %lld due today"
+          }
+        }
+      }
+    },
+    "%lld overdue items": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld overdue items"
+          }
+        }
+      }
+    },
+    "%lld due today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld due today"
           }
         }
       }

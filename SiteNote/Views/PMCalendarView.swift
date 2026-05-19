@@ -157,6 +157,7 @@ struct PMCalendarView: View {
             let isSelected = cal.isDate(date, inSameDayAs: selectedDate)
             let dayNotes = notes(on: date)
             let hasHazard = dayNotes.contains(where: { $0.isHazard })
+            let hasOverdue = isToday && dayNotes.contains(where: { isOverdueAsOfToday($0) })
             let dotCount = min(dayNotes.count, 3)
             let day = cal.component(.day, from: date)
             // M1:今天 = 黑圆填充;选中(非今天)= 1px Ink.fg 描边圆,对比更明确;否则透明
@@ -187,7 +188,7 @@ struct PMCalendarView: View {
                     HStack(spacing: 2.5) {
                         ForEach(0..<dotCount, id: \.self) { idx in
                             Circle()
-                                .fill(dotColorAt(index: idx, hasHazard: hasHazard, isToday: isToday))
+                                .fill(dotColorAt(index: idx, hasHazard: hasHazard, hasOverdue: hasOverdue, isToday: isToday))
                                 .frame(width: 4, height: 4)
                         }
                     }
@@ -203,22 +204,66 @@ struct PMCalendarView: View {
         }
     }
 
-    /// 每颗 dot 的颜色:第一颗如果有 hazard 用红,其他用 Ink.fg(今天的反白处理)。
-    private func dotColorAt(index: Int, hasHazard: Bool, isToday: Bool) -> Color {
-        if index == 0 && hasHazard { return Ink.red }
+    /// 每颗 dot 的颜色:第一颗在以下情形染红 — 有 hazard,或者(今天 cell 且有逾期)。
+    /// 其他颗:今天反白(Ink.bg 衬底),其他日子 fg.opacity(0.55)。
+    private func dotColorAt(index: Int, hasHazard: Bool, hasOverdue: Bool, isToday: Bool) -> Color {
+        if index == 0 && (hasHazard || (isToday && hasOverdue)) { return Ink.red }
         return isToday ? Ink.bg : Ink.fg.opacity(0.55)
     }
 
     // MARK: - 当日列表
 
-    /// 落在指定日期(同一天)的所有未完成 Note。按时间升序。
+    /// 落在指定日期的所有 Note。按时间升序。
+    /// v1.6 (en-v1) 新规则:
+    /// - 今天 cell:本日 dueDate + 所有逾期未完成(从过去推上来)。
+    /// - 过去 cell:只显示当天 due 且已了结(已完成 / archive / inbox)— 逾期已被推到今天。
+    /// - 未来 cell:不变,严格按 dueDate 当天匹配。
     /// 注:Note.deadline 已经在 dueDate(from:) 里推算了具体 dueDate,
     ///     直接按 dueDate 在同一天匹配即可,不需要再判断 deadline 档位。
     private func notes(on date: Date) -> [Note] {
         let cal = Calendar.current
-        return notesForCalendar
-            .filter { cal.isDate($0.dueDate, inSameDayAs: date) }
-            .sorted { $0.dueDate < $1.dueDate }
+        let startOfToday = cal.startOfDay(for: Date())
+        let startOfThis = cal.startOfDay(for: date)
+
+        if startOfThis == startOfToday {
+            // 今天:本日 due + 所有逾期未完成
+            return notesForCalendar
+                .filter { note in
+                    cal.isDate(note.dueDate, inSameDayAs: date) || isOverdueAsOfToday(note)
+                }
+                .sorted { $0.dueDate < $1.dueDate }
+        } else if startOfThis < startOfToday {
+            // 过去:只显示当天 due 且"已了结"(已完成、archive、inbox)— 逾期的不在原日子显示
+            return notesForCalendar
+                .filter { note in
+                    cal.isDate(note.dueDate, inSameDayAs: date)
+                    && (note.isDone || note.deadline == .archive || note.deadline == .inbox)
+                }
+                .sorted { $0.dueDate < $1.dueDate }
+        } else {
+            // 未来:不变
+            return notesForCalendar
+                .filter { cal.isDate($0.dueDate, inSameDayAs: date) }
+                .sorted { $0.dueDate < $1.dueDate }
+        }
+    }
+
+    /// 是否"截至今天仍在逾期":未完成 + dueDate 已过 + 非 archive / inbox。
+    private func isOverdueAsOfToday(_ note: Note) -> Bool {
+        let cal = Calendar.current
+        let startOfToday = cal.startOfDay(for: Date())
+        return !note.isDone
+            && note.dueDate < startOfToday
+            && note.deadline != .archive
+            && note.deadline != .inbox
+    }
+
+    /// 逾期了多少天(用于行内 badge "OVERDUE Xd")。
+    private func overdueDays(_ note: Note) -> Int {
+        let cal = Calendar.current
+        let startOfToday = cal.startOfDay(for: Date())
+        let startOfDue = cal.startOfDay(for: note.dueDate)
+        return max(1, cal.dateComponents([.day], from: startOfDue, to: startOfToday).day ?? 1)
     }
 
     private var notesOnSelectedDate: [Note] {
@@ -273,7 +318,8 @@ struct PMCalendarView: View {
                 Section {
                     if pendingExpanded {
                         ForEach(pending) { note in
-                            calNoteRowItem(note)
+                            // 今天 cell:逾期 note 显示红 badge + 红圆点
+                            calNoteRowItem(note, isOverdue: isOverdueAsOfToday(note))
                         }
                     }
                 } header: {
@@ -331,13 +377,13 @@ struct PMCalendarView: View {
     /// - 长按 → contextMenu「删除」(软删进垃圾桶)
     /// - 行末**不**显示 chevron(用户要求)
     @ViewBuilder
-    private func calNoteRowItem(_ note: Note) -> some View {
+    private func calNoteRowItem(_ note: Note, isOverdue: Bool = false) -> some View {
         Button {
             navPath.append(note)
         } label: {
             HStack(spacing: 12) {
                 Circle()
-                    .fill(note.isHazard ? Ink.red : Ink.fg)
+                    .fill((note.isHazard || isOverdue) ? Ink.red : Ink.fg)
                     .frame(width: 6, height: 6)
                 Text(timeLabel(note.dueDate))
                     .font(.system(size: 12, weight: .semibold))
@@ -345,14 +391,26 @@ struct PMCalendarView: View {
                     .monospacedDigit()
                     .frame(width: 44, alignment: .leading)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(noteSummary(note))
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(
-                            note.isHazard ? Ink.red : (note.isDone ? Ink.fgDim : Ink.fg)
-                        )
-                        .strikethrough(note.isDone)
-                        .lineLimit(1)
-                        .multilineTextAlignment(.leading)
+                    HStack(spacing: 6) {
+                        if isOverdue {
+                            Text(String(localized: "OVERDUE \(overdueDays(note))d", locale: AppLanguageManager.currentLocale))
+                                .font(.system(size: 9, weight: .bold))
+                                .tracking(0.4)
+                                .foregroundStyle(Ink.red)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Ink.red.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                        }
+                        Text(noteSummary(note))
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(
+                                note.isHazard ? Ink.red : (note.isDone ? Ink.fgDim : Ink.fg)
+                            )
+                            .strikethrough(note.isDone)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.leading)
+                    }
                     if let site = note.siteTag, !site.isEmpty {
                         Text(site)
                             .font(.system(size: 11))
