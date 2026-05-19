@@ -37,14 +37,16 @@ struct ReportsView: View {
                 Ink.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     titleRow
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            mainCard
-                            // v1.6 (en-v1):Site Team Reports 加 Recent Reports list 段(用 archive 数据)
-                            if UserProfileManager.shared.current == .siteTeam {
-                                recentReportsSection
+                    if UserProfileManager.shared.current == .siteTeam {
+                        // v1.6 (en-v1):Site Team 用 List 承载 — Recent + Archived 段需要 swipe
+                        siteTeamReportsList
+                    } else {
+                        // Engineer:沿用原 ScrollView + mainCard
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                mainCard
+                                footerHint
                             }
-                            footerHint
                         }
                     }
                 }
@@ -182,60 +184,95 @@ struct ReportsView: View {
         .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
     }
 
-    // MARK: - Recent Reports (v1.6 en-v1)
+    // MARK: - Site Team Reports List (v1.6 en-v1 — file manager style)
     //
-    // Site Team Reports Tab 的"已生成报告"列表。数据源:ReportArchiveService.listArchived()。
-    // 行点击 → share(用 ShareSheet)。没归档 → 空态 hint("Tap above to create your first")。
+    // List 承载 mainCard(自定义 row 样式) + Recent + Archived 两段。
+    // 每行 swipe ← Delete / swipe → Archive 或 Unarchive。Tap = share。
+    // Site filter(顶部)过滤两段。Recent 默认展开,Archived 默认折叠。
 
-    @State private var archivedReports: [ReportArchiveService.ArchivedReport] = []
+    @State private var allReports: [ReportArchiveService.ArchivedReport] = []
     @State private var shareReportURL: URL?
+    @State private var recentExpanded: Bool = true
+    @State private var archivedExpanded: Bool = false
 
-    private var recentReportsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(String(localized: "RECENT REPORTS", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.6)
-                    .textCase(.uppercase)
-                    .foregroundStyle(Ink.fgDim)
-                if !archivedReports.isEmpty {
-                    Text("\(archivedReports.count)")
-                        .font(.system(size: 10, weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(Ink.fg2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Ink.card)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                }
-                Spacer()
+    /// 应用 siteFilter 后的 reports。
+    private var filteredReports: [ReportArchiveService.ArchivedReport] {
+        guard let site = siteFilter else { return allReports }
+        return allReports.filter { $0.projectFolder == site }
+    }
+
+    private var recentReports: [ReportArchiveService.ArchivedReport] {
+        filteredReports.filter { !$0.isUserArchived }
+    }
+
+    private var archivedReports: [ReportArchiveService.ArchivedReport] {
+        filteredReports.filter { $0.isUserArchived }
+    }
+
+    private var siteTeamReportsList: some View {
+        List {
+            // 1) mainCard — 用 List section 包,移除 list 自带样式
+            Section {
+                mainCard
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 28)
-            .padding(.bottom, 6)
 
-            if archivedReports.isEmpty {
-                Text(String(localized: "No reports yet. Tap above to create your first.", locale: AppLanguageManager.currentLocale))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Ink.fgDim)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(archivedReports.prefix(20)) { report in
-                        recentReportRow(report)
-                        if report.id != archivedReports.prefix(20).last?.id {
-                            Rectangle()
-                                .fill(Ink.line)
-                                .frame(height: 1)
-                                .padding(.leading, 24 + 32 + 12)  // align with text
+            // 2) Recent 段
+            Section {
+                if recentExpanded {
+                    if recentReports.isEmpty {
+                        Text(String(localized: "No reports yet. Tap above to create your first.", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 12))
+                            .foregroundStyle(Ink.fgDim)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                            .padding(.horizontal, 24)
+                    } else {
+                        ForEach(recentReports) { report in
+                            reportRow(report)
                         }
                     }
                 }
+            } header: {
+                reportsSectionHeader(
+                    title: String(localized: "Recent", locale: AppLanguageManager.currentLocale),
+                    count: recentReports.count,
+                    expanded: $recentExpanded
+                )
+            }
+
+            // 3) Archived 段(0 条不渲染)
+            if !archivedReports.isEmpty {
+                Section {
+                    if archivedExpanded {
+                        ForEach(archivedReports) { report in
+                            reportRow(report)
+                        }
+                    }
+                } header: {
+                    reportsSectionHeader(
+                        title: String(localized: "Archived", locale: AppLanguageManager.currentLocale),
+                        count: archivedReports.count,
+                        expanded: $archivedExpanded
+                    )
+                }
+            }
+
+            // 4) Footer hint
+            Section {
+                footerHint
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Ink.bg)
         .task {
-            archivedReports = ReportArchiveService.listArchived()
+            allReports = ReportArchiveService.listArchived()
         }
         .sheet(isPresented: Binding(
             get: { shareReportURL != nil },
@@ -247,8 +284,46 @@ struct ReportsView: View {
         }
     }
 
+    /// Section header 含可折叠 chevron + 计数 chip。
+    private func reportsSectionHeader(title: String, count: Int, expanded: Binding<Bool>) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                expanded.wrappedValue.toggle()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.6)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Ink.fgDim)
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Ink.fg2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(Ink.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                Spacer()
+                Image(systemName: expanded.wrappedValue ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Ink.dim)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 18)
+            .padding(.bottom, 6)
+            .contentShape(Rectangle())
+            .listRowBackground(Color.clear)
+        }
+        .buttonStyle(.plain)
+        .textCase(nil)
+        .listRowInsets(EdgeInsets())
+    }
+
     @ViewBuilder
-    private func recentReportRow(_ report: ReportArchiveService.ArchivedReport) -> some View {
+    private func reportRow(_ report: ReportArchiveService.ArchivedReport) -> some View {
+        let isArchived = report.isUserArchived
         Button {
             shareReportURL = report.url
         } label: {
@@ -264,29 +339,98 @@ struct ReportsView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(Ink.fg)
                         .lineLimit(1)
-                    Text(recentReportSubtitle(report))
+                    Text(reportRowSubtitle(report))
                         .font(.system(size: 11))
                         .foregroundStyle(Ink.fgDim)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Ink.dim)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Ink.bg)
+        // 右滑(leading)→ Archive 或 Unarchive
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                toggleArchive(report)
+            } label: {
+                Label(
+                    isArchived
+                        ? String(localized: "Unarchive", locale: AppLanguageManager.currentLocale)
+                        : String(localized: "Archive", locale: AppLanguageManager.currentLocale),
+                    systemImage: isArchived ? "tray.and.arrow.up" : "archivebox"
+                )
+            }
+            .tint(isArchived ? Ink.accentBlue : Ink.fg2)
+        }
+        // 左滑(trailing)→ Delete 立即生效
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                deleteReport(report)
+            } label: {
+                Label(
+                    String(localized: "Delete", locale: AppLanguageManager.currentLocale),
+                    systemImage: "trash"
+                )
+            }
+        }
+        .contextMenu {
+            Button {
+                shareReportURL = report.url
+            } label: {
+                Label(String(localized: "Share", locale: AppLanguageManager.currentLocale), systemImage: "square.and.arrow.up")
+            }
+            Button {
+                toggleArchive(report)
+            } label: {
+                Label(
+                    isArchived
+                        ? String(localized: "Unarchive", locale: AppLanguageManager.currentLocale)
+                        : String(localized: "Archive", locale: AppLanguageManager.currentLocale),
+                    systemImage: isArchived ? "tray.and.arrow.up" : "archivebox"
+                )
+            }
+            Button(role: .destructive) {
+                deleteReport(report)
+            } label: {
+                Label(String(localized: "Delete", locale: AppLanguageManager.currentLocale), systemImage: "trash")
+            }
+        }
     }
 
-    private func recentReportSubtitle(_ report: ReportArchiveService.ArchivedReport) -> String {
+    private func reportRowSubtitle(_ report: ReportArchiveService.ArchivedReport) -> String {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_AU")
         df.dateStyle = .medium
         let dateStr = df.string(from: report.createdAt)
         return "\(dateStr) · \(report.sizeDescription)"
+    }
+
+    private func toggleArchive(_ report: ReportArchiveService.ArchivedReport) {
+        do {
+            if report.isUserArchived {
+                _ = try ReportArchiveService.markUserRecent(report)
+            } else {
+                _ = try ReportArchiveService.markUserArchived(report)
+            }
+            allReports = ReportArchiveService.listArchived()
+        } catch {
+            print("[ReportsView] toggle archive failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func deleteReport(_ report: ReportArchiveService.ArchivedReport) {
+        do {
+            try ReportArchiveService.delete(report)
+            allReports = ReportArchiveService.listArchived()
+        } catch {
+            print("[ReportsView] delete failed: \(error.localizedDescription)")
+        }
     }
 
     private var footerHint: some View {
