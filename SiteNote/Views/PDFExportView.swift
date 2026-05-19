@@ -34,6 +34,12 @@ struct PDFExportView: View {
     @State private var exportURL: URL?
     @State private var errorMessage: String?
 
+    /// v1.6 (en-v1):用户在 sheet 里勾选的 note IDs。默认 = 全部 filteredNotes。
+    /// 用户没改时跟 filteredNotes 同步;用户在 sheet 改了 → 持久化在这里。
+    @State private var pickedNoteIDs: Set<UUID>?
+
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         Form {
             dateRangeSection
@@ -61,18 +67,26 @@ struct PDFExportView: View {
             }
         }
         .sheet(isPresented: $showsPicker) {
+            // v1.6 (en-v1):sheet 只做选择 — Done 按钮存选择,不再直接生成
             NoteSelectionSheet(
                 candidates: filteredNotes,
+                initialSelection: effectiveSelectedIDs,
                 dateRange: rangeDescription,
-                onConfirm: { selected in
+                onDone: { newSelection in
+                    pickedNoteIDs = newSelection
                     showsPicker = false
-                    generatePDF(with: selected)
                 }
             )
         }
         .sheet(item: Binding(
             get: { exportURL.map { PDFShareItem(url: $0) } },
-            set: { _ in exportURL = nil }
+            set: { newVal in
+                // v1.6 (en-v1):share sheet 关掉时 → 也 dismiss PDFExportView 回 Reports
+                if newVal == nil {
+                    exportURL = nil
+                    dismiss()
+                }
+            }
         )) { item in
             ShareSheet(items: [item.url])
         }
@@ -190,7 +204,8 @@ struct PDFExportView: View {
             } label: {
                 HStack {
                     Image(systemName: "checklist")
-                    Text("选择记录并生成 PDF")
+                    // v1.6 (en-v1):入口只用来选 — sheet 里没 Generate 按钮了,生成在主页底部
+                    Text(String(localized: "选择要包含的记录(\(effectiveSelectedIDs.count) / \(filteredNotes.count))", locale: AppLanguageManager.currentLocale))
                         .font(.system(size: DesignTokens.FontSize.body, weight: .semibold))
                     Spacer()
                     Image(systemName: "chevron.right")
@@ -204,35 +219,50 @@ struct PDFExportView: View {
         }
     }
 
-    /// v1.6 (en-v1):一键生成所有匹配 note 的 PDF — 跳过 picker。
-    /// 想挑选用上面的 row;一把全要的话点这个。
+    /// v1.6 (en-v1):一键生成当前选中 note 的 PDF。
+    /// 用户没动过 picker → 全部 filteredNotes;动过 → 用户选的子集。
     private var generateAllSection: some View {
         Section {
             Button {
-                generatePDF(with: filteredNotes)
+                generatePDF(with: selectedNotesToGenerate)
             } label: {
                 HStack(spacing: 10) {
                     Spacer()
                     Image(systemName: "doc.badge.plus")
                         .font(.system(size: 16, weight: .semibold))
-                    Text(String(localized: "生成 \(filteredNotes.count) 条的 PDF", locale: AppLanguageManager.currentLocale))
+                    Text(String(localized: "生成 \(selectedNotesToGenerate.count) 条的 PDF", locale: AppLanguageManager.currentLocale))
                         .font(.system(size: 15, weight: .semibold))
                     Spacer()
                 }
-                .foregroundStyle(filteredNotes.isEmpty ? Color.secondary : Color.white)
+                .foregroundStyle(selectedNotesToGenerate.isEmpty ? Color.secondary : Color.white)
                 .padding(.vertical, 14)
                 .frame(maxWidth: .infinity)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(filteredNotes.isEmpty ? Color(.systemGray5) : Color.black)
+                        .fill(selectedNotesToGenerate.isEmpty ? Color(.systemGray5) : Color.black)
                 )
             }
-            .disabled(filteredNotes.isEmpty)
+            .disabled(selectedNotesToGenerate.isEmpty)
             .buttonStyle(.plain)
             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
         }
+    }
+
+    /// v1.6 (en-v1):用户在 sheet 里没动过 → 全选 filteredNotes;动过 → 取交集(filter 变了后保持有效选择)。
+    private var effectiveSelectedIDs: Set<UUID> {
+        let allIDs = Set(filteredNotes.map { $0.id })
+        if let picked = pickedNoteIDs {
+            return picked.intersection(allIDs)
+        }
+        return allIDs
+    }
+
+    /// 实际生成 PDF 用的 notes:filteredNotes ∩ effectiveSelectedIDs。
+    private var selectedNotesToGenerate: [Note] {
+        let ids = effectiveSelectedIDs
+        return filteredNotes.filter { ids.contains($0.id) }
     }
 
     /// 按用户条件筛出的 note(日期精确到分,含两端)。
@@ -302,11 +332,13 @@ struct PDFExportView: View {
 
 // MARK: - 记录勾选 sheet
 
-/// 让用户在生成 PDF 前勾选要包含的 note。默认全勾。
+/// v1.6 (en-v1):只做选择(点 Done 把选择回传给 parent)。
+/// 不再有底部 Generate PDF 按钮 — 生成在 PDFExportView 主页面底部。
 private struct NoteSelectionSheet: View {
     let candidates: [Note]
+    let initialSelection: Set<UUID>
     let dateRange: String
-    let onConfirm: ([Note]) -> Void
+    let onDone: (Set<UUID>) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedIDs: Set<UUID> = []
@@ -322,7 +354,6 @@ private struct NoteSelectionSheet: View {
                     }
                 }
                 .listStyle(.plain)
-                bottomBar
             }
             .navigationTitle("选要包含的记录")
             .navigationBarTitleDisplayMode(.inline)
@@ -330,9 +361,17 @@ private struct NoteSelectionSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { dismiss() }
                 }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "完成", locale: AppLanguageManager.currentLocale)) {
+                        onDone(selectedIDs)
+                    }
+                    .fontWeight(.semibold)
+                }
             }
             .onAppear {
-                selectedIDs = Set(candidates.map { $0.id })
+                selectedIDs = initialSelection.isEmpty
+                    ? Set(candidates.map { $0.id })
+                    : initialSelection
             }
         }
     }
@@ -433,28 +472,8 @@ private struct NoteSelectionSheet: View {
         return String(localized: "(仅录音/照片)", locale: AppLanguageManager.currentLocale)
     }
 
-    private var bottomBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-            Button {
-                let selected = candidates.filter { selectedIDs.contains($0.id) }
-                onConfirm(selected)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.text")
-                    Text("生成 \(selectedIDs.count) 条的 PDF")
-                }
-                .font(.system(size: DesignTokens.FontSize.body, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(selectedIDs.isEmpty ? Color.gray : Color.accentColor)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .disabled(selectedIDs.isEmpty)
-            .padding(DesignTokens.Spacing.medium)
-        }
-    }
+    // v1.6 (en-v1):原 bottomBar 已删除 — 生成动作搬到 PDFExportView 主页面底部
+    // ("生成 N 条的 PDF" 大黑按钮)。sheet 内只用 toolbar Done 按钮回传选择。
 }
 
 private struct PDFShareItem: Identifiable {
