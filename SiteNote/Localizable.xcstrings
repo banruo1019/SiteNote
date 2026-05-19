@@ -825,6 +825,46 @@
         }
       }
     },
+    "%lld due today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld due today"
+          }
+        }
+      }
+    },
+    "%lld notes · %lld photos": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld notes · %lld photos"
+          }
+        }
+      }
+    },
+    "%lld overdue · %lld due today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld overdue · %lld due today"
+          }
+        }
+      }
+    },
+    "%lld overdue items": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld overdue items"
+          }
+        }
+      }
+    },
     "%lld 个": {
       "extractionState": "manual",
       "localizations": {
@@ -1705,6 +1745,7 @@
       }
     },
     "ABN: %@": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -2148,6 +2189,16 @@
         }
       }
     },
+    "Client": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client"
+          }
+        }
+      }
+    },
     "Client:": {
       "localizations": {
         "en": {
@@ -2179,6 +2230,26 @@
         }
       }
     },
+    "Conducted by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conducted by"
+          }
+        }
+      }
+    },
+    "DAILY SITE DIARY": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DAILY SITE DIARY"
+          }
+        }
+      }
+    },
     "DataAboutSettingsView feedback (E3.7)": {
       "extractionState": "manual",
       "localizations": {
@@ -2197,6 +2268,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "2026-05-02"
+          }
+        }
+      }
+    },
+    "Date": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Date"
           }
         }
       }
@@ -2275,6 +2356,16 @@
         }
       }
     },
+    "Entries": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entries"
+          }
+        }
+      }
+    },
     "EOT Claim Letter": {
       "extractionState": "manual",
       "localizations": {
@@ -2347,6 +2438,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "gpt-4o (high quality)"
+          }
+        }
+      }
+    },
+    "Hazard": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hazard"
           }
         }
       }
@@ -2439,6 +2540,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "iCloud email"
+          }
+        }
+      }
+    },
+    "Inspection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inspection"
           }
         }
       }
@@ -2687,6 +2798,16 @@
         }
       }
     },
+    "No reports yet. Tap above to create your first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No reports yet. Tap above to create your first."
+          }
+        }
+      }
+    },
     "OHS 合规要求,请尽快解决或上报上级。": {
       "extractionState": "manual",
       "localizations": {
@@ -2694,6 +2815,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "OHS compliance — resolve or escalate as soon as possible."
+          }
+        }
+      }
+    },
+    "OVERDUE %lldd": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OVERDUE %lldd"
           }
         }
       }
@@ -3015,7 +3146,37 @@
         }
       }
     },
+    "Prepared by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prepared by"
+          }
+        }
+      }
+    },
     "Privacy Policy": {},
+    "Project": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project"
+          }
+        }
+      }
+    },
+    "Project No.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Project No."
+          }
+        }
+      }
+    },
     "Project No.:": {
       "localizations": {
         "en": {
@@ -3079,6 +3240,16 @@
         }
       }
     },
+    "RECENT REPORTS": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RECENT REPORTS"
+          }
+        }
+      }
+    },
     "RemindersSettingsView (E3.6 / E3.8)": {
       "extractionState": "manual",
       "localizations": {
@@ -3124,6 +3295,16 @@
       }
     },
     "Show Onboarding Again": {},
+    "Site": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Site"
+          }
+        }
+      }
+    },
     "Site Diary 生成失败: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -3131,6 +3312,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Failed to generate Site Diary: %@"
+          }
+        }
+      }
+    },
+    "SITE INSPECTION REPORT": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SITE INSPECTION REPORT"
+          }
+        }
+      }
+    },
+    "Site Rep": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Site Rep"
+          }
+        }
+      }
+    },
+    "Site Rep company (optional)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Site Rep company (optional)"
+          }
+        }
+      }
+    },
+    "Site Rep name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Site Rep name"
           }
         }
       }
@@ -3146,6 +3367,16 @@
         }
       }
     },
+    "Site Rep title (optional)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Site Rep title (optional)"
+          }
+        }
+      }
+    },
     "Site Rep:": {
       "localizations": {
         "en": {
@@ -3157,6 +3388,7 @@
       }
     },
     "Site Visit Report / Site Instruction": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -8209,6 +8441,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Running %@"
+          }
+        }
+      }
+    },
+    "已逾期": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overdue"
           }
         }
       }
@@ -16104,242 +16346,102 @@
         }
       }
     },
-    "已逾期": {
+    "Recent": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Overdue"
+            "value": "Recent"
           }
         }
       }
     },
-    "OVERDUE %lldd": {
+    "Archived": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "OVERDUE %lldd"
+            "value": "Archived"
           }
         }
       }
     },
-    "%lld overdue · %lld due today": {
+    "Archive": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld overdue · %lld due today"
+            "value": "Archive"
           }
         }
       }
     },
-    "%lld overdue items": {
+    "Unarchive": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld overdue items"
+            "value": "Unarchive"
           }
         }
       }
     },
-    "%lld due today": {
+    "Delete": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld due today"
+            "value": "Delete"
           }
         }
       }
     },
-    "SITE INSPECTION REPORT": {
+    "Share": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "SITE INSPECTION REPORT"
+            "value": "Share"
           }
         }
       }
     },
-    "Project": {
+    "DESCRIPTION": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Project"
+            "value": "DESCRIPTION"
           }
         }
       }
     },
-    "Project No.": {
+    "PHOTOS  (%lld)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Project No."
+            "value": "PHOTOS  (%lld)"
           }
         }
       }
     },
-    "Site": {
+    "continued": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Site"
+            "value": "continued"
           }
         }
       }
     },
-    "Client": {
+    "(only audio / photos)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Client"
-          }
-        }
-      }
-    },
-    "Inspection": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Inspection"
-          }
-        }
-      }
-    },
-    "Conducted by": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Conducted by"
-          }
-        }
-      }
-    },
-    "Site Rep": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Site Rep"
-          }
-        }
-      }
-    },
-    "DAILY SITE DIARY": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "DAILY SITE DIARY"
-          }
-        }
-      }
-    },
-    "Prepared by": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Prepared by"
-          }
-        }
-      }
-    },
-    "Date": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Date"
-          }
-        }
-      }
-    },
-    "Entries": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Entries"
-          }
-        }
-      }
-    },
-    "%lld notes · %lld photos": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld notes · %lld photos"
-          }
-        }
-      }
-    },
-    "Hazard": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hazard"
-          }
-        }
-      }
-    },
-    "RECENT REPORTS": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RECENT REPORTS"
-          }
-        }
-      }
-    },
-    "No reports yet. Tap above to create your first.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No reports yet. Tap above to create your first."
-          }
-        }
-      }
-    },
-    "Site Rep name": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Site Rep name"
-          }
-        }
-      }
-    },
-    "Site Rep title (optional)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Site Rep title (optional)"
-          }
-        }
-      }
-    },
-    "Site Rep company (optional)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Site Rep company (optional)"
+            "value": "(only audio / photos)"
           }
         }
       }
