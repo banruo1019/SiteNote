@@ -214,10 +214,15 @@ enum PDFExportService {
         }
     }
 
-    // MARK: - Compact per-note rendering
+    // MARK: - Per-note one-page rendering (v1.6 en-v1 final)
     //
-    // v1.6 (en-v1) 新:多条 note 堆同一页,自动换页。每条只剩 时间 · 标签 · 转写 · 照片 + 平面图缩略图。
-    // 砍掉位置 / 天气 / 工地 / 分派 / 合同 / 到期 / 状态 7 个字段(都已在 cover 集中表达或不再展示)。
+    // 用户明确要求:**一条 note 一页**,固定 4 段模板顺序:
+    //   ① TITLE        — 时间 · [🚨 Hazard] · tag
+    //   ② FLOOR PLAN   — 平面图 + pin(宽度同照片栅格 ≈ 460pt,aspect-fit 居中)
+    //   ③ DESCRIPTION  — 转写正文
+    //   ④ PHOTOS       — 2×2 grid 最多 4 张 / 页,>4 自动续页(标 "PHOTOS (continued)")
+    // 缺数据的段直接跳过(连分隔线一起省)。
+    // Page footer "[Company] · Page N":每页都画。
 
     private static let topMargin: CGFloat = 50
     private static let bottomMargin: CGFloat = 60   // 留给 footer
@@ -229,80 +234,54 @@ enum PDFExportService {
         in pageRect: CGRect
     ) {
         guard !notes.isEmpty else { return }
-        let contentWidth = pageRect.width - sideMargin * 2
-        var pageIndex = 1     // page 1 已是 cover;per-note 从 page 2 起
-        var cursorY: CGFloat = topMargin
-        var pageOpen = false
-
-        func beginNotePage() {
+        var pageIndex = 1  // page 1 已是 cover;per-note 从 page 2 起
+        for note in notes {
+            // 主页(TITLE + FLOOR PLAN + DESCRIPTION + 最多 4 张 PHOTOS)
             context.beginPage()
             pageIndex += 1
-            cursorY = topMargin
-            pageOpen = true
-        }
-
-        for note in notes {
-            // 先算这条 note 大概要多少高(估算,允许超 30pt 容差)
-            let estHeight = estimateCompactNoteHeight(note: note, contentWidth: contentWidth)
-
-            if !pageOpen {
-                beginNotePage()
-            } else if cursorY + estHeight > pageRect.height - bottomMargin {
-                // 不够 → 在当前页画 footer,翻页
-                drawPageFooter(in: pageRect, pageIndex: pageIndex)
-                beginNotePage()
-            }
-
-            cursorY = drawCompactNote(
+            drawNoteFullPage(
+                context: context,
                 note: note,
                 pageRect: pageRect,
-                startY: cursorY,
-                contentWidth: contentWidth
+                photoOffset: 0,
+                isContinuation: false
             )
-            cursorY += 12  // 条间距
-        }
-
-        if pageOpen {
             drawPageFooter(in: pageRect, pageIndex: pageIndex)
+
+            // 续页(若照片 > 4 张):每页再画 4 张
+            var photoCursor = 4
+            while photoCursor < note.photoPaths.count {
+                context.beginPage()
+                pageIndex += 1
+                drawNoteFullPage(
+                    context: context,
+                    note: note,
+                    pageRect: pageRect,
+                    photoOffset: photoCursor,
+                    isContinuation: true
+                )
+                drawPageFooter(in: pageRect, pageIndex: pageIndex)
+                photoCursor += 4
+            }
         }
     }
 
-    /// 估计一条 compact note 占多少垂直空间。粗略 — 不精确也无碍,够触发翻页判断即可。
-    private static func estimateCompactNoteHeight(note: Note, contentWidth: CGFloat) -> CGFloat {
-        var h: CGFloat = 0
-        h += 20  // 标题行
-        // 转写行高(粗估每 80 字符 1 行,12pt 行高)
-        let chars = note.transcription.count
-        let lines = max(1, min(4, (chars + 79) / 80))  // 1-4 行
-        h += CGFloat(lines) * 16
-        // 附件行(照片 / 平面图)
-        let hasMedia = !note.photoPaths.isEmpty
-            || ((note.floorPlanRef ?? "").isEmpty == false && note.floorPlanX != nil)
-        if hasMedia { h += 90 }
-        h += 12  // 分隔线 + spacing
-        return h
-    }
-
-    /// 画一条 compact note,返回新的 cursorY。
-    private static func drawCompactNote(
+    /// 画一条 note 的整页内容。`isContinuation=true` 时只画 PHOTOS(continued)+ 大写小标题,不重画 TITLE / FLOOR PLAN / DESCRIPTION,避免"一页两个不同标题"。
+    private static func drawNoteFullPage(
+        context: UIGraphicsPDFRendererContext,
         note: Note,
         pageRect: CGRect,
-        startY: CGFloat,
-        contentWidth: CGFloat
-    ) -> CGFloat {
-        var y = startY
+        photoOffset: Int,
+        isContinuation: Bool
+    ) {
+        let contentWidth = pageRect.width - sideMargin * 2
+        var y: CGFloat = topMargin
 
-        // === 标题行 ===
-        // 时间 (10:30) · [🚨 Hazard or • Note] · tag
+        // === TITLE 行 ===
         let hourMin = DateFormatter()
         hourMin.dateFormat = "HH:mm"
         let timeStr = hourMin.string(from: note.createdAt)
-
         let titleColor = note.isHazard ? UIColor.systemRed : UIColor.black
-        let titleAttrs: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 12, weight: .semibold),
-            .foregroundColor: titleColor
-        ]
 
         var titleParts: [String] = [timeStr]
         if note.isHazard {
@@ -311,46 +290,27 @@ enum PDFExportService {
         if let tag = note.otherTags.first, !tag.isEmpty {
             titleParts.append(tag)
         }
-        let title = titleParts.joined(separator: " · ")
+        var title = titleParts.joined(separator: " · ")
+        if isContinuation {
+            title += "  — " + String(localized: "continued", locale: AppLanguageManager.currentLocale)
+        }
         (title as NSString).draw(
             at: CGPoint(x: sideMargin, y: y),
-            withAttributes: titleAttrs
+            withAttributes: [
+                .font: UIFont.systemFont(ofSize: 16, weight: .semibold),
+                .foregroundColor: titleColor
+            ]
         )
-        y += 18
+        y += 24
+        drawLine(from: CGPoint(x: sideMargin, y: y), to: CGPoint(x: sideMargin + contentWidth, y: y))
+        y += 14
 
-        // === 转写文本 ===
-        let body = note.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !body.isEmpty {
-            let bodyHeight = drawWrappedText(
-                body,
-                in: CGRect(x: sideMargin, y: y, width: contentWidth, height: 80),
-                fontSize: 11.5
-            )
-            y += bodyHeight + 4
-        }
+        if !isContinuation {
+            // === FLOOR PLAN 段(如有 pin)===
+            let hasFloorPin = (note.floorPlanRef ?? "").isEmpty == false
+                && note.floorPlanX != nil
+                && note.floorPlanY != nil
 
-        // === 附件行:照片(64pt)+ 平面图缩略图(80pt with pin)===
-        let hasFloorPin = (note.floorPlanRef ?? "").isEmpty == false
-            && note.floorPlanX != nil
-            && note.floorPlanY != nil
-        let photoCount = min(note.photoPaths.count, 3)  // 最多 3 张 thumb
-
-        if photoCount > 0 || hasFloorPin {
-            let photoSize: CGFloat = 64
-            let planSize: CGFloat = 80
-            let gap: CGFloat = 8
-            var x: CGFloat = sideMargin
-
-            // 照片 thumbs
-            for path in note.photoPaths.prefix(3) {
-                if let url = PhotoStorage.absoluteURL(forRelative: path),
-                   let img = UIImage(contentsOfFile: url.path) {
-                    drawFittedImage(img, in: CGRect(x: x, y: y, width: photoSize, height: photoSize))
-                }
-                x += photoSize + gap
-            }
-
-            // 平面图缩略图(若有 pin)
             if hasFloorPin,
                let planName = note.floorPlanRef,
                let xN = note.floorPlanX,
@@ -358,7 +318,10 @@ enum PDFExportService {
                let plan = FloorPlansStorage.find(name: planName),
                let planURL = FloorPlansStorage.absoluteURL(forRelative: plan.imageRelativePath),
                let planImg = UIImage(contentsOfFile: planURL.path) {
-                let planRect = CGRect(x: x, y: y, width: planSize, height: planSize)
+                // 宽 = contentWidth(同照片栅格)。高 ≈ contentWidth 的 75%(避免太瘦)。
+                let planRectWidth = contentWidth
+                let planRectHeight: CGFloat = min(planRectWidth * 0.75, 360)
+                let planRect = CGRect(x: sideMargin, y: y, width: planRectWidth, height: planRectHeight)
                 drawFloorPlanWithPin(
                     planImg,
                     normalizedX: xN,
@@ -366,27 +329,85 @@ enum PDFExportService {
                     in: planRect,
                     pinColor: pinUIColor(for: note)
                 )
-                // 平面图名(小灰字)
+                y += planRectHeight + 4
+                // 平面图名(下方居中小字)
                 let nameAttrs: [NSAttributedString.Key: Any] = [
-                    .font: UIFont.systemFont(ofSize: 8.5),
+                    .font: UIFont.systemFont(ofSize: 10),
                     .foregroundColor: UIColor.darkGray
                 ]
-                (planName as NSString).draw(
-                    at: CGPoint(x: x, y: y + planSize + 1),
+                let nameNS = planName as NSString
+                let nameSize = nameNS.size(withAttributes: nameAttrs)
+                nameNS.draw(
+                    at: CGPoint(x: sideMargin + (contentWidth - nameSize.width) / 2, y: y),
                     withAttributes: nameAttrs
                 )
+                y += nameSize.height + 14
+                drawLine(from: CGPoint(x: sideMargin, y: y), to: CGPoint(x: sideMargin + contentWidth, y: y))
+                y += 14
             }
 
-            y += max(photoCount > 0 ? photoSize : 0, hasFloorPin ? planSize + 12 : 0)
-            y += 6
+            // === DESCRIPTION 段 ===
+            (String(localized: "DESCRIPTION", locale: AppLanguageManager.currentLocale) as NSString).draw(
+                at: CGPoint(x: sideMargin, y: y),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+                    .foregroundColor: UIColor.darkGray
+                ]
+            )
+            y += 16
+            let body = note.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+            let descText: String
+            if body.isEmpty {
+                descText = String(localized: "(only audio / photos)", locale: AppLanguageManager.currentLocale)
+            } else {
+                descText = body
+            }
+            let bodyHeight = drawWrappedText(
+                descText,
+                in: CGRect(x: sideMargin, y: y, width: contentWidth, height: 180),
+                fontSize: 13
+            )
+            y += bodyHeight + 14
+            drawLine(from: CGPoint(x: sideMargin, y: y), to: CGPoint(x: sideMargin + contentWidth, y: y))
+            y += 14
         }
 
-        // === 分隔线 ===
-        drawLine(
-            from: CGPoint(x: sideMargin, y: y + 4),
-            to: CGPoint(x: sideMargin + contentWidth, y: y + 4)
-        )
-        return y + 8
+        // === PHOTOS 段(主页前 4 张 / 续页接着下 4 张)===
+        let photoSlice = Array(note.photoPaths.dropFirst(photoOffset).prefix(4))
+        if !photoSlice.isEmpty {
+            let totalPhotos = note.photoPaths.count
+            let headingLabel: String
+            if isContinuation {
+                headingLabel = "PHOTOS (" +
+                    String(localized: "continued", locale: AppLanguageManager.currentLocale) +
+                    ")  \(photoOffset + 1)-\(min(photoOffset + 4, totalPhotos)) / \(totalPhotos)"
+            } else if totalPhotos > 0 {
+                headingLabel = String(localized: "PHOTOS  (\(totalPhotos))", locale: AppLanguageManager.currentLocale)
+            } else {
+                headingLabel = "PHOTOS"
+            }
+            (headingLabel as NSString).draw(
+                at: CGPoint(x: sideMargin, y: y),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+                    .foregroundColor: UIColor.darkGray
+                ]
+            )
+            y += 16
+
+            let photoSize: CGFloat = 220
+            let gap: CGFloat = 10
+            for (i, path) in photoSlice.enumerated() {
+                let col = i % 2
+                let row = i / 2
+                let pX = sideMargin + CGFloat(col) * (photoSize + gap)
+                let pY = y + CGFloat(row) * (photoSize + gap)
+                if let url = PhotoStorage.absoluteURL(forRelative: path),
+                   let img = UIImage(contentsOfFile: url.path) {
+                    drawFittedImage(img, in: CGRect(x: pX, y: pY, width: photoSize, height: photoSize))
+                }
+            }
+        }
     }
 
     /// Page footer: "[Company] · Page N"
