@@ -53,6 +53,13 @@ struct InspectionReportDetailView: View {
     @State private var pdfURL: URL?
     /// 正在生成 PDF 中,按钮 disabled。
     @State private var isBuildingPDF: Bool = false
+    /// v1.6 (en-v1):区分 Build 是为 Preview 还是 Email — 防止两个 actionRow 互相闪 spinner。
+    /// `.preview` = 点了 "重新预览 PDF";`.email` = 点了 "再发一次邮件";`.none` = 没在 build。
+    @State private var buildPurpose: PDFBuildPurpose = .none
+
+    enum PDFBuildPurpose {
+        case none, preview, email
+    }
     /// QuickLook 预览开关。
     @State private var showsPreview: Bool = false
     /// MFMail 撰写开关。
@@ -119,6 +126,7 @@ struct InspectionReportDetailView: View {
                     attachments: [attachment]
                 ) { result, _ in
                     showsMailComposer = false
+                    pendingAttachment = nil  // v1.6 (en-v1):清理防止下次 build 时旧 attachment 触发误 spinner
                     handleMailResult(result)
                 }
             }
@@ -516,7 +524,8 @@ struct InspectionReportDetailView: View {
                 actionRow(
                     icon: "doc.text.magnifyingglass",
                     title: String(localized: "重新预览 PDF", locale: locale),
-                    isProcessing: isBuildingPDF && !showsMailComposer,
+                    // v1.6 (en-v1):只在为 preview build 时转圈
+                    isProcessing: buildPurpose == .preview,
                     disabled: isBuildingPDF
                 ) {
                     handlePreviewPDF()
@@ -527,7 +536,8 @@ struct InspectionReportDetailView: View {
                     title: report.status == .draft
                         ? String(localized: "发送邮件", locale: locale)
                         : String(localized: "再发一次邮件", locale: locale),
-                    isProcessing: isBuildingPDF && showsMailComposer == false && pendingAttachment != nil,
+                    // v1.6 (en-v1):只在为 email build 时转圈
+                    isProcessing: buildPurpose == .email,
                     disabled: isBuildingPDF
                 ) {
                     handleResendEmail()
@@ -749,6 +759,7 @@ struct InspectionReportDetailView: View {
         }
         errorMessage = nil
         isBuildingPDF = true
+        buildPurpose = .preview
         Task {
             await buildPDF()
             if pdfURL != nil {
@@ -769,6 +780,7 @@ struct InspectionReportDetailView: View {
         }
         errorMessage = nil
         isBuildingPDF = true
+        buildPurpose = .email
         Task {
             await buildPDF()
             if let url = pdfURL {
@@ -781,7 +793,10 @@ struct InspectionReportDetailView: View {
     /// 失败设 errorMessage,成功写 pdfURL,主线程更新。
     @MainActor
     private func buildPDF() async {
-        defer { isBuildingPDF = false }
+        defer {
+            isBuildingPDF = false
+            buildPurpose = .none
+        }
         let notesForBuild = fetchNotesForBuild()
         do {
             let url = try await InspectionReportPDFBuilder.build(
