@@ -84,10 +84,11 @@ enum InspectionReportPDFBuilder {
                 var cursor = PDFCursor(pageRect: pageRect, margin: margin, context: ctx)
                 cursor.beginPage()
 
-                // v1.6 (en-v1):合并 cover 为单页:大标题 + 公司副标 + 7 行 KV 表。
-                // 移除原 DISCLAIMERS / Sign-off(用户简化要求)。
+                // v1.6 (en-v1):合并 cover 为单页:大标题 + 公司副标 + 7 行 KV 表 + (可选) DISCLAIMERS。
+                // 用户要求:disclaimer 由用户自己加,没加就不显示这段。
                 drawCoverHeader(cursor: &cursor, report: report)
                 drawCoverInfoTable(cursor: &cursor, report: report)
+                drawDisclaimersIfAny(cursor: &cursor, report: report)
                 drawPageFooter(context: ctx, pageRect: pageRect, margin: margin, pageNumber: 1)
 
                 // ---- 第 2 页起:每条 Note 独占连续页面 ----
@@ -394,6 +395,30 @@ enum InspectionReportPDFBuilder {
     }
 
     // MARK: - Cover: Disclaimers
+
+    /// v1.6 (en-v1):wrapper — 仅在用户有 disclaimer 时绘制。
+    /// `report.disclaimerText` 非空 → 用 report-level 自定义;否则用 DisclaimerStorage.current()。
+    /// 两边都空 → 跳过整个 DISCLAIMERS 段(不画 heading 也不留间距)。
+    @MainActor
+    private static func drawDisclaimersIfAny(cursor: inout PDFCursor, report: InspectionReport) {
+        let items = disclaimerItems(for: report)
+        guard !items.isEmpty else { return }
+        cursor.skip(8)
+        cursor.drawDivider()
+        cursor.skip(10)
+        drawDisclaimers(cursor: &cursor, report: report)
+    }
+
+    private static func disclaimerItems(for report: InspectionReport) -> [String] {
+        if let custom = report.disclaimerText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !custom.isEmpty {
+            return custom
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        return DisclaimerStorage.current()
+    }
 
     @MainActor
     private static func drawDisclaimers(cursor: inout PDFCursor, report: InspectionReport) {
@@ -944,16 +969,9 @@ enum InspectionReportPDFBuilder {
 
     // MARK: - 静态文案
 
-    /// 默认 5 条 disclaimers(英文原文,沿用 QDE 模板)。
-    /// 注:DisclaimerStorage 也有一份;这里保留一个独立 fallback,
-    /// 避免 Storage 异常时封面变空。
-    private static let defaultDisclaimers: [String] = [
-        "This inspection does not include the foundation material and ground stability including: excavations, cuttings, batters and stabilizing elements such as soil nails, rock bolts and ground anchors etc. It is the builder's responsibility to have the Geotechnical engineer inspect and approve prior to placing concrete.",
-        "This inspection does not include the formwork, formwork support and back-propping. It has not been inspected and should be separately certified by an experienced formwork engineer.",
-        "This inspection does not include epoxy grouted bars, chemical or expansion anchors. The correct installation of these items is the responsibility of the builder.",
-        "Reinforcement inspections are subject to final clean out of formwork or excavation and maintaining specified cover during placement of concrete.",
-        "The builder must rectify the defects listed in this report as a contractual, Work Health and Safety, building certification requirement."
-    ]
+    /// v1.6 (en-v1):不再 ship 任何默认 disclaimer(避免泄露公司模板措辞)。
+    /// 用户在 Settings → 默认免责声明 自己加;`drawDisclaimersIfAny` 没数据就跳过整段。
+    private static let defaultDisclaimers: [String] = []
 
     // MARK: - Utilities
 
