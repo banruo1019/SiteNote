@@ -235,13 +235,15 @@ enum PDFExportService {
     ) {
         guard !notes.isEmpty else { return }
         var pageIndex = 1  // page 1 已是 cover;per-note 从 page 2 起
-        for note in notes {
+        for (idx, note) in notes.enumerated() {
+            let noteIndex = idx + 1  // 1-based 序号
             // 主页(TITLE + FLOOR PLAN + DESCRIPTION + 最多 4 张 PHOTOS)
             context.beginPage()
             pageIndex += 1
             drawNoteFullPage(
                 context: context,
                 note: note,
+                noteIndex: noteIndex,
                 pageRect: pageRect,
                 photoOffset: 0,
                 isContinuation: false
@@ -256,6 +258,7 @@ enum PDFExportService {
                 drawNoteFullPage(
                     context: context,
                     note: note,
+                    noteIndex: noteIndex,
                     pageRect: pageRect,
                     photoOffset: photoCursor,
                     isContinuation: true
@@ -266,10 +269,15 @@ enum PDFExportService {
         }
     }
 
-    /// 画一条 note 的整页内容。`isContinuation=true` 时只画 PHOTOS(continued)+ 大写小标题,不重画 TITLE / FLOOR PLAN / DESCRIPTION,避免"一页两个不同标题"。
+    /// 画一条 note 的整页内容。
+    /// v1.6 (en-v1):
+    ///   • TITLE 用 `noteIndex`(1, 2, 3...)代替时间戳
+    ///   • Floor plan 230×163(A3 √2 横向,半宽)左对齐
+    ///   • Photos 1/2/3-4 自适应满高(原图 aspect-fit,不强行 220×220)
     private static func drawNoteFullPage(
         context: UIGraphicsPDFRendererContext,
         note: Note,
+        noteIndex: Int,
         pageRect: CGRect,
         photoOffset: Int,
         isContinuation: Bool
@@ -278,12 +286,9 @@ enum PDFExportService {
         var y: CGFloat = topMargin
 
         // === TITLE 行 ===
-        let hourMin = DateFormatter()
-        hourMin.dateFormat = "HH:mm"
-        let timeStr = hourMin.string(from: note.createdAt)
+        // 格式: "1 · 🚨 Hazard · 安全" (黑色 16pt;隐患时变红)
         let titleColor = note.isHazard ? UIColor.systemRed : UIColor.black
-
-        var titleParts: [String] = [timeStr]
+        var titleParts: [String] = ["\(noteIndex)"]
         if note.isHazard {
             titleParts.append("🚨 " + String(localized: "Hazard", locale: AppLanguageManager.currentLocale))
         }
@@ -306,7 +311,7 @@ enum PDFExportService {
         y += 14
 
         if !isContinuation {
-            // === FLOOR PLAN 段(如有 pin)===
+            // === FLOOR PLAN 段(如有 pin)— 230×163 左对齐 A3 横向比例 ===
             let hasFloorPin = (note.floorPlanRef ?? "").isEmpty == false
                 && note.floorPlanX != nil
                 && note.floorPlanY != nil
@@ -318,10 +323,9 @@ enum PDFExportService {
                let plan = FloorPlansStorage.find(name: planName),
                let planURL = FloorPlansStorage.absoluteURL(forRelative: plan.imageRelativePath),
                let planImg = UIImage(contentsOfFile: planURL.path) {
-                // 宽 = contentWidth(同照片栅格)。高 ≈ contentWidth 的 75%(避免太瘦)。
-                let planRectWidth = contentWidth
-                let planRectHeight: CGFloat = min(planRectWidth * 0.75, 360)
-                let planRect = CGRect(x: sideMargin, y: y, width: planRectWidth, height: planRectHeight)
+                let planW: CGFloat = 230
+                let planH: CGFloat = planW * (297.0 / 420.0)  // A3 √2 横向 ≈ 163
+                let planRect = CGRect(x: sideMargin, y: y, width: planW, height: planH)
                 drawFloorPlanWithPin(
                     planImg,
                     normalizedX: xN,
@@ -329,19 +333,17 @@ enum PDFExportService {
                     in: planRect,
                     pinColor: pinUIColor(for: note)
                 )
-                y += planRectHeight + 4
-                // 平面图名(下方居中小字)
+                y += planH + 4
+                // 平面图名(左对齐 plan 下方,小灰字)
                 let nameAttrs: [NSAttributedString.Key: Any] = [
                     .font: UIFont.systemFont(ofSize: 10),
                     .foregroundColor: UIColor.darkGray
                 ]
-                let nameNS = planName as NSString
-                let nameSize = nameNS.size(withAttributes: nameAttrs)
-                nameNS.draw(
-                    at: CGPoint(x: sideMargin + (contentWidth - nameSize.width) / 2, y: y),
+                (planName as NSString).draw(
+                    at: CGPoint(x: sideMargin, y: y),
                     withAttributes: nameAttrs
                 )
-                y += nameSize.height + 14
+                y += 14 + 10
                 drawLine(from: CGPoint(x: sideMargin, y: y), to: CGPoint(x: sideMargin + contentWidth, y: y))
                 y += 14
             }
@@ -372,7 +374,7 @@ enum PDFExportService {
             y += 14
         }
 
-        // === PHOTOS 段(主页前 4 张 / 续页接着下 4 张)===
+        // === PHOTOS 段 — 1/2/3-4 自适应满高(原图 aspect-fit)===
         let photoSlice = Array(note.photoPaths.dropFirst(photoOffset).prefix(4))
         if !photoSlice.isEmpty {
             let totalPhotos = note.photoPaths.count
@@ -393,18 +395,54 @@ enum PDFExportService {
                     .foregroundColor: UIColor.darkGray
                 ]
             )
-            y += 16
+            y += 18
 
-            let photoSize: CGFloat = 220
-            let gap: CGFloat = 10
-            for (i, path) in photoSlice.enumerated() {
-                let col = i % 2
-                let row = i / 2
-                let pX = sideMargin + CGFloat(col) * (photoSize + gap)
-                let pY = y + CGFloat(row) * (photoSize + gap)
+            // 剩余可用高度 = 页底(留 footer)- 当前 y
+            let availableH = pageRect.height - bottomMargin - y
+            drawPhotosDynamicLayout(
+                photos: photoSlice,
+                in: CGRect(x: sideMargin, y: y, width: contentWidth, height: availableH)
+            )
+        }
+    }
+
+    /// 1/2/3-4 自适应布局:1 张满 hero,2 张 1×2 平分,3-4 张 2×2 grid。
+    /// 每张 aspect-fit,保留原图比例(不裁切)。
+    private static func drawPhotosDynamicLayout(photos: [String], in rect: CGRect) {
+        guard !photos.isEmpty else { return }
+        let availableW = rect.width
+        let availableH = rect.height
+        let gap: CGFloat = 8
+
+        switch photos.count {
+        case 1:
+            // 满 hero
+            if let url = PhotoStorage.absoluteURL(forRelative: photos[0]),
+               let img = UIImage(contentsOfFile: url.path) {
+                drawFittedImage(img, in: CGRect(x: rect.minX, y: rect.minY, width: availableW, height: availableH))
+            }
+        case 2:
+            // 1×2 横排,各占半宽
+            let cellW = (availableW - gap) / 2
+            for (i, path) in photos.enumerated() {
                 if let url = PhotoStorage.absoluteURL(forRelative: path),
                    let img = UIImage(contentsOfFile: url.path) {
-                    drawFittedImage(img, in: CGRect(x: pX, y: pY, width: photoSize, height: photoSize))
+                    let x = rect.minX + CGFloat(i) * (cellW + gap)
+                    drawFittedImage(img, in: CGRect(x: x, y: rect.minY, width: cellW, height: availableH))
+                }
+            }
+        default:
+            // 3-4 张:2×2 grid
+            let cellW = (availableW - gap) / 2
+            let cellH = (availableH - gap) / 2
+            for (i, path) in photos.prefix(4).enumerated() {
+                let col = i % 2
+                let row = i / 2
+                let x = rect.minX + CGFloat(col) * (cellW + gap)
+                let y = rect.minY + CGFloat(row) * (cellH + gap)
+                if let url = PhotoStorage.absoluteURL(forRelative: path),
+                   let img = UIImage(contentsOfFile: url.path) {
+                    drawFittedImage(img, in: CGRect(x: x, y: y, width: cellW, height: cellH))
                 }
             }
         }
