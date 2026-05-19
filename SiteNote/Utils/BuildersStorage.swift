@@ -20,7 +20,7 @@ import Foundation
 /// 一个建造商公司(Builder)。
 struct Builder: Codable, Identifiable, Hashable {
     let id: UUID
-    /// 公司名,如 "HRK Construction"。
+    /// 公司名,如 "Acme Construction"。
     var name: String
     var notes: String
 

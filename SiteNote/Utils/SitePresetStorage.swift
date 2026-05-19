@@ -17,7 +17,7 @@
 //
 //  关联机制:siteTag 是字符串 key(同 SiteTagsStorage),一个 siteTag 对应一条 SitePreset。
 //  实际工作流:
-//    1. 工程师在 Settings → 工地预设 添加一条:siteTag = "Olympic Park",projectNo = "25159",client = "HRK",...
+//    1. 工程师在 Settings → 工地预设 添加一条:siteTag = "Olympic Park",projectNo = "25159",client = "Acme",...
 //    2. 录音时 GPS 反向地理编码 → 自动匹配 siteTag
 //    3. 导出报告时,InspectionFormView 拿 Note.siteTag → SitePresetStorage.find → 自动填 Header
 //

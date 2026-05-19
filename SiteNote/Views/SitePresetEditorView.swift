@@ -1128,7 +1128,7 @@ private struct AddCompanyMiniSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(String(localized: "公司名(如 HRK Construction)", locale: locale), text: $name)
+                    TextField(String(localized: "公司名(如 Acme Construction)", locale: locale), text: $name)
                         .textInputAutocapitalization(.words)
                         .autocorrectionDisabled()
                         .focused($focused)

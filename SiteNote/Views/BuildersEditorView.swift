@@ -229,7 +229,7 @@ private struct BuilderEditSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(String(localized: "公司名(必填,如 HRK Construction)", locale: locale),
+                    TextField(String(localized: "公司名(必填,如 Acme Construction)", locale: locale),
                               text: $name)
                         .textInputAutocapitalization(.words)
                 } header: {

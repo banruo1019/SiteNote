@@ -15,7 +15,7 @@ import Foundation
 enum DisclaimerStorage {
     private static let key = "settings.inspectionDisclaimers.v1"
 
-    /// QDE Engineering 报告里那 5 条标准 disclaimer。
+    /// 公司巡检报告里那 5 条标准 disclaimer。
     static let defaults: [String] = [
         "This inspection does not include the foundation material and ground stability including: excavations, cuttings, batters and stabilizing elements such as soil nails, rock bolts and ground anchors etc. It is the builder's responsibility to have the Geotechnical engineer inspect and approve prior to placing concrete.",
         "This inspection does not include the formwork, formwork support and back-propping. It has not been inspected and should be separately certified by an experienced formwork engineer.",

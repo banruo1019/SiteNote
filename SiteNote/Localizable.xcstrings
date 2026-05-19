@@ -4807,22 +4807,22 @@
         }
       }
     },
-    "公司名(如 HRK Construction)": {
+    "公司名(如 Acme Construction)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Company name (e.g. HRK Construction)"
+            "value": "Company name (e.g. Acme Construction)"
           }
         }
       }
     },
-    "公司名(必填,如 HRK Construction)": {
+    "公司名(必填,如 Acme Construction)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Company name (required, e.g. HRK Construction)"
+            "value": "Company name (required, e.g. Acme Construction)"
           }
         }
       }
@@ -7075,13 +7075,13 @@
         }
       }
     },
-    "客户(如 HRK)": {
+    "客户(如 Acme)": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Client (e.g. HRK)"
+            "value": "Client (e.g. Acme)"
           }
         }
       }
@@ -10176,12 +10176,12 @@
         }
       }
     },
-    "新公司名(如 HRK Construction)": {
+    "新公司名(如 Acme Construction)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "New company name (e.g. HRK Construction)"
+            "value": "New company name (e.g. Acme Construction)"
           }
         }
       }

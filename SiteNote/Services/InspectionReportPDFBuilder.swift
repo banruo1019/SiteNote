@@ -14,7 +14,7 @@
 //    - 图钉缩略图:Note.floorPlanRef + floorPlanX/Y 三个字段都非空,在 caption
 //      右侧渲染 48pt 圆形 mini floor plan + 红点。
 //
-//  参考 QDE Engineering 的 11 页 Site Visit Report 格式:
+//  参考通用 Site Visit Report 格式:
 //    - 第 1 页(封面):公司 Logo + 标题 + Header 表 + 5 条 disclaimers + 签字栏
 //      (注:主照片部分已在 v1.x 移除——封面纯文档化,所有照片走第 2+ 页网格)
 //    - 第 2 页起:详细照片 2x2 网格(每页 4 cell),caption 在下方,

@@ -188,7 +188,7 @@ struct AddContactSheet: View {
             // 新建公司输入框(没选已有 → 显示这个)
             if selectedBuilderID == nil {
                 TextField(
-                    String(localized: "新公司名(如 HRK Construction)", locale: locale),
+                    String(localized: "新公司名(如 Acme Construction)", locale: locale),
                     text: $newCompanyName
                 )
                 .focused($focusedField, equals: .newCompany)
