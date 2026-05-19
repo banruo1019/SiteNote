@@ -567,27 +567,72 @@ enum InspectionReportPDFBuilder {
         )
 
         if continuation {
+            // 续页只画 PHOTOS heading + grid
+            drawSectionHeading(
+                cursor: &cursor,
+                text: "PHOTOS (" +
+                    String(localized: "continued", locale: AppLanguageManager.currentLocale) +
+                    ")"
+            )
             drawPhotosForCount(cursor: &cursor, photos: photos)
             return
         }
 
-        // 1. 大 A3 图纸(顶部,满宽,固定 √2:1 比例)
-        drawFloorPlanFullWidth(cursor: &cursor, note: note)
-
-        // 2. 描述
-        let trimmed = caption.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            cursor.drawWrappedText(trimmed, font: .systemFont(ofSize: 11), lineHeight: 14)
+        // 1. Floor plan 缩到 230×163 左对齐(v1.6 en-v1)
+        let hasPin = (note.floorPlanRef ?? "").isEmpty == false
+            && note.floorPlanX != nil
+            && note.floorPlanY != nil
+        if hasPin {
+            drawFloorPlanFullWidth(cursor: &cursor, note: note)
+            cursor.drawDivider()
             cursor.skip(10)
         }
 
-        // 3. 照片占满剩余区域
+        // 2. DESCRIPTION 段 — 带 heading,跟 Site Diary 统一
+        drawSectionHeading(
+            cursor: &cursor,
+            text: String(localized: "DESCRIPTION", locale: AppLanguageManager.currentLocale)
+        )
+        let trimmed = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        let descText: String
+        if trimmed.isEmpty {
+            descText = String(localized: "(only audio / photos)", locale: AppLanguageManager.currentLocale)
+        } else {
+            descText = trimmed
+        }
+        cursor.drawWrappedText(descText, font: .systemFont(ofSize: 13), lineHeight: 16)
+        cursor.skip(10)
+        cursor.drawDivider()
+        cursor.skip(10)
+
+        // 3. PHOTOS 段 — 带 heading + 自适应 1/2/3-4 满高
         if !photos.isEmpty {
+            let totalPhotos = note.photoPaths.count
+            let headingLabel = String(
+                localized: "PHOTOS  (\(totalPhotos))",
+                locale: AppLanguageManager.currentLocale
+            )
+            drawSectionHeading(cursor: &cursor, text: headingLabel)
             drawPhotosForCount(cursor: &cursor, photos: photos)
         }
     }
 
-    /// 顶部满宽 A3 图纸。宽 = contentWidth,高 = 宽 / √2 ≈ 0.707×宽。
+    /// v1.6 (en-v1):小灰字 section heading(DESCRIPTION / PHOTOS),跟 Site Diary 同口径。
+    @MainActor
+    private static func drawSectionHeading(cursor: inout PDFCursor, text: String) {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: UIColor.darkGray
+        ]
+        (text as NSString).draw(
+            at: CGPoint(x: cursor.margin, y: cursor.y),
+            withAttributes: attrs
+        )
+        cursor.y += 16
+    }
+
+    /// v1.6 (en-v1):缩到 230×163(A3 √2 横向半宽)左对齐,跟 Site Diary 一致。
+    /// 下方左对齐 plan 名字。
     @MainActor
     private static func drawFloorPlanFullWidth(cursor: inout PDFCursor, note: Note) {
         let hasPin = (note.floorPlanRef ?? "").isEmpty == false
@@ -595,9 +640,8 @@ enum InspectionReportPDFBuilder {
             && note.floorPlanY != nil
         guard hasPin else { return }
 
-        let aspect: CGFloat = 420.0 / 297.0   // A3 横向
-        let planW = cursor.contentWidth
-        let planH = planW / aspect
+        let planW: CGFloat = 230
+        let planH: CGFloat = planW * (297.0 / 420.0)  // A3 横向 ≈ 163
 
         let planRect = CGRect(
             x: cursor.margin,
@@ -613,7 +657,21 @@ enum InspectionReportPDFBuilder {
             in: planRect,
             siteTag: note.siteTag
         )
-        cursor.y += planH + 12
+        cursor.y += planH + 4
+        // Plan 名字(左对齐小灰字)
+        let planName = note.floorPlanRef ?? ""
+        if !planName.isEmpty {
+            let nameAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 10),
+                .foregroundColor: UIColor.darkGray
+            ]
+            (planName as NSString).draw(
+                at: CGPoint(x: cursor.margin, y: cursor.y),
+                withAttributes: nameAttrs
+            )
+            cursor.y += 14
+        }
+        cursor.skip(8)
     }
 
     /// 照片区:根据张数自适应。1=hero、2=1x2、3-4=2x2;占满剩余高度。
@@ -652,7 +710,9 @@ enum InspectionReportPDFBuilder {
     }
 
     /// 页面顶部 header:左侧 #N 大字 + 右侧时间戳 + 下方分割线。
-    /// 续页:#N (cont.) 紧凑 16pt,无时间戳。
+    /// v1.6 (en-v1):跟 Site Diary 统一 — 黑色 16pt 纯数字 "1" / "2 — continued"。
+    /// 不再画右上时间戳 + 工地 tag(信息已在 cover 表里)。
+    /// 隐患时 title 变红色。
     @MainActor
     private static func drawNotePageHeader(
         cursor: inout PDFCursor,
@@ -660,44 +720,32 @@ enum InspectionReportPDFBuilder {
         note: Note,
         continuation: Bool
     ) {
-        let titleBlue = UIColor(red: 0x1A / 255.0, green: 0x4F / 255.0, blue: 0xA0 / 255.0, alpha: 1)
-        let indexStr = continuation
-            ? "#\(noteIndex) (cont.)"
-            : "#\(noteIndex)"
-        let indexFont = UIFont.monospacedDigitSystemFont(
-            ofSize: continuation ? 16 : 26,
-            weight: .bold
-        )
-        let indexAttrs: [NSAttributedString.Key: Any] = [
-            .font: indexFont,
-            .foregroundColor: titleBlue
-        ]
-        let indexSize = (indexStr as NSString).size(withAttributes: indexAttrs)
-        (indexStr as NSString).draw(
-            at: CGPoint(x: cursor.margin, y: cursor.y),
-            withAttributes: indexAttrs
-        )
+        let titleColor = note.isHazard ? UIColor.systemRed : UIColor.black
 
-        if !continuation {
-            // 右上:时间戳 + 工地 tag
-            let timeStr = headerRightText(for: note)
-            let timeAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 10),
-                .foregroundColor: UIColor.darkGray
-            ]
-            let timeSize = (timeStr as NSString).size(withAttributes: timeAttrs)
-            (timeStr as NSString).draw(
-                at: CGPoint(
-                    x: cursor.margin + cursor.contentWidth - timeSize.width,
-                    y: cursor.y + (indexSize.height - timeSize.height) - 2
-                ),
-                withAttributes: timeAttrs
-            )
+        var titleParts: [String] = ["\(noteIndex)"]
+        if note.isHazard {
+            titleParts.append("🚨 " + String(localized: "Hazard", locale: AppLanguageManager.currentLocale))
         }
-
-        cursor.y += indexSize.height + (continuation ? 4 : 6)
+        if let tag = note.otherTags.first, !tag.isEmpty {
+            titleParts.append(tag)
+        }
+        var title = titleParts.joined(separator: " · ")
+        if continuation {
+            title += "  — " + String(localized: "continued", locale: AppLanguageManager.currentLocale)
+        }
+        let titleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: titleFont,
+            .foregroundColor: titleColor
+        ]
+        let titleSize = (title as NSString).size(withAttributes: titleAttrs)
+        (title as NSString).draw(
+            at: CGPoint(x: cursor.margin, y: cursor.y),
+            withAttributes: titleAttrs
+        )
+        cursor.y += titleSize.height + 6
         cursor.drawDivider()
-        cursor.skip(8)
+        cursor.skip(10)
     }
 
     /// "10:42 · 工地 20"。
