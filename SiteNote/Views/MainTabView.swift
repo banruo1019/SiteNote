@@ -37,12 +37,23 @@ struct MainTabView: View {
             selection = request.tab
             router.clear()
         }
+        // v1.6 (en-v1):切 tab 时所有 tab 的 NavigationStack 弹回 root。
+        // 用户预期"离开 Log tab 进 Calendar 再回来 → Log 应该回到根,不是停留在 Settings"。
+        .onChange(of: selection) { old, new in
+            if old != new {
+                router.popAllToRoot()
+            }
+        }
     }
 
     private var mainContent: some View {
         VStack(spacing: 0) {
             ZStack {
+                // v1.6 (en-v1):每个 tab view 用 .id(router.popAllTrigger) 钉 —
+                // tab 切换时 trigger 自增 → SwiftUI 重建 view tree → NavigationStack
+                // + @State 全部回 root,实现"离开 tab 就重置"的预期。
                 RecordView()
+                    .id(router.popAllTrigger)
                     .opacity(selection == .record ? 1 : 0)
                     .allowsHitTesting(selection == .record)
 
@@ -54,6 +65,7 @@ struct MainTabView: View {
                         PMCalendarView()
                     }
                 }
+                .id(router.popAllTrigger)
                 .opacity(selection == .calendar ? 1 : 0)
                 .allowsHitTesting(selection == .calendar)
 
@@ -65,6 +77,7 @@ struct MainTabView: View {
                         ReportsView()
                     }
                 }
+                .id(router.popAllTrigger)
                 .opacity(selection == .reports ? 1 : 0)
                 .allowsHitTesting(selection == .reports)
             }
