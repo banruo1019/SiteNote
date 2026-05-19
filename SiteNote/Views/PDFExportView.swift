@@ -41,6 +41,7 @@ struct PDFExportView: View {
             subTagFilterSection
             countSection
             actionSection
+            generateAllSection
         }
         .navigationTitle("导出 PDF 日志")
         .navigationBarTitleDisplayMode(.inline)
@@ -200,6 +201,37 @@ struct PDFExportView: View {
         } footer: {
             Text("PDF 每条占一页,含转写、位置、天气、巡检模板、照片,以及(若标了位置)平面图 + 当前图钉示意。")
                 .font(.system(size: DesignTokens.FontSize.body))
+        }
+    }
+
+    /// v1.6 (en-v1):一键生成所有匹配 note 的 PDF — 跳过 picker。
+    /// 想挑选用上面的 row;一把全要的话点这个。
+    private var generateAllSection: some View {
+        Section {
+            Button {
+                generatePDF(with: filteredNotes)
+            } label: {
+                HStack(spacing: 10) {
+                    Spacer()
+                    Image(systemName: "doc.badge.plus")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text(String(localized: "生成 \(filteredNotes.count) 条的 PDF", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 15, weight: .semibold))
+                    Spacer()
+                }
+                .foregroundStyle(filteredNotes.isEmpty ? Color.secondary : Color.white)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(filteredNotes.isEmpty ? Color(.systemGray5) : Color.black)
+                )
+            }
+            .disabled(filteredNotes.isEmpty)
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 

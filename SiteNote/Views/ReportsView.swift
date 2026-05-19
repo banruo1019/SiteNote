@@ -210,16 +210,18 @@ struct ReportsView: View {
     }
 
     private var siteTeamReportsList: some View {
-        List {
-            // 1) mainCard — 用 List section 包,移除 list 自带样式
-            Section {
-                mainCard
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
+        // v1.6 (en-v1):mainCard 拿出 List(放 List 里 NavigationLink 会自动加右边 chevron,
+        // 用户不喜欢)。VStack 包住 mainCard + List,List 只承载 Recent / Archived 两段
+        // 和 footerHint。
+        VStack(spacing: 0) {
+            mainCard
+            reportsList
+        }
+    }
 
-            // 2) Recent 段
+    private var reportsList: some View {
+        List {
+            // 1) Recent 段
             Section {
                 if recentExpanded {
                     if recentReports.isEmpty {
