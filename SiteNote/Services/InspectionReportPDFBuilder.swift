@@ -84,10 +84,10 @@ enum InspectionReportPDFBuilder {
                 var cursor = PDFCursor(pageRect: pageRect, margin: margin, context: ctx)
                 cursor.beginPage()
 
+                // v1.6 (en-v1):合并 cover 为单页:大标题 + 公司副标 + 7 行 KV 表。
+                // 移除原 DISCLAIMERS / Sign-off(用户简化要求)。
                 drawCoverHeader(cursor: &cursor, report: report)
-                drawHeaderTable(cursor: &cursor, report: report)
-                drawDisclaimers(cursor: &cursor, report: report)
-                drawCoverSignature(cursor: &cursor, report: report)
+                drawCoverInfoTable(cursor: &cursor, report: report)
                 drawPageFooter(context: ctx, pageRect: pageRect, margin: margin, pageNumber: 1)
 
                 // ---- 第 2 页起:每条 Note 独占连续页面 ----
@@ -160,13 +160,17 @@ enum InspectionReportPDFBuilder {
         return outputURL
     }
 
-    // MARK: - Cover: Logo + 公司 + 标题
+    // MARK: - Cover: Logo + 标题 + 公司副标
+    //
+    // v1.6 (en-v1):重排顺序 — 先大标题"SITE INSPECTION REPORT",再公司名 + ABN 副标,
+    // 最后由 drawCoverInfoTable 画 7 行单列 KV 表(项目 / 项目号 / 工地地址 / 客户 / 巡检类型 /
+    // 巡检人 / 工地代表)。logo 仍在右上(若 BrandingStorage 提供)。
 
     @MainActor
     private static func drawCoverHeader(cursor: inout PDFCursor, report: InspectionReport) {
-        // Logo:右上,最大 60x60(UserDefaults 没设 → BrandingStorage 返回 nil,不画)
+        // Logo:右上,最大 50x50
         if let logo = BrandingStorage.loadLogo() {
-            let maxEdge: CGFloat = 60
+            let maxEdge: CGFloat = 50
             let scale = min(maxEdge / logo.size.width, maxEdge / logo.size.height, 1.0)
             let drawW = logo.size.width * scale
             let drawH = logo.size.height * scale
@@ -179,38 +183,138 @@ enum InspectionReportPDFBuilder {
             logo.draw(in: logoRect)
         }
 
-        // 公司名 + ABN(从 UserDefaults 读;两个都空就用 "SiteNote" 兜底当公司名)
+        // 日期 + 报告号(右上,logo 下方)
+        let topRightAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10),
+            .foregroundColor: UIColor.darkGray
+        ]
+        let dateStr = isoYMD(report.reportDate)
+        let dateText = dateStr as NSString
+        let dateSize = dateText.size(withAttributes: topRightAttrs)
+        dateText.draw(
+            at: CGPoint(
+                x: cursor.pageRect.width - cursor.margin - dateSize.width,
+                y: cursor.margin + 56
+            ),
+            withAttributes: topRightAttrs
+        )
+        let reportNo = report.reportNo.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !reportNo.isEmpty {
+            let reportText = reportNo as NSString
+            let reportSize = reportText.size(withAttributes: topRightAttrs)
+            reportText.draw(
+                at: CGPoint(
+                    x: cursor.pageRect.width - cursor.margin - reportSize.width,
+                    y: cursor.margin + 70
+                ),
+                withAttributes: topRightAttrs
+            )
+        }
+
+        // 大标题:居中,粗黑
+        cursor.skip(60)  // 让出顶部 logo / date 空间
+        let title = String(localized: "SITE INSPECTION REPORT", locale: AppLanguageManager.currentLocale) as NSString
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 22, weight: .bold),
+            .foregroundColor: UIColor.black
+        ]
+        let titleSize = title.size(withAttributes: titleAttrs)
+        title.draw(
+            at: CGPoint(
+                x: (cursor.pageRect.width - titleSize.width) / 2,
+                y: cursor.y
+            ),
+            withAttributes: titleAttrs
+        )
+        cursor.y += titleSize.height + 4
+
+        // 公司副标(居中)— 公司名 · ABN 一行
         let rawCompanyName = (UserDefaults.standard.string(forKey: "settings.engineerCompanyName") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let abn = (UserDefaults.standard.string(forKey: "settings.engineerABN") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let companyName = rawCompanyName.isEmpty ? "SiteNote" : rawCompanyName
-
-        cursor.drawText(
-            companyName,
-            font: .systemFont(ofSize: 13, weight: .semibold),
-            color: .black
-        )
+        let companyName = rawCompanyName.isEmpty ? "SiteNotes" : rawCompanyName
+        let subtitle: String
         if !abn.isEmpty {
-            cursor.drawText(
-                String(localized: "ABN: \(abn)", locale: AppLanguageManager.currentLocale),
-                font: .systemFont(ofSize: 10),
-                color: .darkGray
+            subtitle = "\(companyName) · ABN \(abn)"
+        } else {
+            subtitle = companyName
+        }
+        let subAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 11),
+            .foregroundColor: UIColor.darkGray
+        ]
+        let subNS = subtitle as NSString
+        let subSize = subNS.size(withAttributes: subAttrs)
+        subNS.draw(
+            at: CGPoint(
+                x: (cursor.pageRect.width - subSize.width) / 2,
+                y: cursor.y
+            ),
+            withAttributes: subAttrs
+        )
+        cursor.y += subSize.height + 16
+        cursor.drawDivider()
+        cursor.skip(14)
+    }
+
+    // MARK: - Cover: 7 行单列 KV 表
+    //
+    // v1.6 (en-v1):取代原 4x2 双列 header 表。简洁竖排,每行 22pt。
+    // 字段:Project / Project No. / Site / Client / Inspection / Conducted by / Site Rep
+
+    @MainActor
+    private static func drawCoverInfoTable(cursor: inout PDFCursor, report: InspectionReport) {
+        let labelColor = UIColor.darkGray
+        let labelFont = UIFont.systemFont(ofSize: 10.5, weight: .semibold)
+        let valueFont = UIFont.systemFont(ofSize: 11.5)
+        let labelAttrs: [NSAttributedString.Key: Any] = [
+            .font: labelFont, .foregroundColor: labelColor
+        ]
+        let valueAttrs: [NSAttributedString.Key: Any] = [
+            .font: valueFont, .foregroundColor: UIColor.black
+        ]
+
+        // Site Rep 来源:优先用新字段 siteRepName/Title/Company(在 task #277 加),
+        // 当前还在用 siteRepStatus 作为兜底(task #277 后会替换)。
+        let siteRepValue = report.siteRepStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let rows: [(String, String)] = [
+            (String(localized: "Project", locale: AppLanguageManager.currentLocale), report.project),
+            (String(localized: "Project No.", locale: AppLanguageManager.currentLocale), report.projectNo),
+            (String(localized: "Site", locale: AppLanguageManager.currentLocale), report.location),
+            (String(localized: "Client", locale: AppLanguageManager.currentLocale), report.client),
+            (String(localized: "Inspection", locale: AppLanguageManager.currentLocale), report.inspectionType),
+            (String(localized: "Conducted by", locale: AppLanguageManager.currentLocale), report.engineerName),
+            (String(localized: "Site Rep", locale: AppLanguageManager.currentLocale), siteRepValue)
+        ]
+
+        let rowHeight: CGFloat = 22
+        cursor.ensureRoom(CGFloat(rows.count) * rowHeight + 8)
+
+        let labelColWidth: CGFloat = 110
+        for (lbl, val) in rows {
+            let y = cursor.y
+            (lbl as NSString).draw(
+                at: CGPoint(x: cursor.margin, y: y),
+                withAttributes: labelAttrs
             )
+            let valX = cursor.margin + labelColWidth
+            let valRect = CGRect(
+                x: valX, y: y - 1,
+                width: cursor.contentWidth - labelColWidth,
+                height: rowHeight
+            )
+            (val as NSString).draw(in: valRect, withAttributes: valueAttrs)
+            cursor.y += rowHeight
         }
         cursor.skip(8)
-
-        // 大标题(蓝色)
-        let titleColor = UIColor(red: 0x1A / 255.0, green: 0x4F / 255.0, blue: 0xA0 / 255.0, alpha: 1)
-        cursor.drawText(
-            String(localized: "Site Visit Report / Site Instruction", locale: AppLanguageManager.currentLocale),
-            font: .systemFont(ofSize: 24, weight: .semibold),
-            color: titleColor
-        )
-        cursor.skip(12)
         cursor.drawDivider()
-        cursor.skip(10)
+        cursor.skip(8)
     }
+
+    /// Deprecated v1.6:原 4x2 双列 header 表 — 已被 `drawCoverInfoTable` 替代。
+    /// 保留代码但不再调用(如要回滚,把 drawCoverHeader / Disclaimers / Signature 再开启)。
 
     // MARK: - Cover: Header 表(两列)
 
