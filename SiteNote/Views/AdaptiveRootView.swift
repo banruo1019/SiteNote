@@ -21,7 +21,24 @@ struct AdaptiveRootView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        if horizontalSizeClass == .regular {
+        // v1.6 (en-v1):App Store 截图专用 stub 路由。launch arg `-StartScreen recording`
+        // 或 `floorplan` 或 `notedetail` 进入 ScreenshotStubs.swift 的相应 view。
+        if MockDataSeeder.isActive {
+            switch MockDataSeeder.startScreen {
+            case "recording":
+                ScreenshotRecordingStub()
+            case "floorplan":
+                ScreenshotFloorPlanStub(planImage: MockDataSeeder.makeMockFloorPlan())
+            case "notedetail":
+                ScreenshotNoteDetailStub(planImage: MockDataSeeder.makeMockFloorPlan())
+            default:
+                if horizontalSizeClass == .regular {
+                    IPadRootView()
+                } else {
+                    MainTabView()
+                }
+            }
+        } else if horizontalSizeClass == .regular {
             IPadRootView()
         } else {
             MainTabView()

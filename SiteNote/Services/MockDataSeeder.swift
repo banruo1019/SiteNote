@@ -31,6 +31,16 @@ enum MockDataSeeder {
             || ProcessInfo.processInfo.environment["SCREENSHOT_MODE"] == "1"
     }
 
+    /// 截图模式下要渲染哪个特殊屏幕 — `-StartScreen recording|floorplan|<default>`。
+    /// default = 走 MainTabView,根据 -StartTab 显示 Log/Calendar/Reports。
+    static var startScreen: String {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "-StartScreen"), i + 1 < args.count {
+            return args[i + 1]
+        }
+        return UserDefaults.standard.string(forKey: "StartScreen") ?? ""
+    }
+
     /// 入口 — 在 ModelContainer 创建成功后调用。
     /// 把已有 Note / SitePreset 清掉,塞一组演示数据。
     static func seedIfNeeded(_ container: ModelContainer) {
@@ -165,6 +175,124 @@ enum MockDataSeeder {
     }
 
     // MARK: - Sites
+
+    // MARK: - Mock floor plan image (for ScreenshotFloorPlanStub)
+
+    /// 渲染一张"看起来像建筑平面图"的占位图 — Core Graphics 画的房间 + 墙 + 标注。
+    static func makeMockFloorPlan() -> UIImage {
+        let size = CGSize(width: 1600, height: 1200)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { ctx in
+            let cg = ctx.cgContext
+
+            // 浅米色底
+            UIColor(red: 0.96, green: 0.95, blue: 0.92, alpha: 1).setFill()
+            cg.fill(CGRect(origin: .zero, size: size))
+
+            // 网格线(淡灰)
+            cg.setStrokeColor(UIColor(white: 0.85, alpha: 1).cgColor)
+            cg.setLineWidth(0.5)
+            for x in stride(from: 0, to: size.width, by: 50) {
+                cg.move(to: CGPoint(x: x, y: 0))
+                cg.addLine(to: CGPoint(x: x, y: size.height))
+            }
+            for y in stride(from: 0, to: size.height, by: 50) {
+                cg.move(to: CGPoint(x: 0, y: y))
+                cg.addLine(to: CGPoint(x: size.width, y: y))
+            }
+            cg.strokePath()
+
+            // 外墙 + 内墙 — 黑粗线
+            cg.setStrokeColor(UIColor(white: 0.2, alpha: 1).cgColor)
+            cg.setLineWidth(8)
+            // 外墙
+            let outer = CGRect(x: 100, y: 100, width: 1400, height: 1000)
+            cg.stroke(outer)
+            cg.setLineWidth(5)
+            // 内部分隔墙(L 形 + 几个房间)
+            // 横墙(中间偏上)
+            cg.move(to: CGPoint(x: 100, y: 500))
+            cg.addLine(to: CGPoint(x: 900, y: 500))
+            cg.strokePath()
+            // 竖墙
+            cg.move(to: CGPoint(x: 600, y: 100))
+            cg.addLine(to: CGPoint(x: 600, y: 500))
+            cg.strokePath()
+            // 右下房间分隔
+            cg.move(to: CGPoint(x: 900, y: 500))
+            cg.addLine(to: CGPoint(x: 900, y: 1100))
+            cg.strokePath()
+            // 楼梯井(右上)
+            cg.stroke(CGRect(x: 1100, y: 150, width: 350, height: 300))
+            // 楼梯踏步
+            cg.setLineWidth(1.5)
+            for i in 1..<10 {
+                let y = 150 + CGFloat(i) * 30
+                cg.move(to: CGPoint(x: 1100, y: y))
+                cg.addLine(to: CGPoint(x: 1450, y: y))
+            }
+            cg.strokePath()
+
+            // 门口缺口(在墙上画一个小白条)
+            UIColor(red: 0.96, green: 0.95, blue: 0.92, alpha: 1).setFill()
+            cg.fill(CGRect(x: 350, y: 497, width: 60, height: 8))   // 横墙上的门
+            cg.fill(CGRect(x: 597, y: 300, width: 8, height: 60))   // 竖墙上的门
+            cg.fill(CGRect(x: 897, y: 700, width: 8, height: 60))   // 右下墙上的门
+
+            // 房间标签
+            let labelFont = UIFont.systemFont(ofSize: 22, weight: .medium)
+            let labelAttrs: [NSAttributedString.Key: Any] = [
+                .font: labelFont,
+                .foregroundColor: UIColor(white: 0.35, alpha: 1)
+            ]
+            ("OFFICE 01" as NSString).draw(at: CGPoint(x: 250, y: 270), withAttributes: labelAttrs)
+            ("OFFICE 02" as NSString).draw(at: CGPoint(x: 720, y: 270), withAttributes: labelAttrs)
+            ("CORRIDOR" as NSString).draw(at: CGPoint(x: 400, y: 760), withAttributes: labelAttrs)
+            ("PLANT ROOM" as NSString).draw(at: CGPoint(x: 1050, y: 760), withAttributes: labelAttrs)
+            ("STAIR" as NSString).draw(at: CGPoint(x: 1230, y: 280), withAttributes: labelAttrs)
+
+            // 尺寸标注(顶部)
+            let dimFont = UIFont.systemFont(ofSize: 16, weight: .regular)
+            let dimAttrs: [NSAttributedString.Key: Any] = [
+                .font: dimFont,
+                .foregroundColor: UIColor(white: 0.5, alpha: 1)
+            ]
+            // 顶部尺寸线
+            cg.setStrokeColor(UIColor(white: 0.5, alpha: 1).cgColor)
+            cg.setLineWidth(1)
+            cg.move(to: CGPoint(x: 100, y: 60))
+            cg.addLine(to: CGPoint(x: 1500, y: 60))
+            cg.strokePath()
+            // 标注两端的小竖线
+            cg.move(to: CGPoint(x: 100, y: 50)); cg.addLine(to: CGPoint(x: 100, y: 70))
+            cg.move(to: CGPoint(x: 1500, y: 50)); cg.addLine(to: CGPoint(x: 1500, y: 70))
+            cg.strokePath()
+            ("14.0 m" as NSString).draw(at: CGPoint(x: 770, y: 30), withAttributes: dimAttrs)
+
+            // 左侧尺寸
+            cg.move(to: CGPoint(x: 60, y: 100)); cg.addLine(to: CGPoint(x: 60, y: 1100))
+            cg.strokePath()
+            ("10.0 m" as NSString).draw(at: CGPoint(x: 20, y: 580), withAttributes: dimAttrs)
+
+            // 标题块右下
+            let titleAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 18, weight: .semibold),
+                .foregroundColor: UIColor(white: 0.2, alpha: 1)
+            ]
+            let titleBlock = CGRect(x: 1000, y: 1130, width: 480, height: 60)
+            cg.setStrokeColor(UIColor(white: 0.2, alpha: 1).cgColor)
+            cg.setLineWidth(1)
+            cg.stroke(titleBlock)
+            ("LEVEL 1 — EAST WING" as NSString).draw(
+                at: CGPoint(x: 1018, y: 1145),
+                withAttributes: titleAttrs
+            )
+            ("Scale 1:100 · Sydney CBD Tower" as NSString).draw(
+                at: CGPoint(x: 1018, y: 1168),
+                withAttributes: dimAttrs
+            )
+        }
+    }
 
     // MARK: - Mock PDF archives (for Reports tab screenshot)
 
