@@ -41,6 +41,20 @@ enum MockDataSeeder {
         return UserDefaults.standard.string(forKey: "StartScreen") ?? ""
     }
 
+    /// 截图模式下 seed 哪种语言的 mock content — `-SeedLang zh|en`。
+    /// default = en。zh 时塞中文笔记 + stub 显示中文文案。
+    static var seedLanguage: String {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "-SeedLang"), i + 1 < args.count {
+            return args[i + 1]
+        }
+        return UserDefaults.standard.string(forKey: "SeedLang") ?? "en"
+    }
+
+    static var isChineseLocale: Bool {
+        return seedLanguage == "zh"
+    }
+
     /// 入口 — 在 ModelContainer 创建成功后调用。
     /// 把已有 Note / SitePreset 清掉,塞一组演示数据。
     static func seedIfNeeded(_ container: ModelContainer) {
@@ -52,9 +66,18 @@ enum MockDataSeeder {
         // 默认角色 siteTeam(可被 -ProfileMode 覆盖)
         let role = CommandLine.arguments.contains("-ProfileMode") ? "engineer" : "siteTeam"
         UserDefaults.standard.set(role, forKey: "settings.userProfile.role")
-        UserDefaults.standard.set("Sam Chen", forKey: "settings.userProfile.displayName")
-        UserDefaults.standard.set("Acme Construction", forKey: "settings.engineerCompanyName")
+
+        // 用户名 + 公司名 — 看语言切换
+        let isZh = isChineseLocale
+        UserDefaults.standard.set(isZh ? "陈山" : "Sam Chen", forKey: "settings.userProfile.displayName")
+        UserDefaults.standard.set(isZh ? "亚美建筑" : "Acme Construction", forKey: "settings.engineerCompanyName")
         UserDefaults.standard.set("12 345 678 901", forKey: "settings.engineerABN")
+
+        // 锁定 app 内语言切换器到中文,让 SwiftUI catalog 渲染中文 UI
+        if isZh {
+            UserDefaults.standard.set("zh-Hans", forKey: "settings.appLanguage")
+            UserDefaults.standard.set(["zh-Hans"], forKey: "AppleLanguages")
+        }
 
         // 截图模式 — 假装有缓存的位置数据,避免 AppHeaderProvider 调 location 触发 dialog。
         UserDefaults.standard.set(-33.8688, forKey: "lastLocation.latitude")
@@ -116,9 +139,41 @@ enum MockDataSeeder {
         let twoDaysAgo = cal.date(byAdding: .day, value: -2, to: now) ?? now
         let twoDaysAgo3pm = cal.date(bySettingHour: 15, minute: 0, second: 0, of: twoDaysAgo) ?? twoDaysAgo
 
-        let siteTag = "Sydney CBD Tower"
+        let isZh = isChineseLocale
+        let siteTag = isZh ? "悉尼 CBD 塔楼" : "Sydney CBD Tower"
 
-        let entries: [(String, Deadline, Date, Bool, [String], [String], String?)] = [
+        let entries: [(String, Deadline, Date, Bool, [String], [String], String?)] = isZh ? [
+            (
+                "三层东侧楼梯口钢筋外露,11 点前用警示带围起来并通知工长。",
+                .today, today9am.addingTimeInterval(60 * 60 * 0), true,
+                Array(photoPaths.prefix(2)), ["安全"], "小李"
+            ),
+            (
+                "北立面窗顶切口要对照图纸 A-201 rev C 复核,周五前班组划线。",
+                .thisWeek, today9am.addingTimeInterval(60 * 60 * 1), false,
+                [], ["质检"], nil
+            ),
+            (
+                "5 层楼梯扶手缺安全栏,班组当天处理完成。",
+                .today, today9am.addingTimeInterval(60 * 60 * 2), false,
+                [photoPaths.count > 2 ? photoPaths[2] : photoPaths[0]], ["缺陷"], "老张"
+            ),
+            (
+                "4 层楼板浇筑顺序 — 周一 7 点前跟总包确认泵车位置。",
+                .threeDays, today9am.addingTimeInterval(60 * 60 * 3), false,
+                [], ["工序"], nil
+            ),
+            (
+                "2 层机房贯穿处泡沫需要修整平齐,上次清单漏了。",
+                .threeDays, yesterday11, false,
+                [], ["返工"], "小李"
+            ),
+            (
+                "大堂地插布局已与电工复核确认。",
+                .today, twoDaysAgo3pm, false,
+                [], ["大堂"], nil
+            )
+        ] : [
             // (transcription, deadline, createdAt, isHazard, photoPaths, otherTags, assignedTo)
             (
                 "Exposed reinforcement on level 3 east stair landing. Tape off the area and notify the foreman before 11 am.",
@@ -140,13 +195,11 @@ enum MockDataSeeder {
                 .threeDays, today9am.addingTimeInterval(60 * 60 * 3), false,
                 [], ["sequence"], nil
             ),
-            // Overdue
             (
                 "Foam at penetration in level 2 mech room needs trimming flush. Trade missed on prev punch list.",
                 .threeDays, yesterday11, false,
                 [], ["punch"], "Jamie"
             ),
-            // Already done
             (
                 "Floor box layout in lobby reviewed and approved with electrician.",
                 .today, twoDaysAgo3pm, false,
@@ -355,22 +408,23 @@ enum MockDataSeeder {
     }
 
     private static func seedSites(ctx: ModelContext) {
+        let isZh = isChineseLocale
         let s1 = SitePreset()
-        s1.siteTag = "Sydney CBD Tower"
-        s1.projectName = "Sydney CBD Tower - Stage 2"
+        s1.siteTag = isZh ? "悉尼 CBD 塔楼" : "Sydney CBD Tower"
+        s1.projectName = isZh ? "悉尼 CBD 塔楼 · 第二期" : "Sydney CBD Tower - Stage 2"
         s1.projectNo = "25159"
-        s1.clientName = "Acme Construction"
-        s1.defaultAttn = "Sam Chen"
-        s1.address = "123 Sample St, Sydney NSW 2000"
+        s1.clientName = isZh ? "亚美建筑" : "Acme Construction"
+        s1.defaultAttn = isZh ? "陈山" : "Sam Chen"
+        s1.address = isZh ? "悉尼 NSW 2000 样品街 123 号" : "123 Sample St, Sydney NSW 2000"
         ctx.insert(s1)
 
         let s2 = SitePreset()
-        s2.siteTag = "Bondi Mixed-Use"
-        s2.projectName = "Bondi Mixed-Use Development"
+        s2.siteTag = isZh ? "邦迪综合体" : "Bondi Mixed-Use"
+        s2.projectName = isZh ? "邦迪综合体开发项目" : "Bondi Mixed-Use Development"
         s2.projectNo = "26041"
-        s2.clientName = "Coastal Builders"
-        s2.defaultAttn = "Alex Park"
-        s2.address = "55 Sample Ave, Bondi NSW 2026"
+        s2.clientName = isZh ? "海岸建造" : "Coastal Builders"
+        s2.defaultAttn = isZh ? "朴大" : "Alex Park"
+        s2.address = isZh ? "邦迪 NSW 2026 样品大道 55 号" : "55 Sample Ave, Bondi NSW 2026"
         ctx.insert(s2)
     }
 

@@ -43,24 +43,28 @@ struct ScreenshotRecordingStub: View {
         }
     }
 
+    private var isZh: Bool { MockDataSeeder.isChineseLocale }
+
     private var recordingBanner: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 Circle()
                     .fill(Ink.red)
                     .frame(width: 10, height: 10)
-                Text("Recording · 00:08")
+                Text(isZh ? "录音中 · 00:08" : "Recording · 00:08")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Ink.fg)
                     .monospacedDigit()
                 Spacer()
-                Text("Slide up to cancel")
+                Text(isZh ? "上滑取消" : "Slide up to cancel")
                     .font(.system(size: 11))
                     .foregroundStyle(Ink.fgDim)
             }
 
             // 转写文字(部分)
-            Text("Exposed reinforcement on level three east stair landing. Tape off the area and notify the foreman before…")
+            Text(isZh
+                 ? "三层东侧楼梯口钢筋外露,用警示带围起来并通知工长……"
+                 : "Exposed reinforcement on level three east stair landing. Tape off the area and notify the foreman before…")
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(Ink.fg)
                 .lineSpacing(4)
@@ -115,9 +119,9 @@ struct ScreenshotRecordingStub: View {
 
     private var tabBar: some View {
         HStack(spacing: 0) {
-            tabItem("Log", selected: true)
-            tabItem("Calendar", selected: false)
-            tabItem("Reports", selected: false)
+            tabItem(isZh ? "记" : "Log", selected: true)
+            tabItem(isZh ? "日历" : "Calendar", selected: false)
+            tabItem(isZh ? "报告" : "Reports", selected: false)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -149,6 +153,8 @@ struct ScreenshotRecordingStub: View {
 struct ScreenshotFloorPlanStub: View {
     let planImage: UIImage?
 
+    private var isZh: Bool { MockDataSeeder.isChineseLocale }
+
     var body: some View {
         ZStack(alignment: .top) {
             Ink.bg.ignoresSafeArea()
@@ -163,15 +169,15 @@ struct ScreenshotFloorPlanStub: View {
 
     private var topBar: some View {
         HStack {
-            Text("Cancel")
+            Text(isZh ? "取消" : "Cancel")
                 .font(.system(size: 16))
                 .foregroundStyle(Ink.fg)
             Spacer()
-            Text("Mark on Plan")
+            Text(isZh ? "平面图标记" : "Mark on Plan")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Ink.fg)
             Spacer()
-            Text("Save")
+            Text(isZh ? "保存" : "Save")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Ink.fg)
         }
@@ -225,16 +231,16 @@ struct ScreenshotFloorPlanStub: View {
 
     private var bottomBar: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("LEVEL 1 — EAST WING")
+            Text(isZh ? "一层 · 东翼" : "LEVEL 1 — EAST WING")
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.6)
                 .foregroundStyle(Ink.fgDim)
-            Text("Pinch to zoom · Drag to pan · Double-tap to reset")
+            Text(isZh ? "双指缩放 · 拖动平移 · 双击复位" : "Pinch to zoom · Drag to pan · Double-tap to reset")
                 .font(.system(size: 12))
                 .foregroundStyle(Ink.fgDim)
             HStack(spacing: 6) {
                 Circle().fill(Ink.red).frame(width: 8, height: 8)
-                Text("Hazard pin · 10× more accurate than GPS")
+                Text(isZh ? "隐患图钉 · 比 GPS 精度高 10 倍" : "Hazard pin · 10× more accurate than GPS")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Ink.fg)
             }
@@ -270,6 +276,8 @@ struct ScreenshotFloorPlanStub: View {
 struct ScreenshotNoteDetailStub: View {
     let planImage: UIImage?
 
+    private var isZh: Bool { MockDataSeeder.isChineseLocale }
+
     var body: some View {
         ZStack(alignment: .top) {
             Ink.bg.ignoresSafeArea()
@@ -296,7 +304,7 @@ struct ScreenshotNoteDetailStub: View {
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Ink.fg)
             Spacer()
-            Text("Note")
+            Text(isZh ? "速记" : "Note")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Ink.fg)
             Spacer()
@@ -318,12 +326,12 @@ struct ScreenshotNoteDetailStub: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Ink.red)
-            Text("HAZARD")
+            Text(isZh ? "隐患" : "HAZARD")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.8)
                 .foregroundStyle(Ink.red)
             Spacer()
-            Text("Safety")
+            Text(isZh ? "安全" : "Safety")
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.4)
                 .textCase(.uppercase)
@@ -340,14 +348,14 @@ struct ScreenshotNoteDetailStub: View {
     private var headerBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Text("Today")
+                Text(isZh ? "今天" : "Today")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Ink.fg)
                 Text("· 09:21")
                     .font(.system(size: 14))
                     .foregroundStyle(Ink.fgDim)
                 Spacer()
-                Text("Due today")
+                Text(isZh ? "今日到期" : "Due today")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
@@ -355,7 +363,9 @@ struct ScreenshotNoteDetailStub: View {
                     .background(Ink.fg)
                     .clipShape(Capsule())
             }
-            Text("Exposed reinforcement on level 3 east stair landing. Tape off the area and notify the foreman before 11 am.")
+            Text(isZh
+                 ? "三层东侧楼梯口钢筋外露,11 点前用警示带围起来并通知工长。"
+                 : "Exposed reinforcement on level 3 east stair landing. Tape off the area and notify the foreman before 11 am.")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(Ink.fg)
                 .lineSpacing(3)
@@ -366,10 +376,17 @@ struct ScreenshotNoteDetailStub: View {
 
     private var metaBlock: some View {
         VStack(spacing: 8) {
-            metaRow(icon: "building.2", label: "Site",      value: "Sydney CBD Tower")
-            metaRow(icon: "location",   label: "Location",  value: "Sydney, NSW · 0.04 km")
-            metaRow(icon: "cloud.sun",  label: "Weather",   value: "Sunny · 18°C")
-            metaRow(icon: "person.fill", label: "Assigned", value: "Jamie · Site supervisor")
+            if isZh {
+                metaRow(icon: "building.2",  label: "工地",   value: "悉尼 CBD 塔楼")
+                metaRow(icon: "location",    label: "位置",   value: "悉尼 NSW · 0.04 km")
+                metaRow(icon: "cloud.sun",   label: "天气",   value: "晴 · 18°C")
+                metaRow(icon: "person.fill", label: "派发给", value: "小李 · 现场监督")
+            } else {
+                metaRow(icon: "building.2",  label: "Site",      value: "Sydney CBD Tower")
+                metaRow(icon: "location",    label: "Location",  value: "Sydney, NSW · 0.04 km")
+                metaRow(icon: "cloud.sun",   label: "Weather",   value: "Sunny · 18°C")
+                metaRow(icon: "person.fill", label: "Assigned",  value: "Jamie · Site supervisor")
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 14)
@@ -396,7 +413,7 @@ struct ScreenshotNoteDetailStub: View {
 
     private var floorPlanBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("FLOOR PLAN")
+            Text(isZh ? "平面图" : "FLOOR PLAN")
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.5)
                 .foregroundStyle(Ink.fgDim)
@@ -425,7 +442,7 @@ struct ScreenshotNoteDetailStub: View {
                 }
             }
 
-            Text("Level 1 — East Wing · Pin at (62%, 42%)")
+            Text(isZh ? "一层 · 东翼 · 图钉位置 (62%, 42%)" : "Level 1 — East Wing · Pin at (62%, 42%)")
                 .font(.system(size: 11))
                 .foregroundStyle(Ink.fgDim)
         }
@@ -435,13 +452,13 @@ struct ScreenshotNoteDetailStub: View {
 
     private var photosBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("PHOTOS (2)")
+            Text(isZh ? "照片(2 张)" : "PHOTOS (2)")
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.5)
                 .foregroundStyle(Ink.fgDim)
             HStack(spacing: 8) {
-                photoPlaceholder(label: "Safety", color: UIColor.systemOrange)
-                photoPlaceholder(label: "Detail", color: UIColor.systemGray)
+                photoPlaceholder(label: isZh ? "安全" : "Safety", color: UIColor.systemOrange)
+                photoPlaceholder(label: isZh ? "细节" : "Detail", color: UIColor.systemGray)
             }
         }
         .padding(.horizontal, 20)
@@ -449,13 +466,14 @@ struct ScreenshotNoteDetailStub: View {
     }
 
     private func photoPlaceholder(label: String, color: UIColor) -> some View {
-        ZStack {
+        let isSafety = label == "Safety" || label == "安全"
+        return ZStack {
             LinearGradient(
                 colors: [Color(uiColor: color), Color(uiColor: color).opacity(0.6)],
                 startPoint: .top, endPoint: .bottom
             )
             VStack(spacing: 6) {
-                Image(systemName: label == "Safety" ? "exclamationmark.triangle.fill" : "wrench.and.screwdriver.fill")
+                Image(systemName: isSafety ? "exclamationmark.triangle.fill" : "wrench.and.screwdriver.fill")
                     .font(.system(size: 36, weight: .light))
                     .foregroundStyle(.white.opacity(0.75))
                 Text(label)
