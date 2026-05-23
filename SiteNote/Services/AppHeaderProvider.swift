@@ -31,7 +31,9 @@ final class AppHeaderProvider {
     private init() {}
 
     /// Chrome onAppear 调一次。已新鲜则直接返回,否则后台刷新。
+    /// v1.6 (en-v1):截图模式 跳过整个 refresh — 避免 location dialog 污染截图。
     func ensureFresh() {
+        if MockDataSeeder.isActive { return }
         if let last = lastFetched, Date().timeIntervalSince(last) < ttl {
             return
         }

@@ -101,6 +101,8 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// - `.authorized` / `.provisional`: 直接放行。
     /// - `.denied`: 返回 false,后续 add 全部跳过(避免无效系统调用 + 误判"已排上")。
     private func ensureAuthorized() async -> Bool {
+        // v1.6 (en-v1) — 截图模式 永远返回 false,杜绝任何系统授权弹窗污染 App Store 截图。
+        if MockDataSeeder.isActive { return false }
         let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:

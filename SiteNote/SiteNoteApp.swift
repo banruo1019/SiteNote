@@ -171,6 +171,10 @@ private struct RootContainerView: View {
                 }
             }
 
+            // Screenshot mode — launch arg `-ScreenshotMode YES` 时 seed 演示数据。
+            // 仅截图用,生产用户绝对不会触发(launch arg + ProcessInfo gated)。
+            MockDataSeeder.seedIfNeeded(container)
+
             state = .ready(container)
         } catch {
             // SwiftDataError 1 等通用错误 localizedDescription 信息很少,
@@ -191,8 +195,10 @@ private struct RootContainerView: View {
     }
 
     /// E3.5:重排所有未完成且需推送的 note。给时区监听 + scenePhase 钩子复用。
+    /// v1.6 (en-v1):截图模式 跳过 — 避免触发系统通知授权弹窗,污染 App Store 截图。
     @MainActor
     private func rescheduleAllNotes(in context: ModelContext) {
+        if MockDataSeeder.isActive { return }
         let descriptor = FetchDescriptor<Note>(
             predicate: #Predicate<Note> { $0.deletedAt == nil && $0.isDone == false }
         )

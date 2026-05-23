@@ -15,10 +15,23 @@ import SwiftUI
 import SwiftData
 
 struct MainTabView: View {
-    @State private var selection: AppTab = .record
+    @State private var selection: AppTab = MainTabView.initialTabFromLaunchArg()
     @State private var showsOnboarding: Bool = OnboardingView.needsToShow
     @State private var router = AppRouter.shared
     @State private var profileManager = UserProfileManager.shared
+
+    /// 截图用 — `-StartTab record|calendar|reports` 决定 app 启动停留在哪个 tab。
+    private static func initialTabFromLaunchArg() -> AppTab {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "-StartTab"), i + 1 < args.count {
+            switch args[i + 1] {
+            case "calendar": return .calendar
+            case "reports": return .reports
+            default: return .record
+            }
+        }
+        return .record
+    }
 
     private var isEngineer: Bool {
         profileManager.current == .engineer
