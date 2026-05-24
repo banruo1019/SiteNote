@@ -1,11 +1,11 @@
 # SiteNotes Terms of Service
 
-**Effective date:** 2026-05-19
-**Last updated:** 2026-05-19
+**Effective date:** 2026-05-23
+**Last updated:** 2026-05-23
 
-These Terms of Service ("Terms") govern your use of SiteNotes, an iOS application made by Manifoldx in New South Wales, Australia ("Manifoldx", "we", "us", "our"). SiteNotes is built for construction professionals — project managers, foremen, site engineers, and builders — to capture site activity in the field.
+These Terms of Service ("Terms") govern your use of SiteNotes, an iOS application made by Banruo Yang in New South Wales, Australia ("Banruo Yang", "we", "us", "our"). SiteNotes is built for construction professionals — project managers, foremen, site engineers, and builders — to capture site activity in the field.
 
-Please read these Terms carefully. They are a binding agreement between you and Manifoldx.
+Please read these Terms carefully. They are a binding agreement between you and Banruo Yang.
 
 ---
 
@@ -23,7 +23,7 @@ https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 
 The Apple EULA forms part of your agreement with us and is incorporated here by reference. These Terms are **supplemental** to the Apple EULA — they do not replace it. Where the Apple EULA covers a matter, the Apple EULA applies. Where these Terms add to or clarify topics the Apple EULA does not address, these Terms control.
 
-You acknowledge that this agreement is between you and Manifoldx, not between you and Apple. Apple is not responsible for the app or its content. Apple is a third-party beneficiary of these Terms and may enforce them against you.
+You acknowledge that this agreement is between you and Banruo Yang, not between you and Apple. Apple is not responsible for the app or its content. Apple is a third-party beneficiary of these Terms and may enforce them against you.
 
 ---
 
@@ -44,9 +44,9 @@ SiteNotes is a tool to help you record work. It is not a substitute for professi
 
 ## 4. No SiteNotes accounts; use of Apple ID
 
-SiteNotes does not have its own account system. There is no sign-up, no password, and no email registration with Manifoldx.
+SiteNotes does not have its own account system. There is no sign-up, no password, and no email registration with Banruo Yang.
 
-Where the app syncs data across your devices, it does so through **your own iCloud account**, using the Apple ID already configured on your iPhone or iPad. Manifoldx never sees your Apple ID and has no access to your iCloud data. Your relationship with Apple regarding your Apple ID and iCloud is governed by your agreement with Apple.
+Where the app syncs data across your devices, it does so through **your own iCloud account**, using the Apple ID already configured on your iPhone or iPad. Banruo Yang never sees your Apple ID and has no access to your iCloud data. Your relationship with Apple regarding your Apple ID and iCloud is governed by your agreement with Apple.
 
 You are responsible for keeping your device, your Apple ID credentials, and your iCloud account secure.
 
@@ -56,7 +56,7 @@ You are responsible for keeping your device, your Apple ID credentials, and your
 
 **You own everything you put into SiteNotes** — your notes, photos, voice recordings, transcripts, drawings, sketches, site data, exported PDFs, and any other content you create or import ("Your Content").
 
-Manifoldx claims no ownership of Your Content and no licence to use it beyond the limited, technical processing required for SiteNotes to function on your device (for example, rendering a PDF you asked the app to export). Because Your Content stays on your device and in your private iCloud container, we do not receive, store, or have access to it on our servers.
+Banruo Yang claims no ownership of Your Content and no licence to use it beyond the limited, technical processing required for SiteNotes to function on your device (for example, rendering a PDF you asked the app to export). Because Your Content stays on your device and in your private iCloud container, we do not receive, store, or have access to it on our servers.
 
 You are responsible for Your Content, including its accuracy, legality, and any backups you choose to keep. We strongly recommend you keep separate backups of records that may have legal, contractual, or regulatory significance.
 
@@ -128,7 +128,7 @@ Nothing in this section excludes any consumer guarantees that cannot lawfully be
 
 ## 11. Limitation of liability
 
-To the maximum extent permitted by Australian law, Manifoldx's total aggregate liability arising out of or relating to SiteNotes or these Terms — whether in contract, tort (including negligence), statute, or otherwise — is limited to the amount you paid Manifoldx for SiteNotes in the twelve (12) months immediately before the event giving rise to the claim. In version 1, where the app is free, this amount is likely to be **AUD $0**.
+To the maximum extent permitted by Australian law, Banruo Yang's total aggregate liability arising out of or relating to SiteNotes or these Terms — whether in contract, tort (including negligence), statute, or otherwise — is limited to the amount you paid Banruo Yang for SiteNotes in the twelve (12) months immediately before the event giving rise to the claim. In version 1, where the app is free, this amount is likely to be **AUD $0**.
 
 To the maximum extent permitted by law, we are not liable for indirect, incidental, special, consequential, or punitive damages, including loss of profits, loss of business, loss of data, or loss of goodwill, even if we have been advised of the possibility of such damages.
 
@@ -138,7 +138,7 @@ Where the Australian Consumer Law applies and the relevant guarantee cannot be e
 
 ## 12. Indemnification
 
-You agree to indemnify, defend, and hold harmless Manifoldx and its directors, employees, and contractors against any third-party claim, demand, loss, damage, cost, or expense (including reasonable legal fees) arising from or related to:
+You agree to indemnify, defend, and hold harmless Banruo Yang and its directors, employees, and contractors against any third-party claim, demand, loss, damage, cost, or expense (including reasonable legal fees) arising from or related to:
 
 - Your use of SiteNotes in breach of these Terms or applicable law
 - Your Content, including any claim that Your Content infringes a third party's rights or breaches privacy or surveillance laws
@@ -171,7 +171,7 @@ SiteNotes incorporates open-source components. Attribution and licence notices f
 
 These Terms are governed by the laws of **New South Wales, Australia**, and the laws of the Commonwealth of Australia that apply in NSW.
 
-You and Manifoldx submit to the **exclusive jurisdiction of the courts of New South Wales, Australia** (and the courts competent to hear appeals from them) for any dispute arising out of or relating to these Terms or SiteNotes.
+You and Banruo Yang submit to the **exclusive jurisdiction of the courts of New South Wales, Australia** (and the courts competent to hear appeals from them) for any dispute arising out of or relating to these Terms or SiteNotes.
 
 Nothing in this section limits any non-excludable right you may have under the Australian Consumer Law to bring a claim in a forum of your choosing.
 
@@ -187,7 +187,7 @@ Your continued use of SiteNotes after a change takes effect constitutes acceptan
 
 ## 17. Miscellaneous
 
-- **Entire agreement.** These Terms, the Apple EULA, and the Privacy Policy together form the entire agreement between you and Manifoldx regarding SiteNotes.
+- **Entire agreement.** These Terms, the Apple EULA, and the Privacy Policy together form the entire agreement between you and Banruo Yang regarding SiteNotes.
 - **Severability.** If any provision is held unenforceable, the remaining provisions remain in full force.
 - **No waiver.** Our failure to enforce a provision is not a waiver of our right to do so later.
 - **Assignment.** You may not assign these Terms. We may assign them to a successor in connection with a corporate transaction, on notice to you.
@@ -199,5 +199,5 @@ Your continued use of SiteNotes after a change takes effect constitutes acceptan
 
 Questions about these Terms, or notices required under them, should be sent to:
 
-- **Email:** legal@manifoldx.com
-- **Operator:** Manifoldx, New South Wales, Australia
+- **Email:** banruostudio@gmail.com
+- **Operator:** Banruo Yang, New South Wales, Australia

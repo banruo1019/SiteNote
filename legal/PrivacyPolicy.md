@@ -1,9 +1,9 @@
 # SiteNotes Privacy Policy
 
-**Effective date:** 2026-05-19
-**Last updated:** 2026-05-19
+**Effective date:** 2026-05-23
+**Last updated:** 2026-05-23
 
-SiteNotes is an iOS app for construction site logging, made by Manifoldx in New South Wales, Australia. We built it so you can capture notes, photos, and voice memos on site without sending your work to a server we control. This policy explains, in plain English, what the app does with your data, what it does not do, and the rights you have.
+SiteNotes is an iOS app for construction site logging, made by Banruo Yang in New South Wales, Australia. We built it so you can capture notes, photos, and voice memos on site without sending your work to a server we control. This policy explains, in plain English, what the app does with your data, what it does not do, and the rights you have.
 
 If you only read one thing: **we do not operate servers that hold your SiteNotes data.** Your notes, photos, and voice recordings stay on your device and in your own iCloud account. We cannot read them.
 
@@ -12,10 +12,10 @@ If you only read one thing: **we do not operate servers that hold your SiteNotes
 ## 1. Who we are
 
 - **App:** SiteNotes (iOS)
-- **Operator:** Manifoldx, New South Wales, Australia
-- **Contact for privacy questions:** privacy@manifoldx.com
+- **Operator:** Banruo Yang, New South Wales, Australia
+- **Contact for privacy questions:** banruostudio@gmail.com
 
-Manifoldx is the data controller (GDPR) and the responsible business (CCPA) for the limited interactions described below. We are an Australian operator and the app is subject to the Australian Privacy Act 1988 and the Australian Privacy Principles (APPs).
+Banruo Yang is the data controller (GDPR) and the responsible business (CCPA) for the limited interactions described below. We are an Australian operator and the app is subject to the Australian Privacy Act 1988 and the Australian Privacy Principles (APPs).
 
 ---
 
@@ -37,7 +37,7 @@ Manifoldx is the data controller (GDPR) and the responsible business (CCPA) for 
 
 ### 3.1 Account and identity data
 
-**None.** SiteNotes has no account system. There is nothing to sign up for, no password to set, no email to verify. The app uses the Apple ID already on your iPhone to sync your data through iCloud, but Manifoldx never sees that Apple ID.
+**None.** SiteNotes has no account system. There is nothing to sign up for, no password to set, no email to verify. The app uses the Apple ID already on your iPhone to sync your data through iCloud, but Banruo Yang never sees that Apple ID.
 
 ### 3.2 Photos (camera)
 
@@ -97,7 +97,7 @@ When you create a log entry with location, SiteNotes sends just the latitude and
 
 ### 5.2 Apple iCloud
 
-iCloud sync (including CloudKit Sharing, used by the team feature) is provided by Apple under your Apple ID. Your data is stored in the Apple data centre region tied to your Apple ID. Apple's privacy policy governs that storage. Manifoldx has no access to your iCloud container.
+iCloud sync (including CloudKit Sharing, used by the team feature) is provided by Apple under your Apple ID. Your data is stored in the Apple data centre region tied to your Apple ID. Apple's privacy policy governs that storage. Banruo Yang has no access to your iCloud container.
 
 That is the entire third-party list. No analytics SDK, no advertising network, no crash reporting service, no customer-support chatbot.
 
@@ -107,9 +107,9 @@ That is the entire third-party list. No analytics SDK, no advertising network, n
 
 - **Your device.** Notes, photos, voice files, and templates live in the SiteNotes sandbox on your iPhone or iPad, protected by iOS file protection.
 - **Your iCloud.** If iCloud sync is on, the same data is mirrored into a private CloudKit container under your Apple ID. The region is whatever region Apple assigns to your account.
-- **Manifoldx servers:** none. We do not run a backend that holds your project data. We do not replicate, back up, or cache your data on any infrastructure we control.
+- **Banruo Yang servers:** none. We do not run a backend that holds your project data. We do not replicate, back up, or cache your data on any infrastructure we control.
 
-When you share a site with a teammate, SiteNotes uses Apple's CloudKit Sharing. The share happens directly between your iCloud account and theirs via Apple's infrastructure. Manifoldx is not in the middle.
+When you share a site with a teammate, SiteNotes uses Apple's CloudKit Sharing. The share happens directly between your iCloud account and theirs via Apple's infrastructure. Banruo Yang is not in the middle.
 
 ---
 
@@ -135,7 +135,7 @@ You have meaningful, immediate control inside the app.
 - **Right to delete** — Settings → Erase All Content wipes both local storage and the iCloud zone we created. This is irreversible.
 - **Right to withdraw consent** — revoke camera, microphone, or location permission in iOS Settings → SiteNotes at any time. The app keeps working with reduced features.
 
-If you live in a jurisdiction with extra rights (GDPR, CCPA, Australian Privacy Act), you may exercise those rights against Manifoldx by emailing **privacy@manifoldx.com**. Because we do not hold your content, in most cases the answer to "what do you have on me?" will literally be "nothing." We will respond within 30 days.
+If you live in a jurisdiction with extra rights (GDPR, CCPA, Australian Privacy Act), you may exercise those rights against Banruo Yang by emailing **banruostudio@gmail.com**. Because we do not hold your content, in most cases the answer to "what do you have on me?" will literally be "nothing." We will respond within 30 days.
 
 You also have the right to lodge a complaint with a supervisory authority — for example the Office of the Australian Information Commissioner (oaic.gov.au), your EU member-state data protection authority, or the California Privacy Protection Agency.
 
@@ -156,7 +156,7 @@ Security comes from the platforms underneath SiteNotes rather than from us tryin
 - **In-transit encryption** (HTTPS / TLS) is used for the only outbound network call we make — the weather lookup to Open-Meteo.
 - We hold no credentials and operate no servers, which removes a large class of breach risk.
 
-No system is perfectly secure. If you discover a vulnerability, please email privacy@manifoldx.com.
+No system is perfectly secure. If you discover a vulnerability, please email banruostudio@gmail.com.
 
 ---
 
@@ -164,10 +164,10 @@ No system is perfectly secure. If you discover a vulnerability, please email pri
 
 If you are in the EEA or UK:
 
-- **Controller:** Manifoldx, NSW, Australia. Contact: privacy@manifoldx.com.
+- **Controller:** Banruo Yang, NSW, Australia. Contact: banruostudio@gmail.com.
 - **Lawful basis:** consent (camera, microphone, location — given via the iOS permission prompts) and legitimate interest (running the app and diagnostic features).
 - **Data transfers:** any data that leaves your device goes either to your own Apple iCloud (governed by Apple's transfer safeguards) or to Open-Meteo as raw weather coordinates with no personal data attached.
-- **EU representative:** SiteNotes is not offered at scale in the EU and Manifoldx is not required to appoint an Article 27 representative. We still accept GDPR rights requests at privacy@manifoldx.com as a courtesy.
+- **EU representative:** SiteNotes is not offered at scale in the EU and Banruo Yang is not required to appoint an Article 27 representative. We still accept GDPR rights requests at banruostudio@gmail.com as a courtesy.
 - You have the right to access, rectify, erase, restrict, port, and object to processing, and to lodge a complaint with your local supervisory authority.
 
 ---
@@ -183,13 +183,13 @@ If you are a California resident:
 - **Right to non-discrimination:** we will never penalise you for exercising these rights — there is no paid tier that depends on giving up data.
 - **Sale or sharing of personal information:** **we do not sell or share personal information**, as those terms are defined under the CCPA / CPRA. We do not run cross-context behavioural advertising.
 
-You can submit a verified request to privacy@manifoldx.com.
+You can submit a verified request to banruostudio@gmail.com.
 
 ---
 
 ## 13. Australian Privacy Act 1988
 
-Manifoldx is an Australian operator and complies with the Australian Privacy Principles (APPs):
+Banruo Yang is an Australian operator and complies with the Australian Privacy Principles (APPs):
 
 - **APP 1 — open and transparent management:** this policy is our public statement and is also linked from inside the app.
 - **APP 3 — collection of solicited personal information:** we collect only what is described in Section 3, and only via clear in-app actions.
@@ -209,7 +209,7 @@ If we change anything material, we will:
 
 1. Update the "Last updated" date at the top of this document.
 2. Show an in-app banner on the next launch of SiteNotes summarising what changed.
-3. Keep the previous wording available on request at privacy@manifoldx.com.
+3. Keep the previous wording available on request at banruostudio@gmail.com.
 
 Trivial typo fixes will just bump the date.
 
@@ -217,9 +217,9 @@ Trivial typo fixes will just bump the date.
 
 ## 15. Contact
 
-**Manifoldx**
+**Banruo Yang**
 NSW, Australia
-privacy@manifoldx.com
+banruostudio@gmail.com
 
 For App Store policy questions, you can also use Apple's report-a-concern flow on the SiteNotes App Store listing.
 

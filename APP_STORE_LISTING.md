@@ -196,7 +196,7 @@ Apple requires the Support URL and Privacy Policy URL to resolve before review. 
 ## 9. Copyright
 
 ```
-© 2026 Manifoldx
+© 2026 Banruo Yang
 ```
 
 Paste exactly as shown. Apple accepts the © symbol directly.
@@ -219,7 +219,7 @@ Paste exactly as shown. Apple accepts the © symbol directly.
 - [ ] Category: Business / Productivity
 - [ ] What's New for v1.0 pasted
 - [ ] Three URLs resolve to a 200
-- [ ] Copyright reads `© 2026 Manifoldx`
+- [ ] Copyright reads `© 2026 Banruo Yang`
 - [ ] Korea trade rep toggle: off
 - [ ] Screenshots uploaded for 6.7", 6.5" and 5.5" iPhone (Apple's required sizes)
 - [ ] App Privacy questionnaire completed (declare on-device processing, iCloud usage)
