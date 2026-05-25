@@ -15,22 +15,17 @@ import Foundation
 enum DisclaimerStorage {
     private static let key = "settings.inspectionDisclaimers.v1"
 
-    /// QDE Engineering 报告里那 5 条标准 disclaimer。
-    static let defaults: [String] = [
-        "This inspection does not include the foundation material and ground stability including: excavations, cuttings, batters and stabilizing elements such as soil nails, rock bolts and ground anchors etc. It is the builder's responsibility to have the Geotechnical engineer inspect and approve prior to placing concrete.",
-        "This inspection does not include the formwork, formwork support and back-propping. It has not been inspected and should be separately certified by an experienced formwork engineer.",
-        "This inspection does not include epoxy grouted bars, chemical or expansion anchors. The correct installation of these items is the responsibility of the builder.",
-        "Reinforcement inspections are subject to final clean out of formwork or excavation and maintaining specified cover during placement of concrete.",
-        "The builder must rectify the defects listed in this report as a contractual, Work Health and Safety, building certification requirement."
-    ]
+    /// v1.6 (en-v1):不再 ship 任何预设 disclaimer(原 5 条带公司特定法律措辞,泄露公司信息)。
+    /// 用户自己在 Settings → 默认免责声明 里逐条加。空 = 不画 DISCLAIMERS 段。
+    static let defaults: [String] = []
 
-    /// 读用户自定义。空数组表示用 defaults。失败/没存过返回空。
+    /// 读用户自定义。失败/没存过返回空。
     static func load() -> [String] {
         guard let data = UserDefaults.standard.data(forKey: key) else { return [] }
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 
-    /// 保存(覆盖)。空数组表示删除自定义,回退到 defaults。
+    /// 保存(覆盖)。空数组也接受 — 表示用户主动清空,PDF 就不画 disclaimer 段。
     /// - 空字符串条目会被先过滤掉(避免存"5 条空白")。
     static func save(_ items: [String]) {
         let cleaned = items
@@ -44,13 +39,12 @@ enum DisclaimerStorage {
         UserDefaults.standard.set(data, forKey: key)
     }
 
-    /// 当前生效的(用户自定义优先,空则用 defaults)。PDF 渲染调用这个。
+    /// 当前生效的 — 用户没加过任何一条 → 空数组,PDF 跳过 DISCLAIMERS 段。
     static func current() -> [String] {
-        let custom = load()
-        return custom.isEmpty ? defaults : custom
+        return load()
     }
 
-    /// 恢复到 defaults(清自定义)。
+    /// 清空用户自定义。
     static func restoreDefaults() {
         UserDefaults.standard.removeObject(forKey: key)
     }

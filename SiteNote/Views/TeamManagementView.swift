@@ -52,6 +52,7 @@ struct TeamManagementView: View {
                 teamHeader(team)
                 membersSection(team)
                 actionsSection(team)
+                syncDiagnosticSection
             } else {
                 createSection
             }
@@ -59,7 +60,21 @@ struct TeamManagementView: View {
         .industrialForm()
         .navigationTitle(String(localized: "团队", locale: locale))
         .navigationBarTitleDisplayMode(.inline)
-        .task { await ensureCurrentUser() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    Task { await TeamDataMirrorService.shared.fetchAndSyncAll(in: modelContext, forceFullSync: true) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .accessibilityLabel(String(localized: "刷新", locale: locale))
+            }
+        }
+        .task {
+            await ensureCurrentUser()
+            // 进入团队页主动拉一次 zone changes,Owner 能看到 Member 注册;Member 能补 register。
+            await TeamDataMirrorService.shared.fetchAndSyncAll(in: modelContext, forceFullSync: true)
+        }
         .sheet(isPresented: $showsCreateTeam) {
             CreateTeamSheet { name in
                 showsCreateTeam = false
@@ -94,7 +109,7 @@ struct TeamManagementView: View {
             }
         } message: {
             Text(String(
-                localized: "你的数据会留在团队(归公司),你将无法再访问。",
+                localized: "你的本地团队信息会被清理,你将看不到团队数据。注意:Owner 仍然在云端 share 名单里看到你 —— 彻底移除需要 Owner 在团队页点 \"-\" 撤销邀请。",
                 locale: locale
             ))
         }
@@ -232,6 +247,92 @@ struct TeamManagementView: View {
         }
     }
 
+    /// 同步状态诊断段 — 默认折叠的 DisclosureGroup,不污染主页面。
+    /// 用户出问题时展开截图给开发反馈。
+    @ViewBuilder
+    private var syncDiagnosticSection: some View {
+        Section {
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                        Text(String(localized: "最近拉取:", locale: locale))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                    Text(TeamDataMirrorService.shared.lastSyncStatus)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Ink.fg)
+                        .textSelection(.enabled)
+
+                    Divider().padding(.vertical, 4)
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up.circle")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Ink.fgDim)
+                        Text(String(localized: "最近推送:", locale: locale))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                    Text(TeamDataMirrorService.shared.lastMirrorStatus)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Ink.fg)
+                        .textSelection(.enabled)
+
+                    if let ts = TeamDataMirrorService.shared.lastActivityAt {
+                        Text(String(localized: "时间:\(ts.formatted(date: .omitted, time: .standard))", locale: locale))
+                            .font(.system(size: 10))
+                            .foregroundStyle(Ink.fgDim)
+                            .padding(.top, 2)
+                    }
+
+                    // P1 retry queue:让用户清楚知道有多少条 mirror 待重发
+                    let pending = TeamDataMirrorService.shared.pendingRetryCount
+                    if pending > 0 {
+                        Divider().padding(.vertical, 4)
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock.arrow.circlepath")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Ink.amber)
+                            Text(String(localized: "待重发:\(pending) 条", locale: locale))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(Ink.fg)
+                        }
+                        Text(String(localized: "网络恢复后下次进入团队页 / 报告页会自动重发。也可点右上角刷新按钮立刻重试。",
+                                    locale: locale))
+                            .font(.system(size: 10))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                }
+                .padding(.vertical, 6)
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "stethoscope")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                    Text(String(localized: "同步诊断", locale: locale))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Ink.fg2)
+                    // 待重发数量徽章 — 折叠态也能看到 X 条未同步
+                    let pending = TeamDataMirrorService.shared.pendingRetryCount
+                    if pending > 0 {
+                        Text("\(pending)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Ink.bg)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Ink.amber))
+                    }
+                }
+            }
+        } footer: {
+            SectionFooter(String(localized: "同步异常时展开,截图给开发反馈。", locale: locale))
+        }
+    }
+
     @ViewBuilder
     private var createSection: some View {
         Section {
@@ -285,14 +386,19 @@ struct TeamManagementView: View {
             return
         }
 
-        // 1. 本地建 Team + Owner 成员
+        // 1. 本地建 Team + Owner 成员。
+        // displayName 用「设置 → 我是 → 我的名字」,空就 fallback 用 userID 前 8 位。
+        // 不再用 hardcode "我(Owner)" — Member 端拉到这条 TeamMember 时看到"我(Owner)"会困惑。
         let team = Team(name: name, ownerUserID: currentUserID)
         modelContext.insert(team)
 
+        let trimmedName = UserProfileManager.shared.userDisplayName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let ownerDisplay = trimmedName.isEmpty ? String(currentUserID.prefix(8)) : trimmedName
         let ownerMember = TeamMember(
             teamID: team.id,
             userID: currentUserID,
-            displayName: String(localized: "我(Owner)", locale: locale),
+            displayName: ownerDisplay,
             email: "",
             role: .owner
         )
@@ -309,6 +415,16 @@ struct TeamManagementView: View {
         do {
             let (share, container) = try await TeamCloudKitService.shared.createTeamOnCloud(team: team)
             try? modelContext.save()  // cloudShareRecordName 已经写回 team
+
+            // **关键**:Owner 自己的 TeamMember 也要推到 zone — 否则 Member 接受邀请拉 zone records
+            // 只有 Team CKRecord 没 Owner TeamMember,Member 端永远看不到 Owner 的名字 / 信息。
+            do {
+                try await TeamCloudKitService.shared.addMemberOnCloud(member: ownerMember)
+            } catch {
+                // 推 owner member 失败不阻塞(Owner 本地有 record,fetchAndSyncAll 下次会重推)
+                print("[CreateTeam] push owner member failed:", error.localizedDescription)
+            }
+
             // 3. 立刻弹 UICloudSharingController 让 owner 发邀请
             pendingSharingControllerInput = SharingControllerInput(share: share, container: container)
         } catch {
@@ -320,31 +436,17 @@ struct TeamManagementView: View {
         }
     }
 
+    /// 邀请新成员。**不再** 本地写占位 TeamMember(userID="")+ 不再 push placeholder 到 cloud —
+    /// 之前会导致:Owner 输入名字"Jamie",Member 实际接受时用自己「我的名字」"JamieSmith" 再
+    /// register 一条 → 同 team 出现两条 Jamie(一占位 + 一真的)。修法:UICloudSharingController
+    /// 邀请 + Member 端 acceptShareInvitation 自动 ensureSelfMemberRecord 写权威 record。
+    /// name + email 输入框只是用户心智上的"邀请清单",不真写 model。
     private func inviteMember(team: Team, name: String, email: String) async {
-        let member = TeamMember(
-            teamID: team.id,
-            userID: "",  // 待对方接受 share 后由 metadata 回填(目前留空,只作本地占位)
-            displayName: name,
-            email: email,
-            role: .engineer
-        )
-        modelContext.insert(member)
-        try? modelContext.save()
-
-        do {
-            try await TeamCloudKitService.shared.addMemberOnCloud(member: member)
-        } catch {
-            modelContext.delete(member)
-            try? modelContext.save()
-            operationError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            return
-        }
-
-        // 需要把 CKShare 弹出来让 owner 把 share URL 发给该 email(因为 CKShare 是 zone-level,
-        // 邀请是通过 share URL 发布的,不能自动给 email 发,user 自己点系统 share sheet 选 channel)。
         if let shareName = team.cloudShareRecordName {
             await openShareSheet(for: team, shareRecordName: shareName)
         }
+        // name + email 当前只用于 UI hint(也不再发送任何 email/notify — 真邀请走 UICloudSharingController)
+        _ = name; _ = email
     }
 
     private func openShareSheet(for team: Team, shareRecordName: String) async {
@@ -370,28 +472,55 @@ struct TeamManagementView: View {
         }
     }
 
+    /// Owner 端移除成员。**数据流**:
+    /// 1. 删云端 zone 里该成员的 TeamMember CKRecord
+    /// 2. 尝试从 CKShare.participants 撤销该成员的 share access(best-effort,iCloud 端延迟生效)
+    /// 3. 删本地 SwiftData TeamMember
+    ///
+    /// **真实限制**:即使 CKShare 撤销成功,Member 设备的 sharedDB cache 在他主动 fetch
+    /// 前看起来还能访问。彻底"踢人"的语义需要 Owner 解散重建团队,这是 CKShare 的限制。
+    /// 失败时云端先回滚不可能(modifyRecords 已部分提交),所以失败也走本地删 — 至少保持
+    /// "我看不到这人了" 的 UX。下次 fetchAndSyncAll 如果发现 record 还在云端,会重新拉回本地
+    /// (这是正常的"未真正撤销"反馈)。
     private func removeMember(_ member: TeamMember) async {
+        guard let team = currentTeam, team.isOwner(currentUserID: currentUserID) else { return }
+        let userIDForRevoke = member.userID
+        do {
+            try await TeamCloudKitService.shared.removeMemberOnCloud(member: member)
+        } catch {
+            operationError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            // 继续本地删 — 见 doc 上面的解释
+        }
+        // 尝试撤销 share access(best-effort,失败不阻断)
+        await TeamCloudKitService.shared.tryRevokeShareParticipant(team: team, memberUserID: userIDForRevoke)
         modelContext.delete(member)
         try? modelContext.save()
-        // TODO: 同步删 CKRecord(目前只删本地,CKShare 的 participant remove
-        // 需要通过 CKShare API 单独做,留 v1.2.x 补)
     }
 
+    /// Member 端离开团队。**数据流**:
+    /// - 本地:清 Team + TeamMember + UserDefaults team.* 缓存(token / sharedZoneOwnerName /
+    ///   selfMemberID / selfPushed)— 走 clearLocalTeamMirror。
+    /// - 云端:**不删** Owner 的 share zone(没权限,且 zone 是 Owner 资产)。
+    ///   理想做法是调 `CKContainer.shared.unshareCloudKitContainer(...)` 让 Member 主动放弃 share,
+    ///   但 iOS 没暴露该 API。我们只能让 Member 本地不再 fetch,share access 在 Member 接受新邀请前
+    ///   仍然技术上存在。UI 已通过文案说明。
+    ///
+    /// 后果:
+    /// - Member 看不到团队任何数据(本地 Team 软删 + token 清,下次 fetch 找不到也不再尝试)
+    /// - Owner 仍能在自己的 share.participants 看到这个 Member(必须手动 removeMember 才能下掉)
     private func leaveTeam() async {
         guard let team = currentTeam else { return }
-        // Member 端:删自己 + 删本地 team mirror。
-        // 云端 CKShare 还在(zone 是 owner 的),只是该 member 不再 sync。
-        // 严谨做法:让 member 调 CKAcceptSharesOperation 的 remove,但简化版直接清本地。
-        let myMembers = teamMembers.filter { $0.userID == currentUserID }
-        for m in myMembers { modelContext.delete(m) }
-        modelContext.delete(team)
-        try? modelContext.save()
+        TeamDataMirrorService.shared.clearLocalTeamMirror(team: team, in: modelContext)
     }
 
+    /// Owner 端解散团队。**数据流**:
+    /// 1. 删云端 zone(连带 CKShare + 所有 record)— Member 下次 fetch 拿到 zoneNotFound,
+    ///    走 clearLocalTeamMirror 自己清本地
+    /// 2. 本地:删 Team + TeamMember + 清 UserDefaults team.* 缓存
     private func dissolveTeam() async {
         guard let team = currentTeam,
               team.isOwner(currentUserID: currentUserID) else { return }
-        // Owner 端:删 cloud zone(连带 CKShare + records)+ 清本地。
+        let teamID = team.id
         do {
             try await TeamCloudKitService.shared.deleteTeamZoneOnCloud(team: team)
         } catch {
@@ -401,6 +530,7 @@ struct TeamManagementView: View {
         for m in teamMembers { modelContext.delete(m) }
         modelContext.delete(team)
         try? modelContext.save()
+        TeamDataMirrorService.shared.purgeTeamLocalCaches(teamID: teamID)
     }
 }
 

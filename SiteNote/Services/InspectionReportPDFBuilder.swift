@@ -14,7 +14,7 @@
 //    - 图钉缩略图:Note.floorPlanRef + floorPlanX/Y 三个字段都非空,在 caption
 //      右侧渲染 48pt 圆形 mini floor plan + 红点。
 //
-//  参考 QDE Engineering 的 11 页 Site Visit Report 格式:
+//  参考通用 Site Visit Report 格式:
 //    - 第 1 页(封面):公司 Logo + 标题 + Header 表 + 5 条 disclaimers + 签字栏
 //      (注:主照片部分已在 v1.x 移除——封面纯文档化,所有照片走第 2+ 页网格)
 //    - 第 2 页起:详细照片 2x2 网格(每页 4 cell),caption 在下方,
@@ -84,10 +84,11 @@ enum InspectionReportPDFBuilder {
                 var cursor = PDFCursor(pageRect: pageRect, margin: margin, context: ctx)
                 cursor.beginPage()
 
+                // v1.6 (en-v1):合并 cover 为单页:大标题 + 公司副标 + 7 行 KV 表 + (可选) DISCLAIMERS。
+                // 用户要求:disclaimer 由用户自己加,没加就不显示这段。
                 drawCoverHeader(cursor: &cursor, report: report)
-                drawHeaderTable(cursor: &cursor, report: report)
-                drawDisclaimers(cursor: &cursor, report: report)
-                drawCoverSignature(cursor: &cursor, report: report)
+                drawCoverInfoTable(cursor: &cursor, report: report)
+                drawDisclaimersIfAny(cursor: &cursor, report: report)
                 drawPageFooter(context: ctx, pageRect: pageRect, margin: margin, pageNumber: 1)
 
                 // ---- 第 2 页起:每条 Note 独占连续页面 ----
@@ -160,13 +161,17 @@ enum InspectionReportPDFBuilder {
         return outputURL
     }
 
-    // MARK: - Cover: Logo + 公司 + 标题
+    // MARK: - Cover: Logo + 标题 + 公司副标
+    //
+    // v1.6 (en-v1):重排顺序 — 先大标题"SITE INSPECTION REPORT",再公司名 + ABN 副标,
+    // 最后由 drawCoverInfoTable 画 7 行单列 KV 表(项目 / 项目号 / 工地地址 / 客户 / 巡检类型 /
+    // 巡检人 / 工地代表)。logo 仍在右上(若 BrandingStorage 提供)。
 
     @MainActor
     private static func drawCoverHeader(cursor: inout PDFCursor, report: InspectionReport) {
-        // Logo:右上,最大 60x60(UserDefaults 没设 → BrandingStorage 返回 nil,不画)
+        // Logo:右上,最大 50x50
         if let logo = BrandingStorage.loadLogo() {
-            let maxEdge: CGFloat = 60
+            let maxEdge: CGFloat = 50
             let scale = min(maxEdge / logo.size.width, maxEdge / logo.size.height, 1.0)
             let drawW = logo.size.width * scale
             let drawH = logo.size.height * scale
@@ -179,38 +184,148 @@ enum InspectionReportPDFBuilder {
             logo.draw(in: logoRect)
         }
 
-        // 公司名 + ABN(从 UserDefaults 读;两个都空就用 "SiteNote" 兜底当公司名)
+        // 日期 + 报告号(右上,logo 下方)
+        let topRightAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10),
+            .foregroundColor: UIColor.darkGray
+        ]
+        let dateStr = isoYMD(report.reportDate)
+        let dateText = dateStr as NSString
+        let dateSize = dateText.size(withAttributes: topRightAttrs)
+        dateText.draw(
+            at: CGPoint(
+                x: cursor.pageRect.width - cursor.margin - dateSize.width,
+                y: cursor.margin + 56
+            ),
+            withAttributes: topRightAttrs
+        )
+        let reportNo = report.reportNo.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !reportNo.isEmpty {
+            let reportText = reportNo as NSString
+            let reportSize = reportText.size(withAttributes: topRightAttrs)
+            reportText.draw(
+                at: CGPoint(
+                    x: cursor.pageRect.width - cursor.margin - reportSize.width,
+                    y: cursor.margin + 70
+                ),
+                withAttributes: topRightAttrs
+            )
+        }
+
+        // 大标题:居中,粗黑
+        cursor.skip(60)  // 让出顶部 logo / date 空间
+        let title = String(localized: "SITE INSPECTION REPORT", locale: AppLanguageManager.currentLocale) as NSString
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 22, weight: .bold),
+            .foregroundColor: UIColor.black
+        ]
+        let titleSize = title.size(withAttributes: titleAttrs)
+        title.draw(
+            at: CGPoint(
+                x: (cursor.pageRect.width - titleSize.width) / 2,
+                y: cursor.y
+            ),
+            withAttributes: titleAttrs
+        )
+        cursor.y += titleSize.height + 4
+
+        // 公司副标(居中)— 公司名 · ABN 一行
         let rawCompanyName = (UserDefaults.standard.string(forKey: "settings.engineerCompanyName") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let abn = (UserDefaults.standard.string(forKey: "settings.engineerABN") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let companyName = rawCompanyName.isEmpty ? "SiteNote" : rawCompanyName
-
-        cursor.drawText(
-            companyName,
-            font: .systemFont(ofSize: 13, weight: .semibold),
-            color: .black
-        )
+        let companyName = rawCompanyName.isEmpty ? "SiteNotes" : rawCompanyName
+        let subtitle: String
         if !abn.isEmpty {
-            cursor.drawText(
-                String(localized: "ABN: \(abn)", locale: AppLanguageManager.currentLocale),
-                font: .systemFont(ofSize: 10),
-                color: .darkGray
+            subtitle = "\(companyName) · ABN \(abn)"
+        } else {
+            subtitle = companyName
+        }
+        let subAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 11),
+            .foregroundColor: UIColor.darkGray
+        ]
+        let subNS = subtitle as NSString
+        let subSize = subNS.size(withAttributes: subAttrs)
+        subNS.draw(
+            at: CGPoint(
+                x: (cursor.pageRect.width - subSize.width) / 2,
+                y: cursor.y
+            ),
+            withAttributes: subAttrs
+        )
+        cursor.y += subSize.height + 16
+        cursor.drawDivider()
+        cursor.skip(14)
+    }
+
+    // MARK: - Cover: 7 行单列 KV 表
+    //
+    // v1.6 (en-v1):取代原 4x2 双列 header 表。简洁竖排,每行 22pt。
+    // 字段:Project / Project No. / Site / Client / Inspection / Conducted by / Site Rep
+
+    @MainActor
+    private static func drawCoverInfoTable(cursor: inout PDFCursor, report: InspectionReport) {
+        let labelColor = UIColor.darkGray
+        let labelFont = UIFont.systemFont(ofSize: 10.5, weight: .semibold)
+        let valueFont = UIFont.systemFont(ofSize: 11.5)
+        let labelAttrs: [NSAttributedString.Key: Any] = [
+            .font: labelFont, .foregroundColor: labelColor
+        ]
+        let valueAttrs: [NSAttributedString.Key: Any] = [
+            .font: valueFont, .foregroundColor: UIColor.black
+        ]
+
+        // Site Rep 来源:优先用新字段 siteRepName + Title + Company(从邮件收件人 prefill),
+        // 空时兜底到 legacy siteRepStatus(老报告兼容)。
+        let siteRepValue: String = {
+            let name = report.siteRepName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = report.siteRepTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            let company = report.siteRepCompany.trimmingCharacters(in: .whitespacesAndNewlines)
+            var parts: [String] = []
+            if !name.isEmpty { parts.append(name) }
+            if !title.isEmpty { parts.append(title) }
+            if !company.isEmpty { parts.append(company) }
+            if !parts.isEmpty { return parts.joined(separator: " · ") }
+            return report.siteRepStatus.trimmingCharacters(in: .whitespacesAndNewlines)
+        }()
+
+        let rows: [(String, String)] = [
+            (String(localized: "Project", locale: AppLanguageManager.currentLocale), report.project),
+            (String(localized: "Project No.", locale: AppLanguageManager.currentLocale), report.projectNo),
+            (String(localized: "Site", locale: AppLanguageManager.currentLocale), report.location),
+            (String(localized: "Client", locale: AppLanguageManager.currentLocale), report.client),
+            (String(localized: "Inspection", locale: AppLanguageManager.currentLocale), report.inspectionType),
+            (String(localized: "Conducted by", locale: AppLanguageManager.currentLocale), report.engineerName),
+            (String(localized: "Site Rep", locale: AppLanguageManager.currentLocale), siteRepValue)
+        ]
+
+        let rowHeight: CGFloat = 22
+        cursor.ensureRoom(CGFloat(rows.count) * rowHeight + 8)
+
+        let labelColWidth: CGFloat = 110
+        for (lbl, val) in rows {
+            let y = cursor.y
+            (lbl as NSString).draw(
+                at: CGPoint(x: cursor.margin, y: y),
+                withAttributes: labelAttrs
             )
+            let valX = cursor.margin + labelColWidth
+            let valRect = CGRect(
+                x: valX, y: y - 1,
+                width: cursor.contentWidth - labelColWidth,
+                height: rowHeight
+            )
+            (val as NSString).draw(in: valRect, withAttributes: valueAttrs)
+            cursor.y += rowHeight
         }
         cursor.skip(8)
-
-        // 大标题(蓝色)
-        let titleColor = UIColor(red: 0x1A / 255.0, green: 0x4F / 255.0, blue: 0xA0 / 255.0, alpha: 1)
-        cursor.drawText(
-            String(localized: "Site Visit Report / Site Instruction", locale: AppLanguageManager.currentLocale),
-            font: .systemFont(ofSize: 24, weight: .semibold),
-            color: titleColor
-        )
-        cursor.skip(12)
         cursor.drawDivider()
-        cursor.skip(10)
+        cursor.skip(8)
     }
+
+    /// Deprecated v1.6:原 4x2 双列 header 表 — 已被 `drawCoverInfoTable` 替代。
+    /// 保留代码但不再调用(如要回滚,把 drawCoverHeader / Disclaimers / Signature 再开启)。
 
     // MARK: - Cover: Header 表(两列)
 
@@ -280,6 +395,30 @@ enum InspectionReportPDFBuilder {
     }
 
     // MARK: - Cover: Disclaimers
+
+    /// v1.6 (en-v1):wrapper — 仅在用户有 disclaimer 时绘制。
+    /// `report.disclaimerText` 非空 → 用 report-level 自定义;否则用 DisclaimerStorage.current()。
+    /// 两边都空 → 跳过整个 DISCLAIMERS 段(不画 heading 也不留间距)。
+    @MainActor
+    private static func drawDisclaimersIfAny(cursor: inout PDFCursor, report: InspectionReport) {
+        let items = disclaimerItems(for: report)
+        guard !items.isEmpty else { return }
+        cursor.skip(8)
+        cursor.drawDivider()
+        cursor.skip(10)
+        drawDisclaimers(cursor: &cursor, report: report)
+    }
+
+    private static func disclaimerItems(for report: InspectionReport) -> [String] {
+        if let custom = report.disclaimerText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !custom.isEmpty {
+            return custom
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        return DisclaimerStorage.current()
+    }
 
     @MainActor
     private static func drawDisclaimers(cursor: inout PDFCursor, report: InspectionReport) {
@@ -453,27 +592,72 @@ enum InspectionReportPDFBuilder {
         )
 
         if continuation {
+            // 续页只画 PHOTOS heading + grid
+            drawSectionHeading(
+                cursor: &cursor,
+                text: "PHOTOS (" +
+                    String(localized: "continued", locale: AppLanguageManager.currentLocale) +
+                    ")"
+            )
             drawPhotosForCount(cursor: &cursor, photos: photos)
             return
         }
 
-        // 1. 大 A3 图纸(顶部,满宽,固定 √2:1 比例)
-        drawFloorPlanFullWidth(cursor: &cursor, note: note)
-
-        // 2. 描述
-        let trimmed = caption.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            cursor.drawWrappedText(trimmed, font: .systemFont(ofSize: 11), lineHeight: 14)
+        // 1. Floor plan 缩到 230×163 左对齐(v1.6 en-v1)
+        let hasPin = (note.floorPlanRef ?? "").isEmpty == false
+            && note.floorPlanX != nil
+            && note.floorPlanY != nil
+        if hasPin {
+            drawFloorPlanFullWidth(cursor: &cursor, note: note)
+            cursor.drawDivider()
             cursor.skip(10)
         }
 
-        // 3. 照片占满剩余区域
+        // 2. DESCRIPTION 段 — 带 heading,跟 Site Diary 统一
+        drawSectionHeading(
+            cursor: &cursor,
+            text: String(localized: "DESCRIPTION", locale: AppLanguageManager.currentLocale)
+        )
+        let trimmed = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        let descText: String
+        if trimmed.isEmpty {
+            descText = String(localized: "(only audio / photos)", locale: AppLanguageManager.currentLocale)
+        } else {
+            descText = trimmed
+        }
+        cursor.drawWrappedText(descText, font: .systemFont(ofSize: 13), lineHeight: 16)
+        cursor.skip(10)
+        cursor.drawDivider()
+        cursor.skip(10)
+
+        // 3. PHOTOS 段 — 带 heading + 自适应 1/2/3-4 满高
         if !photos.isEmpty {
+            let totalPhotos = note.photoPaths.count
+            let headingLabel = String(
+                localized: "PHOTOS  (\(totalPhotos))",
+                locale: AppLanguageManager.currentLocale
+            )
+            drawSectionHeading(cursor: &cursor, text: headingLabel)
             drawPhotosForCount(cursor: &cursor, photos: photos)
         }
     }
 
-    /// 顶部满宽 A3 图纸。宽 = contentWidth,高 = 宽 / √2 ≈ 0.707×宽。
+    /// v1.6 (en-v1):小灰字 section heading(DESCRIPTION / PHOTOS),跟 Site Diary 同口径。
+    @MainActor
+    private static func drawSectionHeading(cursor: inout PDFCursor, text: String) {
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: UIColor.darkGray
+        ]
+        (text as NSString).draw(
+            at: CGPoint(x: cursor.margin, y: cursor.y),
+            withAttributes: attrs
+        )
+        cursor.y += 16
+    }
+
+    /// v1.6 (en-v1):缩到 230×163(A3 √2 横向半宽)左对齐,跟 Site Diary 一致。
+    /// 下方左对齐 plan 名字。
     @MainActor
     private static func drawFloorPlanFullWidth(cursor: inout PDFCursor, note: Note) {
         let hasPin = (note.floorPlanRef ?? "").isEmpty == false
@@ -481,9 +665,8 @@ enum InspectionReportPDFBuilder {
             && note.floorPlanY != nil
         guard hasPin else { return }
 
-        let aspect: CGFloat = 420.0 / 297.0   // A3 横向
-        let planW = cursor.contentWidth
-        let planH = planW / aspect
+        let planW: CGFloat = 230
+        let planH: CGFloat = planW * (297.0 / 420.0)  // A3 横向 ≈ 163
 
         let planRect = CGRect(
             x: cursor.margin,
@@ -492,13 +675,28 @@ enum InspectionReportPDFBuilder {
             height: planH
         )
         drawFloorPlanPin(
+            planID: note.floorPlanID,
             planName: note.floorPlanRef ?? "",
             normalizedX: note.floorPlanX ?? 0.5,
             normalizedY: note.floorPlanY ?? 0.5,
             in: planRect,
             siteTag: note.siteTag
         )
-        cursor.y += planH + 12
+        cursor.y += planH + 4
+        // Plan 名字(左对齐小灰字)
+        let planName = note.floorPlanRef ?? ""
+        if !planName.isEmpty {
+            let nameAttrs: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 10),
+                .foregroundColor: UIColor.darkGray
+            ]
+            (planName as NSString).draw(
+                at: CGPoint(x: cursor.margin, y: cursor.y),
+                withAttributes: nameAttrs
+            )
+            cursor.y += 14
+        }
+        cursor.skip(8)
     }
 
     /// 照片区:根据张数自适应。1=hero、2=1x2、3-4=2x2;占满剩余高度。
@@ -537,7 +735,9 @@ enum InspectionReportPDFBuilder {
     }
 
     /// 页面顶部 header:左侧 #N 大字 + 右侧时间戳 + 下方分割线。
-    /// 续页:#N (cont.) 紧凑 16pt,无时间戳。
+    /// v1.6 (en-v1):跟 Site Diary 统一 — 黑色 16pt 纯数字 "1" / "2 — continued"。
+    /// 不再画右上时间戳 + 工地 tag(信息已在 cover 表里)。
+    /// 隐患时 title 变红色。
     @MainActor
     private static func drawNotePageHeader(
         cursor: inout PDFCursor,
@@ -545,44 +745,32 @@ enum InspectionReportPDFBuilder {
         note: Note,
         continuation: Bool
     ) {
-        let titleBlue = UIColor(red: 0x1A / 255.0, green: 0x4F / 255.0, blue: 0xA0 / 255.0, alpha: 1)
-        let indexStr = continuation
-            ? "#\(noteIndex) (cont.)"
-            : "#\(noteIndex)"
-        let indexFont = UIFont.monospacedDigitSystemFont(
-            ofSize: continuation ? 16 : 26,
-            weight: .bold
-        )
-        let indexAttrs: [NSAttributedString.Key: Any] = [
-            .font: indexFont,
-            .foregroundColor: titleBlue
-        ]
-        let indexSize = (indexStr as NSString).size(withAttributes: indexAttrs)
-        (indexStr as NSString).draw(
-            at: CGPoint(x: cursor.margin, y: cursor.y),
-            withAttributes: indexAttrs
-        )
+        let titleColor = note.isHazard ? UIColor.systemRed : UIColor.black
 
-        if !continuation {
-            // 右上:时间戳 + 工地 tag
-            let timeStr = headerRightText(for: note)
-            let timeAttrs: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 10),
-                .foregroundColor: UIColor.darkGray
-            ]
-            let timeSize = (timeStr as NSString).size(withAttributes: timeAttrs)
-            (timeStr as NSString).draw(
-                at: CGPoint(
-                    x: cursor.margin + cursor.contentWidth - timeSize.width,
-                    y: cursor.y + (indexSize.height - timeSize.height) - 2
-                ),
-                withAttributes: timeAttrs
-            )
+        var titleParts: [String] = ["\(noteIndex)"]
+        if note.isHazard {
+            titleParts.append("🚨 " + String(localized: "Hazard", locale: AppLanguageManager.currentLocale))
         }
-
-        cursor.y += indexSize.height + (continuation ? 4 : 6)
+        if let tag = note.otherTags.first, !tag.isEmpty {
+            titleParts.append(tag)
+        }
+        var title = titleParts.joined(separator: " · ")
+        if continuation {
+            title += "  — " + String(localized: "continued", locale: AppLanguageManager.currentLocale)
+        }
+        let titleFont = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: titleFont,
+            .foregroundColor: titleColor
+        ]
+        let titleSize = (title as NSString).size(withAttributes: titleAttrs)
+        (title as NSString).draw(
+            at: CGPoint(x: cursor.margin, y: cursor.y),
+            withAttributes: titleAttrs
+        )
+        cursor.y += titleSize.height + 6
         cursor.drawDivider()
-        cursor.skip(8)
+        cursor.skip(10)
     }
 
     /// "10:42 · 工地 20"。
@@ -665,14 +853,16 @@ enum InspectionReportPDFBuilder {
     /// 矩形 mini floor plan 缩略图,大尺寸 aspect-fit + 红色十字 + 双环高亮。
     /// 之前是 48pt 圆形 + 3pt 红点,用户反馈"图钉看不出位置";现在改成 110pt 矩形,
     /// aspect-fit 完整显示图纸(不裁切),并以 12pt 红色十字 + 16pt/24pt 双圈高亮标记位置。
+    /// **Codex#8**:优先按 planID(UUID)查找,改名后不丢图;无 ID 时 fallback name。
     private static func drawFloorPlanPin(
+        planID: UUID?,
         planName: String,
         normalizedX: Double,
         normalizedY: Double,
         in rect: CGRect,
         siteTag: String?
     ) {
-        guard let plan = FloorPlansStorage.find(name: planName, siteTag: siteTag),
+        guard let plan = FloorPlansStorage.resolve(id: planID, name: planName, siteTag: siteTag),
               let url = FloorPlansStorage.absoluteURL(forRelative: plan.imageRelativePath),
               let image = UIImage(contentsOfFile: url.path) else {
             return
@@ -779,16 +969,9 @@ enum InspectionReportPDFBuilder {
 
     // MARK: - 静态文案
 
-    /// 默认 5 条 disclaimers(英文原文,沿用 QDE 模板)。
-    /// 注:DisclaimerStorage 也有一份;这里保留一个独立 fallback,
-    /// 避免 Storage 异常时封面变空。
-    private static let defaultDisclaimers: [String] = [
-        "This inspection does not include the foundation material and ground stability including: excavations, cuttings, batters and stabilizing elements such as soil nails, rock bolts and ground anchors etc. It is the builder's responsibility to have the Geotechnical engineer inspect and approve prior to placing concrete.",
-        "This inspection does not include the formwork, formwork support and back-propping. It has not been inspected and should be separately certified by an experienced formwork engineer.",
-        "This inspection does not include epoxy grouted bars, chemical or expansion anchors. The correct installation of these items is the responsibility of the builder.",
-        "Reinforcement inspections are subject to final clean out of formwork or excavation and maintaining specified cover during placement of concrete.",
-        "The builder must rectify the defects listed in this report as a contractual, Work Health and Safety, building certification requirement."
-    ]
+    /// v1.6 (en-v1):不再 ship 任何默认 disclaimer(避免泄露公司模板措辞)。
+    /// 用户在 Settings → 默认免责声明 自己加;`drawDisclaimersIfAny` 没数据就跳过整段。
+    private static let defaultDisclaimers: [String] = []
 
     // MARK: - Utilities
 

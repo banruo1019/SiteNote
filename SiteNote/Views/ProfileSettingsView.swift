@@ -12,10 +12,13 @@ import UIKit
 struct ProfileSettingsView: View {
     @State private var manager = UserProfileManager.shared
     @State private var pendingSelection: ProfileKind
+    @State private var editedName: String
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var nameFocused: Bool
 
     init() {
         self._pendingSelection = State(initialValue: UserProfileManager.shared.current)
+        self._editedName = State(initialValue: UserProfileManager.shared.userDisplayName)
     }
 
     var body: some View {
@@ -33,6 +36,35 @@ struct ProfileSettingsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
+
+                // 我的名字 — 巡检报告 engineer / 签字字段从这里读
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("我的名字")
+                        .font(.system(size: 12, weight: .semibold))
+                        .tracking(0.4)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Ink.fgDim)
+                    TextField("如 Sam / 张工", text: $editedName)
+                        .focused($nameFocused)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                        .font(.system(size: 15))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Ink.bg)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(nameFocused ? Ink.fg : Ink.line, lineWidth: nameFocused ? 1.5 : 1)
+                        )
+                        .onChange(of: editedName) { _, newValue in
+                            // 实时写盘:用户输入就同步,新巡检 / 设置就生效
+                            manager.userDisplayName = newValue
+                        }
+                    Text("巡检报告默认用这个名字填工程师签字。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                }
+                .padding(.horizontal, 16)
 
                 // 卡片选择器
                 ProfileSelectorView(selection: $pendingSelection, mode: .light)

@@ -22,17 +22,21 @@ enum PDFExportService {
     }
 
     /// 生成 PDF 并写到临时目录,返回 URL。
+    /// v1.6 (en-v1) 大改:
+    ///   • 封面改成 4 行 KV 表(Site / Date / Prepared by / Entries),无 summary
+    ///   • Per-note 砍 7 个 meta 行(位置/天气/工地/分派/合同/到期/状态)
+    ///   • 紧凑布局:一页可堆 5-6 条,floor plan 缩成 80pt 缩略图 + pin
     /// - Parameters:
     ///   - notes: 要导出的 note,按调用方顺序渲染(通常按 createdAt 升序)。
     ///   - startDate/endDate: 可选的日期范围,显示在封面。
-    ///   - title: PDF 封面大标题。
+    ///   - title: PDF 封面大标题(默认 "DAILY SITE DIARY")。
     ///   - includeCoverPage: 是否生成封面。单条分享时建议 false。
     ///   - filenamePrefix: 生成的 PDF 文件名前缀,默认 `SiteNote-Log`。
     static func generatePDF(
         notes: [Note],
         startDate: Date?,
         endDate: Date?,
-        title: String = String(localized: "SiteNote 巡检日志", locale: AppLanguageManager.currentLocale),
+        title: String = String(localized: "DAILY SITE DIARY", locale: AppLanguageManager.currentLocale),
         includeCoverPage: Bool = true,
         filenamePrefix: String = "SiteNote-Log"
     ) throws -> URL {
@@ -55,10 +59,7 @@ enum PDFExportService {
                         in: pageRect
                     )
                 }
-                for note in notes {
-                    context.beginPage()
-                    drawNotePage(context: context, note: note, in: pageRect)
-                }
+                drawNotesCompact(context: context, notes: notes, in: pageRect)
             }
         } catch {
             throw ExportError.renderFailed(error.localizedDescription)
@@ -77,6 +78,8 @@ enum PDFExportService {
         return f
     }()
 
+    /// v1.6 (en-v1):Daily Site Diary 封面 — 大标题 + 工地名 + 4 行 KV 表。
+    /// 取代原"日期范围 + 条数 + 导出时间"3 行流水文字。
     private static func drawCoverPage(
         context: UIGraphicsPDFRendererContext,
         title: String,
@@ -88,25 +91,386 @@ enum PDFExportService {
         context.beginPage()
 
         let leftMargin: CGFloat = 50
-        var y: CGFloat = 100
+        let contentWidth = pageRect.width - leftMargin * 2
 
-        drawText(title, at: CGPoint(x: leftMargin, y: y), fontSize: 32, bold: true)
-        y += 60
-
-        if let start = startDate, let end = endDate {
-            let startStr = rangeFormatter.string(from: start)
-            let endStr = rangeFormatter.string(from: end)
-            let range = String(localized: "日期范围: \(startStr)  —  \(endStr)", locale: AppLanguageManager.currentLocale)
-            drawText(range, at: CGPoint(x: leftMargin, y: y), fontSize: 16)
-            y += 30
+        // 顶部右上 Logo(若 BrandingStorage 提供)
+        if let logo = BrandingStorage.loadLogo() {
+            let maxEdge: CGFloat = 50
+            let scale = min(maxEdge / logo.size.width, maxEdge / logo.size.height, 1.0)
+            let drawW = logo.size.width * scale
+            let drawH = logo.size.height * scale
+            logo.draw(in: CGRect(
+                x: pageRect.width - leftMargin - drawW,
+                y: 50,
+                width: drawW, height: drawH
+            ))
         }
 
-        drawText(String(localized: "共 \(notes.count) 条速记", locale: AppLanguageManager.currentLocale), at: CGPoint(x: leftMargin, y: y), fontSize: 16)
-        y += 30
+        // 顶部右上日期
+        let topDateAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10),
+            .foregroundColor: UIColor.darkGray
+        ]
+        let mainDate = startDate ?? Date()
+        let dateOnly = DateFormatter()
+        dateOnly.locale = Locale(identifier: "en_AU")
+        dateOnly.dateStyle = .long
+        let dateStr = dateOnly.string(from: mainDate)
+        let dateText = dateStr as NSString
+        let dateSize = dateText.size(withAttributes: topDateAttrs)
+        dateText.draw(
+            at: CGPoint(
+                x: pageRect.width - leftMargin - dateSize.width,
+                y: 110
+            ),
+            withAttributes: topDateAttrs
+        )
 
-        let nowStr = rangeFormatter.string(from: Date())
-        let exportAt = String(localized: "导出时间: \(nowStr)", locale: AppLanguageManager.currentLocale)
-        drawText(exportAt, at: CGPoint(x: leftMargin, y: y), fontSize: 14, color: .darkGray)
+        var y: CGFloat = 160
+
+        // 大标题(居中,粗黑)
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 28, weight: .bold),
+            .foregroundColor: UIColor.black
+        ]
+        let titleNS = title as NSString
+        let titleSize = titleNS.size(withAttributes: titleAttrs)
+        titleNS.draw(
+            at: CGPoint(x: (pageRect.width - titleSize.width) / 2, y: y),
+            withAttributes: titleAttrs
+        )
+        y += titleSize.height + 6
+
+        // 工地名副标题(居中)— 取首条 Note 的 siteTag,空时用 "—"
+        let siteNameSubtitle = notes.compactMap { $0.siteTag }.first ?? "—"
+        let subAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 14),
+            .foregroundColor: UIColor.darkGray
+        ]
+        let subNS = siteNameSubtitle as NSString
+        let subSize = subNS.size(withAttributes: subAttrs)
+        subNS.draw(
+            at: CGPoint(x: (pageRect.width - subSize.width) / 2, y: y),
+            withAttributes: subAttrs
+        )
+        y += subSize.height + 28
+
+        // Divider
+        drawLine(from: CGPoint(x: leftMargin, y: y), to: CGPoint(x: leftMargin + contentWidth, y: y))
+        y += 20
+
+        // KV 4-row table
+        let dateRange: String
+        if let s = startDate, let e = endDate {
+            if Calendar.current.isDate(s, inSameDayAs: e) {
+                dateRange = dateOnly.string(from: s)
+            } else {
+                dateRange = "\(dateOnly.string(from: s)) — \(dateOnly.string(from: e))"
+            }
+        } else {
+            dateRange = dateOnly.string(from: mainDate)
+        }
+
+        let userName = (UserDefaults.standard.string(forKey: "settings.userProfile.displayName") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let companyName = (UserDefaults.standard.string(forKey: "settings.engineerCompanyName") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preparedBy: String = {
+            switch (userName.isEmpty, companyName.isEmpty) {
+            case (false, false): return "\(userName) · \(companyName)"
+            case (false, true):  return userName
+            case (true, false):  return companyName
+            default:             return "—"
+            }
+        }()
+
+        let photoCount = notes.reduce(0) { $0 + $1.photoPaths.count }
+        let entriesValue = String(localized: "\(notes.count) notes · \(photoCount) photos", locale: AppLanguageManager.currentLocale)
+
+        let kvRows: [(String, String)] = [
+            (String(localized: "Site", locale: AppLanguageManager.currentLocale), siteNameSubtitle),
+            (String(localized: "Date", locale: AppLanguageManager.currentLocale), dateRange),
+            (String(localized: "Prepared by", locale: AppLanguageManager.currentLocale), preparedBy),
+            (String(localized: "Entries", locale: AppLanguageManager.currentLocale), entriesValue)
+        ]
+        let labelAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: UIColor.darkGray
+        ]
+        let valueAttrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 12.5),
+            .foregroundColor: UIColor.black
+        ]
+        let labelColWidth: CGFloat = 110
+        let rowHeight: CGFloat = 24
+        for (lbl, val) in kvRows {
+            (lbl as NSString).draw(at: CGPoint(x: leftMargin, y: y), withAttributes: labelAttrs)
+            let valRect = CGRect(
+                x: leftMargin + labelColWidth, y: y - 1,
+                width: contentWidth - labelColWidth, height: rowHeight
+            )
+            (val as NSString).draw(in: valRect, withAttributes: valueAttrs)
+            y += rowHeight
+        }
+    }
+
+    // MARK: - Per-note one-page rendering (v1.6 en-v1 final)
+    //
+    // 用户明确要求:**一条 note 一页**,固定 4 段模板顺序:
+    //   ① TITLE        — 时间 · [🚨 Hazard] · tag
+    //   ② FLOOR PLAN   — 平面图 + pin(宽度同照片栅格 ≈ 460pt,aspect-fit 居中)
+    //   ③ DESCRIPTION  — 转写正文
+    //   ④ PHOTOS       — 2×2 grid 最多 4 张 / 页,>4 自动续页(标 "PHOTOS (continued)")
+    // 缺数据的段直接跳过(连分隔线一起省)。
+    // Page footer "[Company] · Page N":每页都画。
+
+    private static let topMargin: CGFloat = 50
+    private static let bottomMargin: CGFloat = 60   // 留给 footer
+    private static let sideMargin: CGFloat = 40
+
+    private static func drawNotesCompact(
+        context: UIGraphicsPDFRendererContext,
+        notes: [Note],
+        in pageRect: CGRect
+    ) {
+        guard !notes.isEmpty else { return }
+        var pageIndex = 1  // page 1 已是 cover;per-note 从 page 2 起
+        for (idx, note) in notes.enumerated() {
+            let noteIndex = idx + 1  // 1-based 序号
+            // 主页(TITLE + FLOOR PLAN + DESCRIPTION + 最多 4 张 PHOTOS)
+            context.beginPage()
+            pageIndex += 1
+            drawNoteFullPage(
+                context: context,
+                note: note,
+                noteIndex: noteIndex,
+                pageRect: pageRect,
+                photoOffset: 0,
+                isContinuation: false
+            )
+            drawPageFooter(in: pageRect, pageIndex: pageIndex)
+
+            // 续页(若照片 > 4 张):每页再画 4 张
+            var photoCursor = 4
+            while photoCursor < note.photoPaths.count {
+                context.beginPage()
+                pageIndex += 1
+                drawNoteFullPage(
+                    context: context,
+                    note: note,
+                    noteIndex: noteIndex,
+                    pageRect: pageRect,
+                    photoOffset: photoCursor,
+                    isContinuation: true
+                )
+                drawPageFooter(in: pageRect, pageIndex: pageIndex)
+                photoCursor += 4
+            }
+        }
+    }
+
+    /// 画一条 note 的整页内容。
+    /// v1.6 (en-v1):
+    ///   • TITLE 用 `noteIndex`(1, 2, 3...)代替时间戳
+    ///   • Floor plan 230×163(A3 √2 横向,半宽)左对齐
+    ///   • Photos 1/2/3-4 自适应满高(原图 aspect-fit,不强行 220×220)
+    private static func drawNoteFullPage(
+        context: UIGraphicsPDFRendererContext,
+        note: Note,
+        noteIndex: Int,
+        pageRect: CGRect,
+        photoOffset: Int,
+        isContinuation: Bool
+    ) {
+        let contentWidth = pageRect.width - sideMargin * 2
+        var y: CGFloat = topMargin
+
+        // === TITLE 行 ===
+        // 格式: "1 · 🚨 Hazard · 安全" (黑色 16pt;隐患时变红)
+        let titleColor = note.isHazard ? UIColor.systemRed : UIColor.black
+        var titleParts: [String] = ["\(noteIndex)"]
+        if note.isHazard {
+            titleParts.append("🚨 " + String(localized: "Hazard", locale: AppLanguageManager.currentLocale))
+        }
+        if let tag = note.otherTags.first, !tag.isEmpty {
+            titleParts.append(tag)
+        }
+        var title = titleParts.joined(separator: " · ")
+        if isContinuation {
+            title += "  — " + String(localized: "continued", locale: AppLanguageManager.currentLocale)
+        }
+        (title as NSString).draw(
+            at: CGPoint(x: sideMargin, y: y),
+            withAttributes: [
+                .font: UIFont.systemFont(ofSize: 16, weight: .semibold),
+                .foregroundColor: titleColor
+            ]
+        )
+        y += 24
+        drawLine(from: CGPoint(x: sideMargin, y: y), to: CGPoint(x: sideMargin + contentWidth, y: y))
+        y += 14
+
+        if !isContinuation {
+            // === FLOOR PLAN 段(如有 pin)— 230×163 左对齐 A3 横向比例 ===
+            let hasFloorPin = (note.floorPlanRef ?? "").isEmpty == false
+                && note.floorPlanX != nil
+                && note.floorPlanY != nil
+
+            if hasFloorPin,
+               let planName = note.floorPlanRef,
+               let xN = note.floorPlanX,
+               let yN = note.floorPlanY,
+               let plan = FloorPlansStorage.find(name: planName),
+               let planURL = FloorPlansStorage.absoluteURL(forRelative: plan.imageRelativePath),
+               let planImg = UIImage(contentsOfFile: planURL.path) {
+                let planW: CGFloat = 230
+                let planH: CGFloat = planW * (297.0 / 420.0)  // A3 √2 横向 ≈ 163
+                let planRect = CGRect(x: sideMargin, y: y, width: planW, height: planH)
+                drawFloorPlanWithPin(
+                    planImg,
+                    normalizedX: xN,
+                    normalizedY: yN,
+                    in: planRect,
+                    pinColor: pinUIColor(for: note)
+                )
+                y += planH + 4
+                // 平面图名(左对齐 plan 下方,小灰字)
+                let nameAttrs: [NSAttributedString.Key: Any] = [
+                    .font: UIFont.systemFont(ofSize: 10),
+                    .foregroundColor: UIColor.darkGray
+                ]
+                (planName as NSString).draw(
+                    at: CGPoint(x: sideMargin, y: y),
+                    withAttributes: nameAttrs
+                )
+                y += 14 + 10
+                drawLine(from: CGPoint(x: sideMargin, y: y), to: CGPoint(x: sideMargin + contentWidth, y: y))
+                y += 14
+            }
+
+            // === DESCRIPTION 段 ===
+            (String(localized: "DESCRIPTION", locale: AppLanguageManager.currentLocale) as NSString).draw(
+                at: CGPoint(x: sideMargin, y: y),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+                    .foregroundColor: UIColor.darkGray
+                ]
+            )
+            y += 16
+            let body = note.transcription.trimmingCharacters(in: .whitespacesAndNewlines)
+            let descText: String
+            if body.isEmpty {
+                descText = String(localized: "(only audio / photos)", locale: AppLanguageManager.currentLocale)
+            } else {
+                descText = body
+            }
+            let bodyHeight = drawWrappedText(
+                descText,
+                in: CGRect(x: sideMargin, y: y, width: contentWidth, height: 180),
+                fontSize: 13
+            )
+            y += bodyHeight + 14
+            drawLine(from: CGPoint(x: sideMargin, y: y), to: CGPoint(x: sideMargin + contentWidth, y: y))
+            y += 14
+        }
+
+        // === PHOTOS 段 — 1/2/3-4 自适应满高(原图 aspect-fit)===
+        let photoSlice = Array(note.photoPaths.dropFirst(photoOffset).prefix(4))
+        if !photoSlice.isEmpty {
+            let totalPhotos = note.photoPaths.count
+            let headingLabel: String
+            if isContinuation {
+                headingLabel = "PHOTOS (" +
+                    String(localized: "continued", locale: AppLanguageManager.currentLocale) +
+                    ")  \(photoOffset + 1)-\(min(photoOffset + 4, totalPhotos)) / \(totalPhotos)"
+            } else if totalPhotos > 0 {
+                headingLabel = String(localized: "PHOTOS  (\(totalPhotos))", locale: AppLanguageManager.currentLocale)
+            } else {
+                headingLabel = "PHOTOS"
+            }
+            (headingLabel as NSString).draw(
+                at: CGPoint(x: sideMargin, y: y),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 10, weight: .semibold),
+                    .foregroundColor: UIColor.darkGray
+                ]
+            )
+            y += 18
+
+            // 剩余可用高度 = 页底(留 footer)- 当前 y
+            let availableH = pageRect.height - bottomMargin - y
+            drawPhotosDynamicLayout(
+                photos: photoSlice,
+                in: CGRect(x: sideMargin, y: y, width: contentWidth, height: availableH)
+            )
+        }
+    }
+
+    /// 1/2/3-4 自适应布局:1 张满 hero,2 张 1×2 平分,3-4 张 2×2 grid。
+    /// 每张 aspect-fit,保留原图比例(不裁切)。
+    private static func drawPhotosDynamicLayout(photos: [String], in rect: CGRect) {
+        guard !photos.isEmpty else { return }
+        let availableW = rect.width
+        let availableH = rect.height
+        let gap: CGFloat = 8
+
+        switch photos.count {
+        case 1:
+            // 满 hero
+            if let url = PhotoStorage.absoluteURL(forRelative: photos[0]),
+               let img = UIImage(contentsOfFile: url.path) {
+                drawFittedImage(img, in: CGRect(x: rect.minX, y: rect.minY, width: availableW, height: availableH))
+            }
+        case 2:
+            // 1×2 横排,各占半宽
+            let cellW = (availableW - gap) / 2
+            for (i, path) in photos.enumerated() {
+                if let url = PhotoStorage.absoluteURL(forRelative: path),
+                   let img = UIImage(contentsOfFile: url.path) {
+                    let x = rect.minX + CGFloat(i) * (cellW + gap)
+                    drawFittedImage(img, in: CGRect(x: x, y: rect.minY, width: cellW, height: availableH))
+                }
+            }
+        default:
+            // 3-4 张:2×2 grid
+            let cellW = (availableW - gap) / 2
+            let cellH = (availableH - gap) / 2
+            for (i, path) in photos.prefix(4).enumerated() {
+                let col = i % 2
+                let row = i / 2
+                let x = rect.minX + CGFloat(col) * (cellW + gap)
+                let y = rect.minY + CGFloat(row) * (cellH + gap)
+                if let url = PhotoStorage.absoluteURL(forRelative: path),
+                   let img = UIImage(contentsOfFile: url.path) {
+                    drawFittedImage(img, in: CGRect(x: x, y: y, width: cellW, height: cellH))
+                }
+            }
+        }
+    }
+
+    /// Page footer: "[Company] · Page N"
+    private static func drawPageFooter(in pageRect: CGRect, pageIndex: Int) {
+        let companyName = (UserDefaults.standard.string(forKey: "settings.engineerCompanyName") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let label: String
+        if companyName.isEmpty {
+            label = String(localized: "Page \(pageIndex)", locale: AppLanguageManager.currentLocale)
+        } else {
+            label = "\(companyName) · " + String(localized: "Page \(pageIndex)", locale: AppLanguageManager.currentLocale)
+        }
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 9),
+            .foregroundColor: UIColor.lightGray
+        ]
+        let ns = label as NSString
+        let size = ns.size(withAttributes: attrs)
+        ns.draw(
+            at: CGPoint(
+                x: (pageRect.width - size.width) / 2,
+                y: pageRect.height - 30
+            ),
+            withAttributes: attrs
+        )
     }
 
     private static func drawNotePage(

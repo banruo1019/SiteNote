@@ -21,6 +21,13 @@ final class AppRouter {
     /// 待处理的 tab 切换请求。MainTabView 监听 → 消费 → 置 nil。
     var pendingTab: PendingTab?
 
+    /// v1.6 (en-v1):tab 切换时各 view 的 NavigationStack 应弹回 root。
+    /// MainTabView 在 selection change 时 bump 这个 counter;
+    /// 每个 tab 的根 view(RecordView / PMCalendarView / ReportsView 等)
+    /// 监听这个值,变化时 navPath = NavigationPath()。
+    /// 用 Int 而不是 Bool 避免"已经是 true 就不触发 onChange"的坑。
+    var popAllTrigger: Int = 0
+
     private init() {}
 
     struct PendingTab: Equatable {
@@ -35,5 +42,10 @@ final class AppRouter {
     /// 由 MainTabView 调,标记请求已被消费。
     func clear() {
         pendingTab = nil
+    }
+
+    /// MainTabView selection change 时调 — 通知所有 tab 弹回 root。
+    func popAllToRoot() {
+        popAllTrigger &+= 1  // 溢出回卷,只用来变化通知
     }
 }

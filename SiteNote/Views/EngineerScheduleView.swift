@@ -42,18 +42,9 @@ struct EngineerScheduleView: View {
     @State private var sessionManager = InspectionSessionManager.shared
     /// 顶部 banner 的"完成巡检"按下后弹 EndInspectionSheet。
     @State private var showsEndSheet: Bool = false
-    /// 当日详情段落切换:全部 / 仅日程 / 仅报告。
-    @State private var dayDetailScope: DayDetailScope = .all
     /// 点已关联报告的日程 → 跳报告详情。NavigationStack path-style 仍走旧 NavigationLink,
     /// 这里只是给 sheet/导航触发用,实际跳转走 navigationDestination(item:)。
     @State private var navigateToReportID: UUID? = nil
-
-    /// 当日详情段切换枚举。
-    enum DayDetailScope: String, CaseIterable, Hashable {
-        case all
-        case schedules
-        case reports
-    }
 
     /// 应用工地 filter 后的 schedules / reports。
     private var filteredSchedules: [SiteVisitSchedule] {
@@ -83,15 +74,17 @@ struct EngineerScheduleView: View {
                 Ink.bg.ignoresSafeArea()
                 VStack(spacing: 0) {
                     titleRow
+                    // v1.5:banner 移出 ScrollView,sticky 在 titleRow 下。
+                    // 之前放 ScrollView 内部导致用户滚到当日详情时看不见「正在巡检」状态,
+                    // 表现像「点开始巡检后跳走了」。session nil 时 banner 不占空间(EmptyView)。
+                    InspectionSessionBanner(onComplete: { _ in
+                        showsEndSheet = true
+                    })
+                    .padding(.horizontal, 24)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
                     ScrollView {
                         VStack(spacing: 0) {
-                            // v1.4:active session 时显示顶部 banner;点"完成巡检"弹 EndInspectionSheet
-                            InspectionSessionBanner(onComplete: { _ in
-                                showsEndSheet = true
-                            })
-                            .padding(.horizontal, 24)
-                            .padding(.bottom, 12)
-
                             monthHeader
                             calendarGrid
                             divider
@@ -124,6 +117,17 @@ struct EngineerScheduleView: View {
                         showsEndSheet = false
                     }
                 }
+            }
+            .task {
+                // P2 #200:三步**串行**,确保 scanAndNotify 用的是 fetch 完后的最新 allSchedules。
+                // 之前并发启动 scanAndNotify 用旧数据 → 漏检 Owner 刚分配的任务。
+                // 1) 自愈 ghost session(纯本地,瞬完)
+                sessionManager.validateOrCancel(in: modelContext)
+                // 2) 拉云端 share zone changes(await,确保 SwiftData 更新)
+                await TeamDataMirrorService.shared.fetchAndSyncAll(in: modelContext)
+                // 3) scan 已 fetch 后的 schedules,弹 local notification(SwiftData @Query 在
+                //    await 后下个 run loop 会刷新 allSchedules,scan 时拿到的是最新数据)
+                TeamAssignmentNotifier.shared.scanAndNotify(Array(allSchedules))
             }
         }
     }
@@ -205,8 +209,9 @@ struct EngineerScheduleView: View {
             let scheduleN = scheduleCount(on: date)
             let reportN = reportCount(on: date)
             let day = cal.component(.day, from: date)
-            // M1:今天 = 黑圆填充;选中(非今天)= 灰底圆;否则透明
-            let bgFill: Color = isToday ? Ink.fg : (isSelected ? Ink.card : .clear)
+            // M1:今天 = 黑圆填充 + 白字;选中(非今天)= 黑色 stroke 描边圆 + 黑字
+            // (老的 Ink.card 填充几乎是白色 0xFAFAF9 → 用户反馈"灰圆太浅看不清",
+            //  改成描边能清晰看出"我选了哪一天",同时不抢"今天 = 实心"的视觉位)。
             let textColor: Color = isToday ? Ink.bg : Ink.fg
 
             // dot 分色:先报告(黑/今天反色为白)再日程(蓝),总数 ≤ 3
@@ -220,11 +225,17 @@ struct EngineerScheduleView: View {
             } label: {
                 VStack(spacing: 3) {
                     ZStack {
-                        Circle()
-                            .fill(bgFill)
-                            .frame(width: 26, height: 26)
+                        if isToday {
+                            Circle()
+                                .fill(Ink.fg)
+                                .frame(width: 26, height: 26)
+                        } else if isSelected {
+                            Circle()
+                                .stroke(Ink.fg, lineWidth: 1.5)
+                                .frame(width: 26, height: 26)
+                        }
                         Text("\(day)")
-                            .font(.system(size: 13, weight: isToday ? .semibold : .medium))
+                            .font(.system(size: 13, weight: (isToday || isSelected) ? .semibold : .medium))
                             .monospacedDigit()
                             .foregroundStyle(textColor)
                     }
@@ -288,15 +299,6 @@ struct EngineerScheduleView: View {
         return filteredSchedules.contains { $0.scheduledDate >= start && $0.scheduledDate < end }
     }
 
-    private var reportsOnSelectedDate: [InspectionReport] {
-        let cal = Calendar.current
-        let dayStart = cal.startOfDay(for: selectedDate)
-        guard let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart) else { return [] }
-        return filteredReports
-            .filter { $0.reportDate >= dayStart && $0.reportDate < dayEnd }
-            .sorted { $0.reportDate < $1.reportDate }
-    }
-
     private var dayDetailSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             // 日期主标题:周三 5 月 17 · 今天
@@ -314,66 +316,19 @@ struct EngineerScheduleView: View {
             }
             .padding(.horizontal, 24)
 
-            // 段落 segmented:全部 / 日程 N / 报告 N
-            Picker("", selection: $dayDetailScope) {
-                Text(String(localized: "全部", locale: AppLanguageManager.currentLocale))
-                    .tag(DayDetailScope.all)
-                Text(scopeLabel(
-                    base: String(localized: "日程", locale: AppLanguageManager.currentLocale),
+            // 当日巡检日程 — 单一 section,直接展示
+            VStack(alignment: .leading, spacing: 6) {
+                sectionMiniHeader(
+                    String(localized: "当日巡检日程", locale: AppLanguageManager.currentLocale),
                     count: schedulesOnSelectedDate.count
-                ))
-                    .tag(DayDetailScope.schedules)
-                Text(scopeLabel(
-                    base: String(localized: "报告", locale: AppLanguageManager.currentLocale),
-                    count: reportsOnSelectedDate.count
-                ))
-                    .tag(DayDetailScope.reports)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 24)
-            .padding(.bottom, 4)
-
-            // 当日巡检日程 — scope=.all 或 .schedules 时显示
-            if dayDetailScope == .all || dayDetailScope == .schedules {
-                VStack(alignment: .leading, spacing: 6) {
-                    sectionMiniHeader(
-                        String(localized: "当日巡检日程", locale: AppLanguageManager.currentLocale),
-                        count: schedulesOnSelectedDate.count
-                    )
-                    if schedulesOnSelectedDate.isEmpty {
-                        emptyDayState
-                    } else {
-                        cardGroup {
-                            VStack(spacing: 0) {
-                                ForEach(Array(schedulesOnSelectedDate.enumerated()), id: \.element.id) { idx, s in
-                                    scheduleRow(s, isLast: idx == schedulesOnSelectedDate.count - 1)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 当日巡检报告 — scope=.all 或 .reports 时显示
-            if dayDetailScope == .all || dayDetailScope == .reports {
-                VStack(alignment: .leading, spacing: 6) {
-                    sectionMiniHeader(
-                        String(localized: "当日巡检报告", locale: AppLanguageManager.currentLocale),
-                        count: reportsOnSelectedDate.count
-                    )
-                    if reportsOnSelectedDate.isEmpty {
-                        Text(String(localized: "当日无报告", locale: AppLanguageManager.currentLocale))
-                            .font(.system(size: 13))
-                            .foregroundStyle(Ink.fgDim)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 10)
-                    } else {
-                        cardGroup {
-                            VStack(spacing: 0) {
-                                ForEach(Array(reportsOnSelectedDate.enumerated()), id: \.element.id) { idx, r in
-                                    reportRow(r, isLast: idx == reportsOnSelectedDate.count - 1)
-                                }
+                )
+                if schedulesOnSelectedDate.isEmpty {
+                    emptyDayState
+                } else {
+                    cardGroup {
+                        VStack(spacing: 0) {
+                            ForEach(Array(schedulesOnSelectedDate.enumerated()), id: \.element.id) { idx, s in
+                                scheduleRow(s, isLast: idx == schedulesOnSelectedDate.count - 1)
                             }
                         }
                     }
@@ -382,11 +337,6 @@ struct EngineerScheduleView: View {
         }
         .padding(.top, 14)
         .padding(.bottom, 20)
-    }
-
-    /// segmented tab 文本:无内容时不挂数字,避免 "日程 0" 视觉负担。
-    private func scopeLabel(base: String, count: Int) -> String {
-        count > 0 ? "\(base) \(count)" : base
     }
 
     /// "当日巡检日程" 这种 mini 段头(uppercase + count chip)。
@@ -422,15 +372,6 @@ struct EngineerScheduleView: View {
             .padding(.horizontal, 24)
     }
 
-    private func reportRow(_ r: InspectionReport, isLast: Bool) -> some View {
-        NavigationLink {
-            InspectionFormView(report: r)
-        } label: {
-            InspectionReportRowContent(report: r, isLast: isLast)
-        }
-        .buttonStyle(.plain)
-    }
-
     /// 友好日期标签 — "周三 5 月 17"。
     private var selectedDateLabel: String {
         Formatters.weekdayMonthDay.string(from: selectedDate)
@@ -447,8 +388,32 @@ struct EngineerScheduleView: View {
 
     private func scheduleRow(_ s: SiteVisitSchedule, isLast: Bool) -> some View {
         VStack(spacing: 0) {
+            // 团队协作:Owner 分给我但还没点开过 → 头上贴橙色 NEW chip。
+            if !TeamAssignmentNotifier.shared.isNotified(s.id),
+               let assignee = s.assignedToUserID,
+               !assignee.isEmpty,
+               assignee == (ICloudSyncConfig.shared.currentUserRecordName ?? "") {
+                HStack(spacing: 6) {
+                    Text("NEW")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.orange))
+                    Text(String(localized: "Owner 分配", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Ink.fgDim)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 8)
+            }
+
             // 行主体:沿用 ScheduleRowContent,外包 Button → 点开编辑
             Button {
+                // 标记已读 → 下次进 view NEW chip 消失。
+                TeamAssignmentNotifier.shared.markRead(s.id)
                 editingSchedule = s
                 showEditor = true
             } label: {
@@ -510,12 +475,34 @@ struct EngineerScheduleView: View {
 
     /// 日程行下方的操作按钮:
     /// - linkedReportID == nil → [▶ 开始巡检](一键开 session 并双向绑定)
-    /// - linkedReportID != nil → [→ SVR-xxx >](跳报告详情)
+    /// - linkedReportID != nil + 该 report 的 session 已 active → [→ SVR-xxx >] (banner 在显示进度)
+    /// - linkedReportID != nil + session 不 active 在它上 → [▶ 继续巡检] + [→ SVR-xxx >]
+    ///   (用户上次 cancel 或暂存草稿,这里给恢复入口)
     @ViewBuilder
     private func scheduleActionRow(for s: SiteVisitSchedule) -> some View {
-        HStack {
+        HStack(spacing: 8) {
             Spacer()
             if let rid = s.linkedReportID {
+                // 「继续巡检」— 仅当 session 不在跑 / 在跑别的 report 时显示
+                if sessionManager.currentSessionID != rid {
+                    Button {
+                        resumeSessionFromSchedule(s)
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text(String(localized: "继续巡检", locale: AppLanguageManager.currentLocale))
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundStyle(Ink.bg)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(Ink.fg))
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                // 跳报告详情(已 linked 永远可点)
                 Button {
                     navigateToReportID = rid
                 } label: {
@@ -568,6 +555,14 @@ struct EngineerScheduleView: View {
         )
     }
 
+    /// 「继续巡检」— 把 schedule.linkedReportID 对应的 report 重新挂回 session。
+    /// 用于 cancel / suspendAsDraft 后用户想继续录的场景。
+    private func resumeSessionFromSchedule(_ s: SiteVisitSchedule) {
+        guard let rid = s.linkedReportID,
+              let report = fetchReport(for: rid) else { return }
+        sessionManager.resume(report: report, in: modelContext)
+    }
+
     /// 用 reportID 反查 reportNo(navigation chip 显示用)。找不到时回退 short uuid。
     private func reportNo(for id: UUID) -> String {
         if let r = fetchReport(for: id) {
@@ -605,30 +600,38 @@ struct EngineerScheduleView: View {
         s.status = .completed
         s.completedAt = Date()
         try? modelContext.save()
-        // 完成 → 不再提醒
         NotificationService.shared.cancelVisit(s.id)
+        fireScheduleMirror(s)
     }
 
     private func markPending(_ s: SiteVisitSchedule) {
         s.status = .pending
         s.completedAt = nil
         try? modelContext.save()
-        // 重新进入 pending,如启用提醒 → 重排
         NotificationService.shared.scheduleVisit(s)
+        fireScheduleMirror(s)
     }
 
     private func markCancelled(_ s: SiteVisitSchedule) {
         s.status = .cancelled
         try? modelContext.save()
         NotificationService.shared.cancelVisit(s.id)
+        fireScheduleMirror(s)
     }
 
     private func deleteSchedule(_ s: SiteVisitSchedule) {
-        // 软删 + 清通知。先抓 id 再改 model,防止扩展属性访问的微妙顺序问题。
         let id = s.id
         s.deletedAt = Date()
         try? modelContext.save()
         NotificationService.shared.cancelVisit(id)
+        fireScheduleMirror(s)
+    }
+
+    /// 团队 mirror — schedule 状态变化(完成 / 取消 / 删除 / 重新待办)都要推到 share zone,
+    /// 让 owner 和其他成员看到状态变化。漏 mirror 是之前 status 变化不同步的根因。
+    private func fireScheduleMirror(_ s: SiteVisitSchedule) {
+        let ctx = modelContext
+        Task { await TeamDataMirrorService.shared.mirrorSchedule(s, in: ctx) }
     }
 }
 

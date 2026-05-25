@@ -22,7 +22,12 @@ struct GlobalSearchView: View {
     @Query(
         filter: #Predicate<Note> { $0.deletedAt == nil },
         sort: [SortDescriptor(\Note.createdAt, order: .reverse)]
-    ) private var allNotes: [Note]
+    ) private var allNotesAllRoles: [Note]
+
+    /// v1.5:只显示当前角色的 note(historical nil → PM)。
+    private var allNotes: [Note] {
+        allNotesAllRoles.filter { $0.belongsToCurrentRole }
+    }
 
     @State private var query: String = ""
     @FocusState private var queryFocused: Bool

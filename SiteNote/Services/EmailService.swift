@@ -6,10 +6,11 @@
 //
 //  设计:
 //    - 纯函数模块(Foundation 即可,不依赖 SwiftUI / UIKit / SwiftData),易单测。
-//    - 邮件正文/主题 **强制英文**(不读 AppLanguageManager / Locale):
-//      工程师 Inspection 报告通常发给 builder/客户(国际通用英文),不需要
-//      中文邮件正文。app UI 仍可中英切换,但发件草稿统一英文模板。
-//    - 失败容忍:字段空就降级,绝不抛——给用户一个能 send 的草稿就赢一半。
+//    - 邮件正文/主题 **走用户模板**(EmailTemplateStorage):用户在「设置 → 邮件
+//      模板」自定义,中英都行。占位符 {project}/{projectNo}/{client}/{reportNo}/
+//      {date}/{inspectionType} 渲染时按报告字段填充。
+//    - 失败容忍:模板渲染为空 → 降级到老的硬编码英文 fallback。绝不抛,
+//      保证给用户一个能 send 的草稿。
 //
 
 import Foundation
@@ -27,12 +28,34 @@ enum EmailService {
 
     // MARK: - 主题
 
-    /// 主题构造(英文固定):`"Site Visit Report - <reportNo> - <location>"`。
-    /// 字段为空时降级:
-    ///   - reportNo 空 → 用 "Draft"
-    ///   - location 空 → 仅 "Site Visit Report - <reportNo>"
-    ///   - 全空 → "Site Visit Report - Draft"
+    /// 主题:走用户模板(`EmailTemplateStorage.load()`)+ 占位符渲染。
+    /// 用户在「设置 → 邮件模板」自定义,没存过用 `EmailTemplateStorage.defaultTemplate()`。
+    /// 渲染后若仍为空(例如用户清空了模板),降级到老的硬编码英文 fallback,
+    /// 保证 compose 永远有个可发的主题。
     static func subjectFor(report: InspectionReport) -> String {
+        let template = EmailTemplateStorage.load()
+        let rendered = EmailTemplateStorage.render(template, report: report).subject
+        let trimmed = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return fallbackSubject(for: report)
+    }
+
+    // MARK: - 正文
+
+    /// 正文:走用户模板 + 占位符渲染。
+    /// 渲染后若整体空白则降级到老的英文 fallback(保证草稿不是空白)。
+    static func bodyFor(report: InspectionReport) -> String {
+        let template = EmailTemplateStorage.load()
+        let rendered = EmailTemplateStorage.render(template, report: report).body
+        let trimmed = rendered.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return rendered }
+        return fallbackBody(for: report)
+    }
+
+    // MARK: - Fallback(硬编码英文)
+
+    /// 老的硬编码英文 subject。模板渲染为空时才走。
+    private static func fallbackSubject(for report: InspectionReport) -> String {
         let reportNo = report.reportNo.trimmingCharacters(in: .whitespacesAndNewlines)
         let location = report.location.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -40,7 +63,6 @@ enum EmailService {
         if !reportNo.isEmpty {
             parts.append(reportNo)
         } else {
-            // 没编号也别给个奇怪 "Site Visit Report -  - 38 Forsyth"
             parts.append("Draft")
         }
         if !location.isEmpty {
@@ -49,15 +71,8 @@ enum EmailService {
         return parts.joined(separator: " - ")
     }
 
-    // MARK: - 正文
-
-    /// 正文(英文固定)。不读 AppLanguageManager / Locale。
-    /// 空字段降级:
-    ///   - attn 空 → 称呼 "Hi team,"
-    ///   - project / location 空 → 句子里降级或整段省略
-    ///   - engineerName 空 → 末尾只剩 "Regards,"
-    ///   - companyName(从 UserDefaults 读)非空时附在签名第二行
-    static func bodyFor(report: InspectionReport) -> String {
+    /// 老的硬编码英文 body。模板渲染为空时才走。
+    private static func fallbackBody(for report: InspectionReport) -> String {
         let attn = report.attn.trimmingCharacters(in: .whitespacesAndNewlines)
         let project = report.project.trimmingCharacters(in: .whitespacesAndNewlines)
         let location = report.location.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -67,7 +82,6 @@ enum EmailService {
 
         let greeting: String = attn.isEmpty ? "Hi team," : "Hi \(attn),"
 
-        // 主句按 project / location 是否齐全选不同模板,避免 "for  at "。
         let mainLine: String
         switch (project.isEmpty, location.isEmpty) {
         case (false, false):
@@ -82,14 +96,9 @@ enum EmailService {
 
         let actionLine = "Items requiring action are listed in the report. Please rectify and reply with confirmation when completed."
 
-        // 签名:Regards, / engineer / company(后两个都可空)
         var signoffLines: [String] = ["Regards,"]
-        if !engineer.isEmpty {
-            signoffLines.append(engineer)
-        }
-        if !company.isEmpty {
-            signoffLines.append(company)
-        }
+        if !engineer.isEmpty { signoffLines.append(engineer) }
+        if !company.isEmpty { signoffLines.append(company) }
         let signoff = signoffLines.joined(separator: "\n")
 
         return """
@@ -105,15 +114,16 @@ enum EmailService {
 
     // MARK: - 收件人
 
-    /// 默认收件人:从 `report.builderID` 反查 BuildersStorage,拿 email。
-    /// builderID 为 nil / 找不到 / email 空白 → 返回 `[]`。
-    /// 调用方在 UI 上据此让用户手填或换 Builder。
+    /// 默认收件人:从 `report.builderID` 反查 ContactsStorage,拿 email。
+    /// v1.5:Builder 拆成 Builder(公司)+ Contact(联系人)后,legacy `builderID` 字段值
+    /// 经 ContactsStorage.migrateFromBuilderLegacyOnce 重映射为对应 Contact.id。
+    /// builderID 为 nil / 找不到 / email 空白 → 返回 `[]`,调用方在 UI 上据此让用户手填。
     static func defaultRecipientsFor(report: InspectionReport) -> [String] {
         guard let idString = report.builderID,
-              let builder = BuildersStorage.find(idString: idString) else {
+              let contact = ContactsStorage.find(idString: idString) else {
             return []
         }
-        let email = builder.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = contact.email.trimmingCharacters(in: .whitespacesAndNewlines)
         return email.isEmpty ? [] : [email]
     }
 

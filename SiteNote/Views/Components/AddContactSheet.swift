@@ -2,24 +2,19 @@
 //  AddContactSheet.swift
 //  SiteNote
 //
-//  在 SitePresetEditor 里 inline 添加新联系人的 bottom sheet。
+//  在 SitePresetEditor 里 inline 添加新联系人(Contact)的 bottom sheet。
 //
 //  设计动机:
-//  - 用户填工地预设时常发现"这个工头还没存进通讯录",原本要退出去 Settings
+//  - 用户填工地预设时常发现"这个联系人还没存进通讯录",原本要退出去 Settings
 //    页加完再回来,容易丢上下文。这个 sheet 把"加联系人 + 自动 link 到本工地"
-//    合并成一步,公司字段直接锁死为当前 site 的 clientName,避免输错。
-//  - 保存后调用方负责把 builder.id 写到 SitePreset.builderID(若 markAsDefault),
-//    本 sheet 只管"创建 Builder + 持久化 + 回调"。
+//    合并成一步。
 //
-//  保存逻辑:
-//  1. 校验 name 非空,email 含 @ 且 . 在 @ 后(本地轻量校验,不连网)。
-//  2. 用 Builder(name:company:email:phone:) 构造,company 强制取传入的
-//     `company` 参数(锁定,不可改)。
-//  3. BuildersStorage.add(builder) 写入 UserDefaults。
-//     注意:存储层会自动 trim name/email,空 name/email 拒绝;
-//     超出 maxItems 也会拒绝并返回 nil。
-//  4. 调 onAdded(builder, markAsDefault),调用方决定是否设为本工地默认收件人。
-//  5. dismiss。
+//  v1.5 改:Builder 拆成 Builder(公司)+ Contact(联系人)后,sheet 的职责变成:
+//  1. 选/新建 Builder(公司)— 公司是必需的;若 SitePreset.clientName 能匹配已有
+//     公司,默认选中那家;否则提示用户选或新建。
+//  2. 填 Contact 的 name / email / phone。
+//  3. 保存:ContactsStorage.add 写入,回调 onAdded(contact, markAsDefault),
+//     SitePresetEditor 把 contact.id 塞进 linkedContactIDs / defaultRecipientIDs。
 //
 
 import SwiftUI
@@ -27,24 +22,30 @@ import SwiftUI
 struct AddContactSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    /// 当前 site 的 clientName,作为新 builder 的公司名(锁定,read-only 显示)。
-    /// 传空字符串也允许,UI 会显示"未指定"灰字。
+    /// 当前 site 的 clientName。用于尝试匹配已有公司;匹配不到也作为新公司名的默认值。
+    /// 传空字符串也允许,UI 会让用户从下拉里选。
     let company: String
 
-    /// 完成回调。把新建好的 Builder 和"是否设为本工地默认收件人"开关传回。
-    /// 调用方负责把 builder.id 写到 SitePreset.builderID(若 markAsDefault=true)。
-    var onAdded: (Builder, _ markAsDefault: Bool) -> Void
+    /// 完成回调。把新建好的 Contact 和"是否设为本工地默认收件人"开关传回。
+    /// SitePresetEditor 把 contact.id 写到 linkedContactIDs / defaultRecipientIDs。
+    var onAdded: (Contact, _ markAsDefault: Bool) -> Void
+
+    /// 全部已有公司(用于下拉选)。
+    @State private var allBuilders: [Builder] = []
+    /// 当前选中的公司 id。nil = 还没选(需要选或新建)。
+    @State private var selectedBuilderID: UUID? = nil
+    /// 新建公司输入框(只在 selectedBuilderID == nil 时显示)。
+    @State private var newCompanyName: String = ""
 
     @State private var name: String = ""
     @State private var email: String = ""
     @State private var phone: String = ""
     @State private var markAsDefault: Bool = true
-    /// 保存失败时给用户的提示(如超出 maxItems 上限)。
+    /// 保存失败时的错误提示。
     @State private var errorMessage: String?
 
-    /// 当前 focus 字段,决定 input box 是否高亮 1.5pt Ink.fg 描边。
     @FocusState private var focusedField: FocusField?
-    private enum FocusField: Hashable { case name, email, phone }
+    private enum FocusField: Hashable { case newCompany, name, email, phone }
 
     private var locale: Locale { AppLanguageManager.currentLocale }
 
@@ -60,9 +61,19 @@ struct AddContactSheet: View {
         phone.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// 保存按钮可用条件:名字非空 + 邮箱本地校验通过。
+    private var trimmedNewCompany: String {
+        newCompanyName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// 选定 / 新建后能落到一个具体的 Builder.id。
+    /// - 已选中:返 selectedBuilderID
+    /// - 没选:必须新建,新建公司名非空时返新 id(在 save 时创建)
     private var canSave: Bool {
-        !trimmedName.isEmpty && Self.isValidEmail(trimmedEmail)
+        let nameOK = !trimmedName.isEmpty
+        let companyOK = (selectedBuilderID != nil) || !trimmedNewCompany.isEmpty
+        // 邮箱可空,有邮箱则要本地校验通过(便于一键发邮件)。
+        let emailOK = trimmedEmail.isEmpty || Self.isValidEmail(trimmedEmail)
+        return nameOK && companyOK && emailOK
     }
 
     var body: some View {
@@ -110,51 +121,107 @@ struct AddContactSheet: View {
                     .disabled(!canSave)
                 }
             }
-            .onAppear {
-                // 进入页面默认 focus 姓名输入,公司已锁,优先填名字。
-                focusedField = .name
-            }
+            .onAppear(perform: bootstrap)
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
 
     // MARK: - Sections
 
-    /// 公司字段:read-only,显示当前 site 的 clientName。
-    /// 灰底 + dim 文字,提示用户"此处由所在工地决定,不在此处改"。
+    /// 公司字段:Picker 选已有 + "新建公司"行。
+    /// 启动时如果 `company` 参数匹配已有 Builder 名,默认选中那家;
+    /// 否则空选,把它预填到"新建公司"输入框。
     private var companySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel(
                 icon: "building.2",
-                text: String(localized: "公司", locale: locale)
+                text: String(localized: "公司", locale: locale),
+                required: true
             )
 
-            HStack(spacing: 8) {
-                Text(company.isEmpty
-                     ? String(localized: "未指定", locale: locale)
-                     : company)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Ink.fgDim)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Ink.fgDim)
+            // 已有公司 Picker(只在有公司时显示)
+            if !allBuilders.isEmpty {
+                Menu {
+                    ForEach(allBuilders) { b in
+                        Button {
+                            selectedBuilderID = b.id
+                            newCompanyName = ""
+                        } label: {
+                            if selectedBuilderID == b.id {
+                                Label(b.name, systemImage: "checkmark")
+                            } else {
+                                Text(b.name)
+                            }
+                        }
+                    }
+                    Divider()
+                    Button {
+                        selectedBuilderID = nil
+                        focusedField = .newCompany
+                    } label: {
+                        Label(String(localized: "新建公司...", locale: locale),
+                              systemImage: "plus")
+                    }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text(selectedCompanyLabel)
+                            .font(.system(size: 15))
+                            .foregroundStyle(selectedBuilderID == nil ? Ink.fgDim : Ink.fg)
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Ink.fgDim)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 14)
+                    .background(Ink.bg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Ink.line, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Ink.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Ink.line, lineWidth: 1)
-            )
+
+            // 新建公司输入框(没选已有 → 显示这个)
+            if selectedBuilderID == nil {
+                TextField(
+                    String(localized: "新公司名(如 Acme Construction)", locale: locale),
+                    text: $newCompanyName
+                )
+                .focused($focusedField, equals: .newCompany)
+                .font(.system(size: 15))
+                .tint(Ink.fg)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .submitLabel(.next)
+                .onSubmit { focusedField = .name }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(Ink.bg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(
+                            focusedField == .newCompany ? Ink.fg : Ink.line,
+                            lineWidth: focusedField == .newCompany ? 1.5 : 1
+                        )
+                )
+            }
         }
     }
 
-    /// 姓名 section,必填,带 * 标记。
+    /// 公司选中态显示文案。
+    private var selectedCompanyLabel: String {
+        if let id = selectedBuilderID,
+           let b = allBuilders.first(where: { $0.id == id }) {
+            return b.name
+        }
+        return String(localized: "选择公司(或往下新建)", locale: locale)
+    }
+
+    /// 姓名 section,必填。
     private var nameSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel(
@@ -187,17 +254,16 @@ struct AddContactSheet: View {
         }
     }
 
-    /// 邮箱 section,必填,带 * 标记。键盘类型 emailAddress。
+    /// 邮箱 section,可选(填了就 validate)。
     private var emailSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionLabel(
                 icon: "envelope",
-                text: String(localized: "邮箱", locale: locale),
-                required: true
+                text: String(localized: "邮箱", locale: locale)
             )
 
             TextField(
-                String(localized: "john@lendlease.com", locale: locale),
+                String(localized: "john@example.com", locale: locale),
                 text: $email
             )
             .focused($focusedField, equals: .email)
@@ -320,22 +386,55 @@ struct AddContactSheet: View {
         .padding(.horizontal, 4)
     }
 
+    // MARK: - Lifecycle
+
+    private func bootstrap() {
+        allBuilders = BuildersStorage.load()
+        // 尝试用 company 参数匹配已有 Builder。命中 → 自动选中;否则把 company 预填到"新公司"。
+        let target = company.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !target.isEmpty,
+           let matched = allBuilders.first(where: { $0.name.lowercased() == target }) {
+            selectedBuilderID = matched.id
+        } else {
+            selectedBuilderID = nil
+            if newCompanyName.isEmpty {
+                newCompanyName = company.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        // 默认 focus 姓名输入(若已选公司);否则先填新公司名。
+        focusedField = (selectedBuilderID == nil && newCompanyName.isEmpty) ? .newCompany : .name
+    }
+
     // MARK: - Save
 
     private func save() {
         guard canSave else { return }
         errorMessage = nil
 
-        let builder = Builder(
+        // 1) 确保 builderID 存在 — 没有就先创建公司。
+        let builderID: UUID
+        if let existing = selectedBuilderID {
+            builderID = existing
+        } else {
+            let newCompany = Builder(name: trimmedNewCompany)
+            guard let createdID = BuildersStorage.add(newCompany) else {
+                errorMessage = String(
+                    localized: "公司创建失败,可能已达上限。请到设置里清理后再加。",
+                    locale: locale
+                )
+                return
+            }
+            builderID = createdID
+        }
+
+        // 2) 创建 Contact。
+        let contact = Contact(
+            builderID: builderID,
             name: trimmedName,
-            company: company,            // 锁定值,来自调用方
             email: trimmedEmail,
             phone: trimmedPhone
         )
-
-        // BuildersStorage.add 失败:可能是空 name/email(已被 canSave 拦截),
-        // 或超出 maxItems 上限。后者给用户明确提示。
-        guard BuildersStorage.add(builder) != nil else {
+        guard ContactsStorage.add(contact) != nil else {
             errorMessage = String(
                 localized: "联系人保存失败,可能已达上限。请到设置里清理后再加。",
                 locale: locale
@@ -343,27 +442,23 @@ struct AddContactSheet: View {
             return
         }
 
-        onAdded(builder, markAsDefault)
+        onAdded(contact, markAsDefault)
         dismiss()
     }
 
     // MARK: - Email validation
 
     /// 极轻量邮箱校验:含 @ 且 . 在 @ 之后,本地长度合理。
-    /// 不上正则,避免 RFC 5322 焦虑;真正的有效性由发送时回执决定。
     static func isValidEmail(_ raw: String) -> Bool {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard s.count >= 5 else { return false }
         guard let atIdx = s.firstIndex(of: "@") else { return false }
-        // @ 不能在首位
         guard atIdx != s.startIndex else { return false }
         let afterAt = s.index(after: atIdx)
         guard afterAt < s.endIndex else { return false }
-        // @ 之后必须出现至少一个 .,且 . 不能紧贴 @
         let domainPart = s[afterAt...]
         guard let dotIdx = domainPart.firstIndex(of: ".") else { return false }
         guard dotIdx != domainPart.startIndex else { return false }
-        // . 之后还要有至少一个字符(顶级域)
         let afterDot = domainPart.index(after: dotIdx)
         guard afterDot < domainPart.endIndex else { return false }
         return true

@@ -24,6 +24,10 @@ struct SiteNoteApp: App {
         // 用户从旧版升级或多设备 sync 残留时,这里兜底确保 key 不留在 Keychain)。
         KeychainStorage.delete(for: KeychainKeys.openAIAPIKey)
 
+        // v1.5:Builder 拆成 Builder(公司)+ Contact(联系人)。
+        // 一次性把扁平老数据拆成二级结构,UserDefaults flag 保证 idempotent。
+        ContactsStorage.migrateFromBuilderLegacyOnce()
+
         CrashReporter.shared.start()
     }
 
@@ -74,6 +78,11 @@ private struct RootContainerView: View {
             // SwiftUI 的 scenePhase 也覆盖了"App 长时间挂后台又回来"的场景。
             guard newPhase == .active, case .ready(let container) = state else { return }
             rescheduleAllNotes(in: container.mainContext)
+            // **P1 retry queue**:前台时处理 mirror retry queue。
+            // 用户离线时 mirror 失败入队 → 网络恢复后 app 切前台自动重发。
+            Task { @MainActor in
+                await TeamDataMirrorService.shared.processRetryQueue(in: container.mainContext)
+            }
         }
         // CloudKit share invitation:SiteNoteAppDelegate 把 metadata 派发到这里,
         // ModelContext 准备好后(.ready)接受 share + 在本地建 Team/TeamMember mirror。
@@ -142,6 +151,12 @@ private struct RootContainerView: View {
                 for: schema,
                 configurations: [modelConfiguration]
             )
+            // v1.6: SwiftDataStack 注册 — facade(SitePresetStorage 等)启动后能拿到 mainContext。
+            // 必须在任何 storage facade 被调用前完成,所以放在 ModelContainer 创建成功后第一时间。
+            SwiftDataStack.shared.register(container)
+            // v1.6: 一次性迁移 — UserDefaults `settings.sitePresets.v1` JSON → SwiftData @Model。
+            // idempotent flag 防重跑。
+            SitePresetStorage.migrateFromUserDefaultsOnce()
             // B2: 启动时清理孤儿 .m4a。录音中被杀的进程会留下永久不被引用的音频文件,
             // 长期累积可能占满磁盘。同步执行,失败不阻塞。
             VoiceCaptureService.cleanupOrphanAudio(modelContext: container.mainContext)
@@ -155,6 +170,10 @@ private struct RootContainerView: View {
                     try? await ICloudSyncConfig.shared.fetchAndCacheUserRecord()
                 }
             }
+
+            // Screenshot mode — launch arg `-ScreenshotMode YES` 时 seed 演示数据。
+            // 仅截图用,生产用户绝对不会触发(launch arg + ProcessInfo gated)。
+            MockDataSeeder.seedIfNeeded(container)
 
             state = .ready(container)
         } catch {
@@ -176,8 +195,10 @@ private struct RootContainerView: View {
     }
 
     /// E3.5:重排所有未完成且需推送的 note。给时区监听 + scenePhase 钩子复用。
+    /// v1.6 (en-v1):截图模式 跳过 — 避免触发系统通知授权弹窗,污染 App Store 截图。
     @MainActor
     private func rescheduleAllNotes(in context: ModelContext) {
+        if MockDataSeeder.isActive { return }
         let descriptor = FetchDescriptor<Note>(
             predicate: #Predicate<Note> { $0.deletedAt == nil && $0.isDone == false }
         )

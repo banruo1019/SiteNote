@@ -15,10 +15,23 @@ import SwiftUI
 import SwiftData
 
 struct MainTabView: View {
-    @State private var selection: AppTab = .record
+    @State private var selection: AppTab = MainTabView.initialTabFromLaunchArg()
     @State private var showsOnboarding: Bool = OnboardingView.needsToShow
     @State private var router = AppRouter.shared
     @State private var profileManager = UserProfileManager.shared
+
+    /// 截图用 — `-StartTab record|calendar|reports` 决定 app 启动停留在哪个 tab。
+    private static func initialTabFromLaunchArg() -> AppTab {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "-StartTab"), i + 1 < args.count {
+            switch args[i + 1] {
+            case "calendar": return .calendar
+            case "reports": return .reports
+            default: return .record
+            }
+        }
+        return .record
+    }
 
     private var isEngineer: Bool {
         profileManager.current == .engineer
@@ -37,12 +50,23 @@ struct MainTabView: View {
             selection = request.tab
             router.clear()
         }
+        // v1.6 (en-v1):切 tab 时所有 tab 的 NavigationStack 弹回 root。
+        // 用户预期"离开 Log tab 进 Calendar 再回来 → Log 应该回到根,不是停留在 Settings"。
+        .onChange(of: selection) { old, new in
+            if old != new {
+                router.popAllToRoot()
+            }
+        }
     }
 
     private var mainContent: some View {
         VStack(spacing: 0) {
             ZStack {
+                // v1.6 (en-v1):每个 tab view 用 .id(router.popAllTrigger) 钉 —
+                // tab 切换时 trigger 自增 → SwiftUI 重建 view tree → NavigationStack
+                // + @State 全部回 root,实现"离开 tab 就重置"的预期。
                 RecordView()
+                    .id(router.popAllTrigger)
                     .opacity(selection == .record ? 1 : 0)
                     .allowsHitTesting(selection == .record)
 
@@ -54,6 +78,7 @@ struct MainTabView: View {
                         PMCalendarView()
                     }
                 }
+                .id(router.popAllTrigger)
                 .opacity(selection == .calendar ? 1 : 0)
                 .allowsHitTesting(selection == .calendar)
 
@@ -65,6 +90,7 @@ struct MainTabView: View {
                         ReportsView()
                     }
                 }
+                .id(router.popAllTrigger)
                 .opacity(selection == .reports ? 1 : 0)
                 .allowsHitTesting(selection == .reports)
             }

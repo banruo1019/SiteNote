@@ -101,6 +101,8 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// - `.authorized` / `.provisional`: 直接放行。
     /// - `.denied`: 返回 false,后续 add 全部跳过(避免无效系统调用 + 误判"已排上")。
     private func ensureAuthorized() async -> Bool {
+        // v1.6 (en-v1) — 截图模式 永远返回 false,杜绝任何系统授权弹窗污染 App Store 截图。
+        if MockDataSeeder.isActive { return false }
         let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .authorized, .provisional, .ephemeral:
@@ -183,12 +185,12 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         center.removePendingNotificationRequests(withIdentifiers: ids)
     }
 
-    /// App 启动时对全部未完成未归档重排。同时更新每日汇总。
+    /// App 启动时对全部未完成未归档重排。同时更新每日汇总(带 overdue / today 计数)。
     func rescheduleAll(notes: [Note]) {
         for note in notes where !note.isDone && note.deadline.shouldSchedule {
             schedule(for: note)
         }
-        updateDailyDigest()
+        updateDailyDigest(notes: notes)
     }
 
     // MARK: - 每日汇总
@@ -197,12 +199,50 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// 异步:同样走 `ensureAuthorized` 授权门,避免首装"看着开了但实际没排"。
     /// 竞态防护:跟踪 digestTask 并在新一轮调用时 cancel 老 task;在 await 后再读一次
     /// UserDefaults,防止"开了又秒关"的情况下被旧 task 抢着 add。
-    func updateDailyDigest() {
+    ///
+    /// v1.6 (en-v1):新增可选 `notes` 参数。传入时统计 overdue + today 数,body 改成动态:
+    ///   • 有逾期 + 今日:  "%lld overdue · %lld due today"
+    ///   • 仅逾期:         "%lld overdue items"
+    ///   • 仅今日:         "%lld due today"
+    ///   • 都为 0:        跳过 schedule(早上不打扰)
+    /// notes 为 nil 时(Settings 开关切换等场景)沿用原通用 body — 此时没法访问 SwiftData,
+    /// 用 fallback "打开查看今日待处理任务" 即可,app 下次启动 rescheduleAll 时会带数据更新。
+    /// trade-off:body 是"上次重排时"的快照,不实时(iOS push 没有运行时动态生成 body 的低成本方案)。
+    func updateDailyDigest(notes: [Note]? = nil) {
         setDigestTask(nil)
         center.removePendingNotificationRequests(withIdentifiers: [Self.dailyDigestIdentifier])
 
         let enabled = UserDefaults.standard.bool(forKey: "settings.dailyDigestEnabled")
         guard enabled else { return }
+
+        // 计算 overdue + today 数(notes 提供时)
+        let (overdueCount, todayCount): (Int, Int)
+        if let notes {
+            let cal = Calendar.current
+            let startOfToday = cal.startOfDay(for: Date())
+            let endOfToday = cal.date(byAdding: .day, value: 1, to: startOfToday) ?? Date()
+            overdueCount = notes.filter { n in
+                !n.isDone
+                && n.dueDate < startOfToday
+                && n.deadline != .archive
+                && n.deadline != .inbox
+            }.count
+            todayCount = notes.filter { n in
+                !n.isDone
+                && n.dueDate >= startOfToday
+                && n.dueDate < endOfToday
+                && n.deadline != .archive
+                && n.deadline != .inbox
+            }.count
+            // 两边都是 0 → 早上不要打扰
+            if overdueCount == 0 && todayCount == 0 {
+                print("[SiteNote] NotificationService.updateDailyDigest: 无逾期 + 无今日,跳过")
+                return
+            }
+        } else {
+            overdueCount = -1  // 标记 nil 状态
+            todayCount = -1
+        }
 
         let task = Task { @MainActor [center] in
             guard await Self.shared.ensureAuthorized() else {
@@ -222,7 +262,18 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
             let content = UNMutableNotificationContent()
             content.title = String(localized: "SiteNote · 今日检查", locale: AppLanguageManager.currentLocale)
-            content.body = String(localized: "打开查看今日待处理任务", locale: AppLanguageManager.currentLocale)
+            // 动态 body
+            let locale = AppLanguageManager.currentLocale
+            if overdueCount > 0 && todayCount > 0 {
+                content.body = String(localized: "\(overdueCount) overdue · \(todayCount) due today", locale: locale)
+            } else if overdueCount > 0 {
+                content.body = String(localized: "\(overdueCount) overdue items", locale: locale)
+            } else if todayCount > 0 {
+                content.body = String(localized: "\(todayCount) due today", locale: locale)
+            } else {
+                // notes 是 nil 时的 fallback
+                content.body = String(localized: "打开查看今日待处理任务", locale: locale)
+            }
             content.sound = .default
 
             var components = DateComponents()
@@ -523,6 +574,38 @@ extension NotificationService {
         for s in schedules {
             scheduleVisit(s)
         }
+    }
+
+    /// 团队协作:Owner 给 Member 分配新工地时,Member 端 1 秒后弹 local notification 提醒。
+    /// 调用方:`TeamAssignmentNotifier.scanAndNotify(_:)` 内,已做"分给我 + 未通知过"过滤。
+    /// 用 UNTimeIntervalNotificationTrigger(1s) 是因为这是"探测时立即提醒",不需要业务时间排程,
+    /// 而 add(request) 本身要求 trigger ≥ now,所以给个最小的 1s。
+    /// identifier 用 "assign-<scheduleID>" 防同一条 schedule 重弹(系统层面 dedupe)。
+    func notifyNewAssignment(_ schedule: SiteVisitSchedule) {
+        let content = UNMutableNotificationContent()
+        content.title = String(
+            localized: "新工地分配",
+            locale: AppLanguageManager.currentLocale
+        )
+        let label: String = {
+            let title = schedule.title.trimmingCharacters(in: .whitespaces)
+            if !title.isEmpty { return title }
+            if let tag = schedule.siteTag, !tag.isEmpty { return tag }
+            return String(localized: "工地", locale: AppLanguageManager.currentLocale)
+        }()
+        content.body = String(
+            format: String(localized: "你被分配到「%@」", locale: AppLanguageManager.currentLocale),
+            label
+        )
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "assign-\(schedule.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        center.add(request, withCompletionHandler: nil)
     }
 
     /// 把提前分钟数翻译成人话:1d / 2h / 30m。

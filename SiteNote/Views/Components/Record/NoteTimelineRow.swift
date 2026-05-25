@@ -16,6 +16,9 @@ import SwiftUI
 
 struct NoteTimelineRow: View {
     let note: Note
+    /// v1.6 (en-v1):Site Team 主屏「已逾期」段把这个传 true → 圆点染红。
+    /// 默认 false 保持原行为(Engineer 主屏 / 详情页 等其他场景不变)。
+    var isOverdue: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -49,7 +52,7 @@ struct NoteTimelineRow: View {
         .contentShape(Rectangle())
     }
 
-    /// 行首状态点 — 已完成空心圈,未完成实心(隐患红、其他黑)。
+    /// 行首状态点 — 已完成空心圈,未完成实心(隐患 / 逾期红、其他黑)。
     @ViewBuilder
     private var statusDot: some View {
         if note.isDone {
@@ -58,7 +61,7 @@ struct NoteTimelineRow: View {
                 .frame(width: 6, height: 6)
         } else {
             Circle()
-                .fill(note.isHazard ? Ink.red : Ink.fg)
+                .fill((note.isHazard || isOverdue) ? Ink.red : Ink.fg)
                 .frame(width: 6, height: 6)
         }
     }

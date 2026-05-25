@@ -24,8 +24,9 @@ struct InspectionExportSheet: View {
 
     // MARK: - 收件人 / 内容(可编辑)
 
-    /// 当前选中的 builder。初值从 report.builderID 反查。
-    @State private var selectedBuilder: Builder?
+    /// 当前选中的 Contact(v1.5 起);初值从 report.builderID 反查 ContactsStorage。
+    /// 变量名沿用 selectedBuilder 以减少修改面;语义已变。
+    @State private var selectedBuilder: Contact?
 
     /// 可编辑主题。预填 EmailService.subjectFor(report:)。
     @State private var subject: String = ""
@@ -168,17 +169,18 @@ struct InspectionExportSheet: View {
     @ViewBuilder
     private var recipientSection: some View {
         Section("发给") {
-            if BuildersStorage.load().isEmpty {
+            if ContactsStorage.load().isEmpty {
                 // 联系簿为空——引导去 Settings。
                 VStack(alignment: .leading, spacing: 6) {
                     Text("联系人簿是空的")
                         .font(.system(size: DesignTokens.FontSize.body, weight: .medium))
-                    Text("请先到 设置 → 联系人簿 添加 Builder/Foreman 后再使用一键发邮件。")
+                    Text("请先到 设置 → 建造商联系簿 建公司再加联系人,然后再用一键发邮件。")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
-            } else if let builder = selectedBuilder {
+            } else if let contact = selectedBuilder {
+                let company = BuildersStorage.find(id: contact.builderID)?.name ?? ""
                 Button {
                     showsBuilderPicker = true
                 } label: {
@@ -188,18 +190,18 @@ struct InspectionExportSheet: View {
                             .foregroundStyle(.tint)
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
-                                Text(builder.name.isEmpty ? builder.email : builder.name)
+                                Text(contact.name.isEmpty ? contact.email : contact.name)
                                     .font(.system(size: DesignTokens.FontSize.body, weight: .medium))
                                     .foregroundStyle(.primary)
-                                if !builder.company.isEmpty {
-                                    Text(builder.company)
+                                if !company.isEmpty {
+                                    Text(company)
                                         .font(.system(size: 12))
                                         .foregroundStyle(.secondary)
                                 }
                             }
-                            Text(builder.email.isEmpty ? String(localized: "(无邮箱)", locale: AppLanguageManager.currentLocale) : builder.email)
+                            Text(contact.email.isEmpty ? String(localized: "(无邮箱)", locale: AppLanguageManager.currentLocale) : contact.email)
                                 .font(.system(size: 12))
-                                .foregroundStyle(builder.email.isEmpty ? .red : .secondary)
+                                .foregroundStyle(contact.email.isEmpty ? .red : .secondary)
                         }
                         Spacer(minLength: 0)
                         Image(systemName: "chevron.right")
@@ -288,13 +290,14 @@ struct InspectionExportSheet: View {
         try? modelContext.save()
     }
 
-    /// 进入 sheet 时:用 EmailService 预填 subject / body,反查 builder。
+    /// 进入 sheet 时:用 EmailService 预填 subject / body,反查 Contact。
+    /// v1.5:legacy `report.builderID` 已被迁移函数重映射到 Contact.id。
     private func prefill() {
         subject = EmailService.subjectFor(report: report)
         emailBody = EmailService.bodyFor(report: report)
         if let idString = report.builderID,
-           let builder = BuildersStorage.find(idString: idString) {
-            selectedBuilder = builder
+           let contact = ContactsStorage.find(idString: idString) {
+            selectedBuilder = contact
         } else {
             selectedBuilder = nil
         }
@@ -321,8 +324,8 @@ struct InspectionExportSheet: View {
     /// 实际要传给 MailComposeView 的收件人。
     /// 优先用 selectedBuilder.email;次选 EmailService.defaultRecipientsFor(让用户在 compose 内手填)。
     private var currentRecipients: [String] {
-        if let builder = selectedBuilder {
-            let email = builder.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let contact = selectedBuilder {
+            let email = contact.email.trimmingCharacters(in: .whitespacesAndNewlines)
             if !email.isEmpty { return [email] }
         }
         return EmailService.defaultRecipientsFor(report: report)
@@ -332,8 +335,8 @@ struct InspectionExportSheet: View {
     private var canSendMail: Bool {
         guard MailComposeView.canSendMail else { return false }
         guard !subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        // 收件人可以为空(让用户在 compose 里手填),但有 builder 又 email 空就拦一下。
-        if let builder = selectedBuilder, builder.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        // 收件人可以为空(让用户在 compose 里手填),但有 contact 又 email 空就拦一下。
+        if let contact = selectedBuilder, contact.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return false
         }
         return true
@@ -351,40 +354,46 @@ struct InspectionExportSheet: View {
     }
 }
 
-// MARK: - Builder picker
+// MARK: - Contact picker
 
-/// 切换收件人。显示 BuildersStorage 全部条目,点选返回。
+/// 切换收件人。显示 ContactsStorage 全部条目(带公司名),点选返回。
 private struct BuilderPickerSheet: View {
     let selectedID: UUID?
-    let onPick: (Builder) -> Void
+    let onPick: (Contact) -> Void
 
+    @State private var contacts: [Contact] = ContactsStorage.load()
     @State private var builders: [Builder] = BuildersStorage.load()
     @Environment(\.dismiss) private var dismiss
 
+    private func companyName(for c: Contact) -> String {
+        builders.first(where: { $0.id == c.builderID })?.name ?? ""
+    }
+
     var body: some View {
         NavigationStack {
-            List(builders) { builder in
+            List(contacts) { contact in
+                let company = companyName(for: contact)
                 Button {
-                    onPick(builder)
+                    onPick(contact)
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 6) {
-                                Text(builder.name.isEmpty ? builder.email : builder.name)
+                                Text(contact.name.isEmpty ? contact.email : contact.name)
                                     .font(.system(size: DesignTokens.FontSize.body, weight: .medium))
                                     .foregroundStyle(.primary)
-                                if !builder.company.isEmpty {
-                                    Text(builder.company)
+                                if !company.isEmpty {
+                                    Text(company)
                                         .font(.system(size: 12))
                                         .foregroundStyle(.secondary)
                                 }
                             }
-                            Text(builder.email.isEmpty ? String(localized: "(无邮箱)", locale: AppLanguageManager.currentLocale) : builder.email)
+                            Text(contact.email.isEmpty ? String(localized: "(无邮箱)", locale: AppLanguageManager.currentLocale) : contact.email)
                                 .font(.system(size: 12))
-                                .foregroundStyle(builder.email.isEmpty ? .red : .secondary)
+                                .foregroundStyle(contact.email.isEmpty ? .red : .secondary)
                         }
                         Spacer()
-                        if builder.id == selectedID {
+                        if contact.id == selectedID {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.tint)
                         }

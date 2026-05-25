@@ -1,5 +1,30 @@
 # Overnight Run · 2026-05-17(本轮)
 
+## 性能优化:"直接存" → 详情页延迟(2026-05-17 增补)
+
+用户反馈"直接存按钮点击后跳转到详情页的时间太长了"。代码 review 后定位 3 个主线程阻塞点 + 1 个隐藏 1-5s 阻塞:
+
+| 瓶颈 | 改前 | 改后 |
+|---|---|---|
+| `savePhotosOnly()` 先 `await getCurrentLocation()` + `await weather.fetch()` 再 commit | **1-5 秒**(GPS 锁 + 反查 + 天气网) | 用 cached location 立即 commit,真 GPS / 天气后台补(参考 `stopAndSave` 模式) |
+| `PhotoStorage.save()` 同步 JPEG 编码 + 写盘 | 1080p × 3 张 ~150ms 阻塞主线程 | `reservePaths` 预分配 UUID 路径(零 I/O),Note 立即带上 photoPaths;真编码+写盘交 `Task.detached(.userInitiated)` 与 navigation 动画(~400ms)并行 |
+| 同步 `modelContext.save()` + `attachIfNeeded`(2× fetch + save)+ `NotificationService.schedule` | 同步串行 ~15-30ms | `lastSave` 立即设(触发 navigation)后,save / attach / schedule 全部推到 `Task { @MainActor }`,下个 runloop tick 执行 |
+
+**改的文件**:
+- `SiteNote/Services/PhotoStorage.swift`:新增 `reservePaths(count:)` + `saveImages(_:toRelativePaths:)`,旧 `save(_:)` 保留兼容
+- `SiteNote/ViewModels/HomeViewModel.swift`:`commitDirectly` 重排执行顺序(navigation trigger 前移到最早可能位置);`savePhotosOnly` 改为立即 commit 模式
+
+**预期效果**:用户感知"直接存 → 详情页"从 1500-5000ms 降到 < 200ms(几乎只剩 NavigationStack push 动画本身的 ~350ms)。
+
+**数据正确性**:
+- 照片 UUID 路径 deterministic,Note 一致性不破。后台写盘失败的张数从 photoPaths 修剪(罕见,磁盘满)
+- Undo 路径:`writeTask` 句柄入 `enrichTasks`,`undoLastSave` 一并 cancel + `snapshot.photoRelativePaths` 循环 removeItem 兜底
+- attachIfNeeded fire-and-forget 后,Engineer session 内的 Note 关联在下个 runloop tick 完成,远早于用户在详情页做任何操作
+
+**构建**:`xcodebuild` 输出我改的两个文件 **0 errors / 0 warnings**;构建仍失败的 InspectionExportSheet/InspectionFormView 是其他 agent 正在做的 Builder→Contact 模型迁移,与本次优化无关。
+
+---
+
 ## ⭐ 最终摘要(24 个 task,2026-05-17 通宵)
 
 **24 个 task 完成**,19 个原文件改动 + 7 个新组件/util 文件,**最终 `xcodebuild` ✓ SUCCEEDED**。**不 push、不 commit**。

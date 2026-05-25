@@ -128,6 +128,9 @@ enum ReportArchiveService {
         let projectFolder: String
         /// 是否同时存在 iCloud 镜像(用户能在 Files App 看到)。
         let hasICloudMirror: Bool
+        /// v1.6 (en-v1):用户是否归档(在 Reports tab 右滑触发)。
+        /// 实现:文件在 `Reports/<project>/.archived/` 子目录里 = true,其他 = false。
+        let isUserArchived: Bool
 
         var id: URL { url }
 
@@ -136,9 +139,13 @@ enum ReportArchiveService {
         }
     }
 
+    /// v1.6 (en-v1):用户归档隐藏子目录名(隐藏在 iOS Files App 不可见 — 点开头)。
+    private static let userArchivedSubdir = ".archived"
+
     /// 列出所有已归档的报告(递归扫子目录),按创建时间倒序。
     /// - legacy: 直接在 Reports/ 根目录下的 .pdf 视为 "未分类"
-    /// - 现在的: Reports/<projectFolder>/<file>.pdf
+    /// - 现在的: Reports/<projectFolder>/<file>.pdf(recent)
+    /// - v1.6 (en-v1):Reports/<projectFolder>/.archived/<file>.pdf(user archived)
     static func listArchived() -> [ArchivedReport] {
         guard let root = try? localDirectory() else { return [] }
         let fm = FileManager.default
@@ -146,39 +153,81 @@ enum ReportArchiveService {
 
         var results: [ArchivedReport] = []
 
-        // 1) 根目录里的 legacy 平铺 .pdf → 算"未分类"
+        // 1) 根目录里的 legacy 平铺 .pdf → 算"未分类",isUserArchived=false
+        let opts: FileManager.DirectoryEnumerationOptions = []  // 必须不 skip hidden,才能看到 .archived
         if let topFiles = try? fm.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: [.creationDateKey, .fileSizeKey, .isDirectoryKey],
-            options: [.skipsHiddenFiles]
+            options: opts
         ) {
             for url in topFiles where url.pathExtension.lowercased() == "pdf" {
+                if url.lastPathComponent.hasPrefix(".") { continue }
                 results.append(makeReport(
                     url: url,
                     projectFolder: unsortedFolderName,
+                    isUserArchived: false,
                     iCloudRoot: iCloudRoot,
                     fm: fm
                 ))
             }
-            // 2) 每个子目录里的 .pdf → 算该 project
+            // 2) 每个子目录里的 .pdf → 算该 project + isUserArchived=false
             let subDirs = topFiles.filter { url in
                 (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+                    && !url.lastPathComponent.hasPrefix(".")  // 跳过 .archived(下面单独处理)
             }
             for sub in subDirs {
                 let folder = sub.lastPathComponent
                 if let files = try? fm.contentsOfDirectory(
                     at: sub,
-                    includingPropertiesForKeys: [.creationDateKey, .fileSizeKey],
-                    options: [.skipsHiddenFiles]
+                    includingPropertiesForKeys: [.creationDateKey, .fileSizeKey, .isDirectoryKey],
+                    options: opts
                 ) {
                     for url in files where url.pathExtension.lowercased() == "pdf" {
+                        if url.lastPathComponent.hasPrefix(".") { continue }
                         results.append(makeReport(
                             url: url,
                             projectFolder: folder,
+                            isUserArchived: false,
                             iCloudRoot: iCloudRoot,
                             fm: fm
                         ))
                     }
+                    // 3) 子目录里的 .archived/ → user archived
+                    let archivedDir = sub.appendingPathComponent(userArchivedSubdir, isDirectory: true)
+                    if fm.fileExists(atPath: archivedDir.path),
+                       let archivedFiles = try? fm.contentsOfDirectory(
+                           at: archivedDir,
+                           includingPropertiesForKeys: [.creationDateKey, .fileSizeKey],
+                           options: []
+                       ) {
+                        for url in archivedFiles where url.pathExtension.lowercased() == "pdf" {
+                            results.append(makeReport(
+                                url: url,
+                                projectFolder: folder,
+                                isUserArchived: true,
+                                iCloudRoot: iCloudRoot,
+                                fm: fm
+                            ))
+                        }
+                    }
+                }
+            }
+            // 4) 根目录 .archived/ — 老 legacy 未分类被归档时的去处
+            let topArchived = root.appendingPathComponent(userArchivedSubdir, isDirectory: true)
+            if fm.fileExists(atPath: topArchived.path),
+               let archivedTopFiles = try? fm.contentsOfDirectory(
+                   at: topArchived,
+                   includingPropertiesForKeys: [.creationDateKey, .fileSizeKey],
+                   options: []
+               ) {
+                for url in archivedTopFiles where url.pathExtension.lowercased() == "pdf" {
+                    results.append(makeReport(
+                        url: url,
+                        projectFolder: unsortedFolderName,
+                        isUserArchived: true,
+                        iCloudRoot: iCloudRoot,
+                        fm: fm
+                    ))
                 }
             }
         }
@@ -186,10 +235,70 @@ enum ReportArchiveService {
         return results.sorted { $0.createdAt > $1.createdAt }
     }
 
+    /// v1.6 (en-v1):把 report 从 recent 标记为 user archived(移到 .archived/ 子目录)。
+    /// 本地 + iCloud 镜像同步移动。
+    @discardableResult
+    static func markUserArchived(_ report: ArchivedReport) throws -> URL {
+        return try moveReport(report, toArchived: true)
+    }
+
+    /// v1.6 (en-v1):把 report 从 user archived 还原到 recent(移出 .archived/)。
+    @discardableResult
+    static func markUserRecent(_ report: ArchivedReport) throws -> URL {
+        return try moveReport(report, toArchived: false)
+    }
+
+    /// 内部:移动文件到 `.archived/` 或移出。
+    private static func moveReport(_ report: ArchivedReport, toArchived: Bool) throws -> URL {
+        let fm = FileManager.default
+        let root = try localDirectory()
+
+        // 计算目标目录:project/<.archived/>?
+        let projectDir = root.appendingPathComponent(report.projectFolder, isDirectory: true)
+        let destDir: URL
+        if toArchived {
+            destDir = projectDir.appendingPathComponent(userArchivedSubdir, isDirectory: true)
+        } else {
+            destDir = projectDir
+        }
+        if !fm.fileExists(atPath: destDir.path) {
+            try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+        }
+        let dest = destDir.appendingPathComponent(report.filename)
+        if fm.fileExists(atPath: dest.path) {
+            try fm.removeItem(at: dest)
+        }
+        try fm.moveItem(at: report.url, to: dest)
+
+        // iCloud 镜像同步移动(失败静默)
+        if let iCloudRoot = iCloudDocumentsDirectory() {
+            let srcMirror = iCloudRoot
+                .appendingPathComponent(report.projectFolder, isDirectory: true)
+                .appendingPathComponent(toArchived ? "" : userArchivedSubdir, isDirectory: true)
+                .appendingPathComponent(report.filename)
+            let dstMirrorDir = iCloudRoot
+                .appendingPathComponent(report.projectFolder, isDirectory: true)
+                .appendingPathComponent(toArchived ? userArchivedSubdir : "", isDirectory: true)
+            let dstMirror = dstMirrorDir.appendingPathComponent(report.filename)
+            if fm.fileExists(atPath: srcMirror.path) {
+                if !fm.fileExists(atPath: dstMirrorDir.path) {
+                    try? fm.createDirectory(at: dstMirrorDir, withIntermediateDirectories: true)
+                }
+                if fm.fileExists(atPath: dstMirror.path) {
+                    try? fm.removeItem(at: dstMirror)
+                }
+                try? fm.moveItem(at: srcMirror, to: dstMirror)
+            }
+        }
+
+        return dest
+    }
+
     /// 构造一条 ArchivedReport,顺手探测 iCloud 镜像是否存在。
     private static func makeReport(
         url: URL,
         projectFolder: String,
+        isUserArchived: Bool = false,
         iCloudRoot: URL?,
         fm: FileManager
     ) -> ArchivedReport {
@@ -198,16 +307,16 @@ enum ReportArchiveService {
         let size = Int64(values?.fileSize ?? 0)
         let mirrorExists: Bool
         if let iCloudRoot {
-            // legacy 未分类 → 镜像放在 iCloud 根;有 project → 在子目录
-            let mirrorURL: URL
-            if projectFolder == unsortedFolderName {
-                mirrorURL = iCloudRoot.appendingPathComponent(url.lastPathComponent)
-            } else {
-                mirrorURL = iCloudRoot
-                    .appendingPathComponent(projectFolder, isDirectory: true)
-                    .appendingPathComponent(url.lastPathComponent)
-            }
-            mirrorExists = fm.fileExists(atPath: mirrorURL.path)
+            // **R6#5 关键修**:archive() 永远写到 `iCloudRoot/<folder>/<filename>`
+            // (folder = "未分类" 或具体 project)。之前 makeReport 在未分类时检测 iCloud 根
+            // → 永远查不到镜像 → UI 错显"未同步 iCloud"。
+            // 同时兼容老数据:先查规范路径,fallback 老根路径。
+            let canonical = iCloudRoot
+                .appendingPathComponent(projectFolder, isDirectory: true)
+                .appendingPathComponent(url.lastPathComponent)
+            let legacyRoot = iCloudRoot.appendingPathComponent(url.lastPathComponent)
+            mirrorExists = fm.fileExists(atPath: canonical.path) ||
+                (projectFolder == unsortedFolderName && fm.fileExists(atPath: legacyRoot.path))
         } else {
             mirrorExists = false
         }
@@ -217,26 +326,28 @@ enum ReportArchiveService {
             createdAt: date,
             sizeBytes: size,
             projectFolder: projectFolder,
-            hasICloudMirror: mirrorExists
+            hasICloudMirror: mirrorExists,
+            isUserArchived: isUserArchived
         )
     }
 
     // MARK: - 删除
 
     /// 删除归档(本地 + iCloud 镜像)。
+    /// R6#5:未分类 PDF 在 iCloud 可能在 `<unsortedFolderName>/<filename>`(新)或根目录
+    /// `<filename>`(老 legacy)— 两条都删。
     static func delete(_ report: ArchivedReport) throws {
         try FileManager.default.removeItem(at: report.url)
         if let iCloudRoot = iCloudDocumentsDirectory() {
-            // 跟 listArchived/makeReport 里的 mirror 路径计算保持一致
-            let mirror: URL
+            let canonical = iCloudRoot
+                .appendingPathComponent(report.projectFolder, isDirectory: true)
+                .appendingPathComponent(report.filename)
+            try? FileManager.default.removeItem(at: canonical)
+            // 未分类 legacy 路径也清一遍(老用户残留)
             if report.projectFolder == unsortedFolderName {
-                mirror = iCloudRoot.appendingPathComponent(report.filename)
-            } else {
-                mirror = iCloudRoot
-                    .appendingPathComponent(report.projectFolder, isDirectory: true)
-                    .appendingPathComponent(report.filename)
+                let legacyRoot = iCloudRoot.appendingPathComponent(report.filename)
+                try? FileManager.default.removeItem(at: legacyRoot)
             }
-            try? FileManager.default.removeItem(at: mirror)
         }
     }
 

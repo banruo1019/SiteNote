@@ -22,7 +22,7 @@ struct SearchBarButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("搜索")
+        .accessibilityLabel(String(localized: "搜索"))
         .sheet(isPresented: $showsSearch) {
             GlobalSearchView()
         }

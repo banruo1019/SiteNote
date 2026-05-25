@@ -139,7 +139,11 @@ final class Note {
     var contractClauseRef: String?
 
     /// 任务 15:关联的工地平面图名字。`nil` 表示未标注。
+    /// **保留**作为兼容字段:1) 老数据;2) PDF 显示;3) 跨账号 NoteSnapshot 易读
     var floorPlanRef: String?
+    /// P2 #187:关联的工地平面图 UUID — 优先于 `floorPlanRef` 用于查找,name 改了不影响绑定。
+    /// 老数据 nil → 走 find(name:) fallback。
+    var floorPlanID: UUID?
     /// 任务 15:在平面图上的 x 坐标,归一化到 0-1。
     var floorPlanX: Double?
     /// 任务 15:在平面图上的 y 坐标,归一化到 0-1。
@@ -171,6 +175,11 @@ final class Note {
     /// HomeViewModel 会写到这里。InspectionReport 那边也同步追加 noteIDs。
     var inspectionSessionID: UUID? = nil
 
+    /// v1.5 角色归属 — 这条 note 是 PM 还是 Engineer 创建的。
+    /// nil = 历史 note(v1.5 之前),UI 一律视为 PM(老用户基线)。
+    /// 切角色时 UI 按此过滤(同账号双世界,物理数据共存)。
+    var createdByRoleRaw: String? = nil
+
     /// 到期选择。映射到 `deadlineRaw` 存储。非法值降级到 `.threeDays`。
     var deadline: Deadline {
         get { Deadline(rawValue: deadlineRaw) ?? .threeDays }
@@ -200,6 +209,7 @@ final class Note {
         checkedItems: [String] = [],
         contractClauseRef: String? = nil,
         floorPlanRef: String? = nil,
+        floorPlanID: UUID? = nil,
         floorPlanX: Double? = nil,
         floorPlanY: Double? = nil
     ) {
@@ -226,7 +236,29 @@ final class Note {
         self.checkedItems = checkedItems
         self.contractClauseRef = contractClauseRef
         self.floorPlanRef = floorPlanRef
+        self.floorPlanID = floorPlanID
         self.floorPlanX = floorPlanX
         self.floorPlanY = floorPlanY
+    }
+}
+
+// MARK: - v1.5 角色过滤
+
+extension Note {
+    /// 这条 note 真正归属的角色。
+    /// 历史 nil → Site Team(老用户基线)。
+    /// v1.5 老 Note 可能写过 `"pm"` rawValue — v1.6 改名后视为 `.siteTeam`(无感迁移)。
+    var effectiveRole: ProfileKind {
+        switch createdByRoleRaw {
+        case "engineer": return .engineer
+        case "siteTeam", "pm", nil, "": return .siteTeam
+        default: return .siteTeam
+        }
+    }
+
+    /// 是否归属当前用户选择的角色。RecordView / ReportsView / Trash / Search 用它过滤列表。
+    /// NoteDetailView **不要**用 — 通过 PDF / 通知 deep link 进来要能打开任意 note。
+    var belongsToCurrentRole: Bool {
+        effectiveRole == UserProfileManager.shared.current
     }
 }

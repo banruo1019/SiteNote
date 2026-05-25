@@ -23,8 +23,10 @@ import SwiftData
 import PDFKit
 import QuickLook
 import MessageUI
+import os
 
 struct EndInspectionSheet: View {
+    private static let logger = Logger(subsystem: "com.banruo.sitenote", category: "EndInspectionSheet")
 
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -37,10 +39,13 @@ struct EndInspectionSheet: View {
 
     // MARK: - 状态
 
-    /// 可选的 Builder 列表(BuildersStorage),onAppear 时一次性 load。
+    /// v1.5:可选的 Contact 列表(ContactsStorage),onAppear 时一次性 load。
+    /// Builder 列表用于反查公司名(显示在 row 上)。
+    @State private var availableContacts: [Contact] = []
     @State private var availableBuilders: [Builder] = []
 
-    /// 多选勾上的 Builder ID。默认匹配 report.builderID;不匹配就空集。
+    /// 多选勾上的 Contact ID。默认匹配 report.builderID(legacy 字段名)
+    /// 已被迁移到 Contact.id,不匹配就空集。
     @State private var selectedBuilderIDs: Set<UUID> = []
 
     /// 临时手输的邮箱(可选,不存到联系簿)。
@@ -75,6 +80,7 @@ struct EndInspectionSheet: View {
 
     // MARK: - 可编辑的报告信息(用户确认时可改)
     /// onAppear 时从 report 拷过来,确认时写回 report 并重新生成 PDF。
+    @State private var editedReportNo: String = ""
     @State private var editedProject: String = ""
     @State private var editedProjectNo: String = ""
     @State private var editedClient: String = ""
@@ -85,8 +91,6 @@ struct EndInspectionSheet: View {
     // MARK: - 选项开关
     /// 是否发邮件给收件人。默认 on。
     @State private var sendMail: Bool = true
-    /// 是否团队共享。默认 off,且暂未实现(UI 占位)。
-    @State private var teamShare: Bool = false
 
     /// 用户改过任何字段时设 true,确认时触发 PDF 重新生成。
     @State private var infoDirty: Bool = false
@@ -307,12 +311,13 @@ struct EndInspectionSheet: View {
         .padding(.vertical, 18)
     }
 
-    /// 单条 Builder row — 复选框 + 名/公司/邮箱。
-    private func builderRow(_ builder: Builder) -> some View {
-        let isChecked = selectedBuilderIDs.contains(builder.id)
-        let emailEmpty = builder.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    /// 单条 Contact row — 复选框 + 名/公司/邮箱。
+    private func builderRow(_ contact: Contact) -> some View {
+        let isChecked = selectedBuilderIDs.contains(contact.id)
+        let emailEmpty = contact.email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let company = companyName(for: contact)
         return Button {
-            toggleBuilder(builder.id)
+            toggleBuilder(contact.id)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: isChecked ? "checkmark.square.fill" : "square")
@@ -320,18 +325,18 @@ struct EndInspectionSheet: View {
                     .foregroundStyle(isChecked ? Ink.fg : Ink.dim)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(builder.name.isEmpty ? builder.email : builder.name)
+                        Text(contact.name.isEmpty ? contact.email : contact.name)
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(Ink.fg)
-                        if !builder.company.isEmpty {
-                            Text("(\(builder.company))")
+                        if !company.isEmpty {
+                            Text("(\(company))")
                                 .font(.system(size: 12))
                                 .foregroundStyle(Ink.fgDim)
                         }
                     }
                     Text(emailEmpty
                          ? String(localized: "(无邮箱)", locale: AppLanguageManager.currentLocale)
-                         : builder.email)
+                         : contact.email)
                         .font(.system(size: 12))
                         .foregroundStyle(emailEmpty ? Ink.red : Ink.fgDim)
                         .lineLimit(1)
@@ -345,6 +350,11 @@ struct EndInspectionSheet: View {
         }
         .buttonStyle(.plain)
         .disabled(emailEmpty)
+    }
+
+    /// 通过 Contact.builderID 反查公司名(显示用)。
+    private func companyName(for contact: Contact) -> String {
+        availableBuilders.first(where: { $0.id == contact.builderID })?.name ?? ""
     }
 
     /// "+ 临时邮箱" 手输行。
@@ -383,6 +393,10 @@ struct EndInspectionSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionLabel(String(localized: "报告信息(可改后确认)", locale: AppLanguageManager.currentLocale))
             VStack(spacing: 0) {
+                infoEditableRow(label: String(localized: "报告号", locale: AppLanguageManager.currentLocale),
+                                text: $editedReportNo,
+                                placeholder: report.reportNo)
+                rowDivider
                 infoEditableRow(label: String(localized: "项目名", locale: AppLanguageManager.currentLocale),
                                 text: $editedProject)
                 rowDivider
@@ -412,13 +426,15 @@ struct EndInspectionSheet: View {
     }
 
     /// 单行 label + TextField 编辑器。
-    private func infoEditableRow(label: String, text: Binding<String>) -> some View {
+    /// placeholder:留空时 TextField 不显示占位文字;传 auto-generated reportNo 之类的可以
+    /// 让用户清空字段后还能看到默认值预览。
+    private func infoEditableRow(label: String, text: Binding<String>, placeholder: String = "") -> some View {
         HStack(spacing: 12) {
             Text(label)
                 .font(.system(size: 13))
                 .foregroundStyle(Ink.fgDim)
                 .frame(width: 84, alignment: .leading)
-            TextField("", text: text)
+            TextField(placeholder, text: text)
                 .font(.system(size: 14))
                 .foregroundStyle(Ink.fg)
                 .tint(Ink.fg)
@@ -456,7 +472,8 @@ struct EndInspectionSheet: View {
                                 .font(.system(size: 11))
                                 .foregroundStyle(Ink.fgDim)
                         } else {
-                            Text(String(localized: "仅存档,不发邮件", locale: AppLanguageManager.currentLocale))
+                            Text(String(localized: "保存为草稿,稍后从「报告」Tab 继续巡检或补发邮件",
+                                        locale: AppLanguageManager.currentLocale))
                                 .font(.system(size: 11))
                                 .foregroundStyle(Ink.fgDim)
                         }
@@ -468,31 +485,25 @@ struct EndInspectionSheet: View {
 
                 rowDivider
 
-                // 团队共享(暂未实施)
-                Toggle(isOn: $teamShare) {
+                // v1.6:团队共享已经接通(由 TeamDataMirrorService 自动 mirror 到 share zone)
+                // 这里不再需要 toggle,改为信息行告知用户。
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Ink.fgDim)
+                        .frame(width: 18)
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(String(localized: "团队共享", locale: AppLanguageManager.currentLocale))
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(Ink.fgDim)
-                            Text(String(localized: "即将推出", locale: AppLanguageManager.currentLocale))
-                                .font(.system(size: 9, weight: .semibold))
-                                .tracking(0.5)
-                                .textCase(.uppercase)
-                                .foregroundStyle(Ink.fgDim)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(Ink.card)
-                                .clipShape(RoundedRectangle(cornerRadius: 4))
-                        }
-                        Text(String(localized: "团队成员可以在他们的报告页看到此份报告。CloudKit Sharing 还在开发中。",
+                        Text(String(localized: "已自动共享给团队", locale: AppLanguageManager.currentLocale))
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(Ink.fg)
+                        Text(String(localized: "团队成员在「报告 → 团队全部」段能看到此报告。无团队时此条不影响。",
                                     locale: AppLanguageManager.currentLocale))
                             .font(.system(size: 11))
                             .foregroundStyle(Ink.fgDim)
                     }
+                    Spacer()
                 }
-                .tint(Ink.fg)
-                .disabled(true)
+                .padding(.vertical, 4)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
             }
@@ -550,11 +561,13 @@ struct EndInspectionSheet: View {
     }
 
     /// 按钮文案根据 toggle 状态动态变。
+    /// 不发邮件时:报告**保持 .draft**,所以叫"暂存为草稿"更准确,
+    /// 跟用户原话对齐:"未发邮件的巡检状态也不能叫已提交"。
     private var confirmButtonLabel: String {
         if sendMail {
             return String(localized: "确认完成巡检并发邮件", locale: AppLanguageManager.currentLocale)
         }
-        return String(localized: "确认完成巡检", locale: AppLanguageManager.currentLocale)
+        return String(localized: "暂存为草稿(稍后再发)", locale: AppLanguageManager.currentLocale)
     }
 
     /// 是否能按"确认":PDF 没在生成 + 没在归档 + (不发邮件 OR 至少有 1 个有效收件人)
@@ -617,31 +630,46 @@ struct EndInspectionSheet: View {
         )
     }
 
-    /// 当前 report 对应 site 的联系人(从 SitePresetStorage 反查 + BuildersStorage filter)。
+    /// 当前 report 对应 site 的联系人(v1.5 起从 ContactsStorage 拉,id 指 Contact)。
     /// 报告刚生成时 report.projectNo 已写入 — 用它 match SitePreset.projectNo。
-    /// match 不到(老 report / 项目编号空 / 没绑联系人)→ 退回显示所有 builders(降级,保证能发邮件)。
-    private var siteContacts: [Builder] {
+    /// match 不到(老 report / 项目编号空 / 没绑联系人)→ 退回显示所有 contacts(降级)。
+    private var siteContacts: [Contact] {
         let trimmed = report.projectNo.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let preset = SitePresetStorage.load().first(where: { $0.projectNo == trimmed }),
               !preset.linkedContactIDs.isEmpty else {
-            return availableBuilders  // 降级:全列
+            return availableContacts  // 降级:全列
         }
         let ids = Set(preset.linkedContactIDs)
-        return availableBuilders.filter { ids.contains($0.id) }
+        return availableContacts.filter { ids.contains($0.id) }
     }
 
-    /// 当前要发的收件人邮箱列表(builder 勾选 + 临时邮箱手输,合并去重)。
-    /// iterate siteContacts(而非 availableBuilders)与 UI 显示集合保持一致。
+    /// 当前要发的收件人邮箱列表(Contact 勾选 + 临时邮箱手输,合并去重)。
+    /// **R11 修**:先 iterate siteContacts(UI 顺序优先),再补 selectedBuilderIDs 中**不在
+    /// siteContacts 但在 availableContacts** 的 frozen 收件人(eg. report.builderID 指向的
+    /// contact 已从 preset.linkedContactIDs 里移除,但 report 历史仍引用)。否则用户在 EndSheet
+    /// 看到收件人勾选但实际邮件少了。
     private var collectedRecipients: [String] {
         var out: [String] = []
         var seen: Set<String> = []
-        for builder in siteContacts where selectedBuilderIDs.contains(builder.id) {
-            let email = builder.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        for contact in siteContacts where selectedBuilderIDs.contains(contact.id) {
+            let email = contact.email.trimmingCharacters(in: .whitespacesAndNewlines)
             let lower = email.lowercased()
             if !email.isEmpty, !seen.contains(lower) {
                 out.append(email)
                 seen.insert(lower)
+            }
+        }
+        // R11 补:frozen builderID 不在 preset.linkedContactIDs 时,从 availableContacts 找
+        let siteContactIDs = Set(siteContacts.map { $0.id })
+        for id in selectedBuilderIDs where !siteContactIDs.contains(id) {
+            if let c = availableContacts.first(where: { $0.id == id }) {
+                let email = c.email.trimmingCharacters(in: .whitespacesAndNewlines)
+                let lower = email.lowercased()
+                if !email.isEmpty, !seen.contains(lower) {
+                    out.append(email)
+                    seen.insert(lower)
+                }
             }
         }
         let extra = extraEmail.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -669,23 +697,31 @@ struct EndInspectionSheet: View {
 
     // MARK: - Lifecycle bootstrap
 
-    /// onAppear 触发:加载 builders + fetch notes + 后台生成 PDF。
+    /// onAppear 触发:加载 contacts + fetch notes + 后台生成 PDF。
     private func bootstrap() {
+        availableContacts = ContactsStorage.load()
         availableBuilders = BuildersStorage.load()
 
-        // 默认勾选:matched SitePreset 的 defaultRecipientIDs(优先),否则 report.builderID(向后兼容)
+        // **R10 + R12 修(并集策略)**:
+        // 单纯用 `report.builderID` 会丢 Start 时多选(report 只存第一个)。
+        // 单纯用 `preset.defaultRecipientIDs` 会无视 Start 时用户的 explicit choice。
+        // 取并集:preset.defaultRecipientIDs ∪ {report.builderID},然后过滤到本工地可见 contacts。
+        // 用户在 EndSheet 仍能取消勾选。
         let trimmedProjectNo = report.projectNo.trimmingCharacters(in: .whitespacesAndNewlines)
+        var initialIDs: Set<UUID> = []
         if !trimmedProjectNo.isEmpty,
-           let preset = SitePresetStorage.load().first(where: { $0.projectNo == trimmedProjectNo }),
-           !preset.defaultRecipientIDs.isEmpty {
-            selectedBuilderIDs = Set(preset.defaultRecipientIDs)
-        } else if let idString = report.builderID,
-                  let uuid = UUID(uuidString: idString),
-                  availableBuilders.contains(where: { $0.id == uuid }) {
-            selectedBuilderIDs = [uuid]
+           let preset = SitePresetStorage.load().first(where: { $0.projectNo == trimmedProjectNo }) {
+            initialIDs.formUnion(preset.defaultRecipientIDs)
         }
+        if let idString = report.builderID, let uuid = UUID(uuidString: idString) {
+            initialIDs.insert(uuid)
+        }
+        // 过滤到 availableContacts 实际存在的(防引用已删除的 contact)
+        let availableSet = Set(availableContacts.map { $0.id })
+        selectedBuilderIDs = initialIDs.intersection(availableSet)
 
         // 初始化可编辑字段 — 用户改了 → infoDirty = true → 确认时重新生成 PDF
+        editedReportNo = report.reportNo
         editedProject = report.project
         editedProjectNo = report.projectNo
         editedClient = report.client
@@ -707,7 +743,12 @@ struct EndInspectionSheet: View {
     }
 
     /// 把可编辑字段写回 report 实例(modelContext 自动跟踪保存)。
+    /// reportNo 特殊:空字符串就保留原 auto-generated 值不动,避免用户误清空导致文件名丢失。
     private func applyEditsToReport() {
+        let trimmedReportNo = editedReportNo.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedReportNo.isEmpty {
+            report.reportNo = trimmedReportNo
+        }
         report.project = editedProject.trimmingCharacters(in: .whitespacesAndNewlines)
         report.projectNo = editedProjectNo.trimmingCharacters(in: .whitespacesAndNewlines)
         report.client = editedClient.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -722,19 +763,26 @@ struct EndInspectionSheet: View {
     /// 1. 保存可编辑字段
     /// 2. 如有 dirty → 重新生成 PDF
     /// 3. 归档 PDF
-    /// 4. sendMail on → 弹邮件撰写器(MailComposeView 完成回调里 end session)
-    /// 5. sendMail off → 直接 end session
-    /// 6. teamShare 暂未实现,目前 toggle 无 effect(UI 占位)
+    /// 4. sendMail on → 弹邮件撰写器,.sent 回调里 end session(状态 = .submitted)
+    /// 5. sendMail off → 不 end,session 暂存为草稿(状态保持 .draft),让用户之后从
+    ///    「报告」Tab 草稿段点「继续巡检」回来。用户原话:"未发邮件的也不能叫已提交"
+    /// 6. teamShare 已通过 TeamDataMirrorService 自动 mirror,UI 只展示信息行
     private func handleConfirm() {
         guard !isGenerating, !isArchiving else { return }
         applyEditsToReport()
 
+        // P2 #199:**同步**设 isGenerating=true,防用户在 Task 启动前狂按再次进 handleConfirm
+        // (之前 isGenerating=true 在 Task 内,guard 检查时还是 false → 双重 generatePDF 竞态,
+        //  临时 PDF 文件互相覆盖)。
+        let needRegen = infoDirty || generatedPDFURL == nil
+        if needRegen {
+            isGenerating = true
+            generatedPDFURL = nil
+            pdfThumbnail = nil
+        }
+
         Task { @MainActor in
-            // 如果用户改过字段,重新生成 PDF
-            if infoDirty || generatedPDFURL == nil {
-                isGenerating = true
-                generatedPDFURL = nil
-                pdfThumbnail = nil
+            if needRegen {
                 await generatePDF()
                 infoDirty = false
             }
@@ -745,10 +793,11 @@ struct EndInspectionSheet: View {
                 return
             }
 
-            // 不发邮件:仅归档 + end session
+            // 不发邮件:仅归档 PDF,把 session 暂存为草稿(不 mark .submitted)。
+            // session manager detach → banner 收起;报告进「报告」Tab 草稿段。
             isArchiving = true
             let archived = archiveGeneratedPDFIfPresent()
-            endSessionAndCallback(archivedPDFURL: archived)
+            suspendSessionAsDraftAndCallback(archivedPDFURL: archived)
             isArchiving = false
         }
     }
@@ -898,6 +947,30 @@ struct EndInspectionSheet: View {
             // end 失败不阻断 UI 跳转(状态机层的异常少见且无可挽回);记下提示。
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+        onCompleted(report, archivedPDFURL)
+        dismiss()
+    }
+
+    /// "暂存为草稿" + 触发 callback + 关 sheet。
+    /// session manager detach 但 report 状态保持 .draft、submittedAt 不写。
+    /// 报告进「报告」Tab 的草稿段,用户之后可点「继续巡检」回到 session。
+    private func suspendSessionAsDraftAndCallback(archivedPDFURL: URL?) {
+        InspectionSessionManager.shared.suspendAsDraft()
+        // 写一次 updatedAt 让列表行的"最近编辑"信号更新,
+        // 但 statusRaw / submittedAt 都不动。
+        report.updatedAt = Date()
+        // P1 #194:save 失败写日志 — 之前 try? 静默,失败时 updatedAt 不持久化 → 列表行旧
+        do {
+            try modelContext.save()
+        } catch {
+            Self.logger.error("suspendAsDraft save failed: \(error.localizedDescription)")
+        }
+        // 团队同步:applyEditsToReport 把用户改的 reportNo/project/location/attn 等
+        // 写进 report,但草稿路径不走 end(in:)(没 mirror),不补这条 mirror 的话
+        // Member 端永远看不到这些编辑。
+        let ctx = modelContext
+        let r = report
+        Task { await TeamDataMirrorService.shared.mirrorReport(r, in: ctx) }
         onCompleted(report, archivedPDFURL)
         dismiss()
     }

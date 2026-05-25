@@ -156,7 +156,7 @@ struct SiteAddressPicker: View {
         )
     }
 
-    /// 用户点联想项 → MKLocalSearch 拿到精确坐标。
+    /// 用户点联想项 → MKLocalSearch 拿到精确坐标 + 完整地址(街道/suburb/STATE/postcode/country)。
     private func pick(_ item: AddressCompleter.Suggestion) {
         resolveError = nil
         resolvingFor = item.title
@@ -165,10 +165,11 @@ struct SiteAddressPicker: View {
         search.start { response, err in
             DispatchQueue.main.async {
                 resolvingFor = nil
-                if let coord = response?.mapItems.first?.placemark.coordinate {
-                    let parts = [item.title, item.subtitle].filter { !$0.isEmpty }
-                    selectedAddress = parts.joined(separator: " · ")
-                    selectedCoordinate = coord
+                if let placemark = response?.mapItems.first?.placemark {
+                    let full = AddressEnrichment.format(placemark: placemark)
+                        ?? AddressEnrichment.fallback(for: item.completion)
+                    selectedAddress = full
+                    selectedCoordinate = placemark.coordinate
                     query = ""
                     completer.update(query: "")
                 } else {
@@ -217,5 +218,68 @@ final class AddressCompleter: NSObject, MKLocalSearchCompleterDelegate {
 
     func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
         results = []
+    }
+}
+
+// MARK: - 详细地址解析
+
+/// 把一个 MKLocalSearchCompletion enrich 成 `Street, Suburb STATE Postcode, Country`
+/// 格式的完整地址(澳洲场景:e.g. "123 Sample St, Sydney NSW 2000, Australia")。
+///
+/// 设计:
+/// - 跑一次 MKLocalSearch 拿 top1 mapItem,从 placemark 提取字段。
+/// - 任一字段缺失就跳过(用 compactMap + filter),不会出现 ", , NSW, "。
+/// - 失败 / 超时 / 取消时 fallback 用 completion.title + completion.subtitle 拼。
+/// - 调用方负责 Task cancellation(连按时取消上一次)。
+enum AddressEnrichment {
+    /// 拉详细地址。失败时返回 fallback(title+subtitle)而不是 throw。
+    static func resolve(completion: MKLocalSearchCompletion) async -> String {
+        let request = MKLocalSearch.Request(completion: completion)
+        let search = MKLocalSearch(request: request)
+        do {
+            let response = try await search.start()
+            if Task.isCancelled { return fallback(for: completion) }
+            if let placemark = response.mapItems.first?.placemark {
+                return format(placemark: placemark) ?? fallback(for: completion)
+            }
+            return fallback(for: completion)
+        } catch {
+            return fallback(for: completion)
+        }
+    }
+
+    /// 用 placemark 字段拼:`"<street>, <suburb> <STATE> <postcode>, <country>"`。
+    /// 任一段为空就 skip 整段,不留尾巴逗号。
+    static func format(placemark: MKPlacemark) -> String? {
+        let street = [placemark.subThoroughfare, placemark.thoroughfare]
+            .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        let suburb = (placemark.subLocality ?? placemark.locality)?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        let state = placemark.administrativeArea?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        let postcode = placemark.postalCode?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+
+        let line2 = [suburb, state, postcode]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        let country = placemark.country?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+
+        let segments = [street, line2, country]
+            .filter { !$0.isEmpty }
+        guard !segments.isEmpty else { return nil }
+        return segments.joined(separator: ", ")
+    }
+
+    static func fallback(for completion: MKLocalSearchCompletion) -> String {
+        [completion.title, completion.subtitle]
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
     }
 }

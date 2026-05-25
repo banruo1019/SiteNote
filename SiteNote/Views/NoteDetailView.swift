@@ -91,30 +91,37 @@ struct NoteDetailView: View {
         }
     }
 
+    /// ScrollView 内容,抽出来减 mainBody 类型推断负担。
+    @ViewBuilder
+    private var scrollContent: some View {
+        VStack(spacing: DesignTokens.Spacing.medium) {
+            sessionBanner         // 0. 归属巡检报告 banner(note.inspectionSessionID 不空时显示)
+            titleBlock            // 1. 标题
+            if !isEngineerProfile {
+                tagsRow           // 1.5 工地 + 分类(Engineer 巡检 session 已自动绑工地,sessionBanner 显示工地名;且 Engineer 没有分类/隐患/指派/平面图概念,整排 chip 隐藏)
+            }
+            photosBlock           // 3. 照片
+            addPhotoRow           // 4. 加照片
+            if !isEngineerProfile {
+                datesRow          // 5. 到期时间(Engineer 不显示——没有 deadline 概念)
+            }
+            audioDisclosure       // 6. 录音
+            floorPlanDisclosure   // 7. 平面图
+            otherMetaDisclosure   // 9. 位置/天气/分享
+            actionButtonGroup     // 10. 操作按钮
+        }
+        .padding()
+    }
+
     /// 主体 ScrollView。只在 note 仍然有效时才会被 evaluate;所有读 note 属性的 sheet/overlay 都挂这里。
     @ViewBuilder
     private var mainBody: some View {
-        ScrollView {
-            VStack(spacing: DesignTokens.Spacing.medium) {
-                sessionBanner         // 0. 归属巡检报告 banner(note.inspectionSessionID 不空时显示)
-                titleBlock            // 1. 标题
-                tagsRow               // 1.5 工地 + 分类
-                photosBlock           // 3. 照片
-                addPhotoRow           // 4. 加照片
-                if !isEngineerProfile {
-                    datesRow          // 5. 到期时间(Engineer 不显示——没有 deadline 概念)
-                }
-                audioDisclosure       // 6. 录音
-                floorPlanDisclosure   // 7. 平面图
-                otherMetaDisclosure   // 9. 位置/天气/分享
-                actionButtonGroup     // 10. 操作按钮
-            }
-            .padding()
-        }
+        ScrollView { scrollContent }
         .scrollContentBackground(.hidden)
         .background(Ink.bg.ignoresSafeArea())
         .navigationTitle("详情")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar { engineerDoneToolbar }
         .overlay {
             if aiWorking {
                 aiLoadingOverlay
@@ -130,10 +137,15 @@ struct NoteDetailView: View {
         }
         .sheet(isPresented: $isShowingFloorPlanMark) {
             FloorPlanMarkView(
-                preferredSiteTag: note.siteTag,
+                // 巡检中的 note 优先用 session report 的 location(= siteTag = address);
+                // 否则 fallback note.siteTag。这样巡检页打开图标位时只显示本工地图纸,
+                // 不再让工程师从其它工地的清单里挑。
+                preferredSiteTag: floorPlanSiteContext,
                 pinColor: pinColorForThisNote
             ) { result in
                 note.floorPlanRef = result.planName
+                // P2 #187:同时存 floorPlanID,name 改了仍能找回。
+                note.floorPlanID = FloorPlansStorage.find(name: result.planName)?.id
                 note.floorPlanX = result.x
                 note.floorPlanY = result.y
             }
@@ -246,44 +258,35 @@ struct NoteDetailView: View {
         }
         .onChange(of: pickerItems) { _, items in
             guard !items.isEmpty else { return }
-            Task {
-                var loaded: [UIImage] = []
-                for item in items {
-                    if let data = try? await item.loadTransferable(type: Data.self),
-                       let img = UIImage(data: data) {
-                        loaded.append(img)
-                    }
-                }
-                await MainActor.run {
-                    for img in loaded { appendPhoto(img) }
-                    pickerItems = []
-                }
-            }
+            Task { await loadAndAppendPickerItems(items) }
         }
-        .alert("无法指派", isPresented: Binding(
-            get: { assignError != nil },
-            set: { if !$0 { assignError = nil } }
-        )) {
+        .alert("无法指派", isPresented: assignErrorPresented) {
             Button("知道了") { assignError = nil }
         } message: {
             Text(assignError ?? "")
         }
-        .alert("AI 出错", isPresented: Binding(
-            get: { aiError != nil },
-            set: { if !$0 { aiError = nil } }
-        )) {
+        .alert("AI 出错", isPresented: aiErrorPresented) {
             Button("知道了") { aiError = nil }
         } message: {
             Text(aiError ?? "")
         }
-        .alert("标注提示", isPresented: Binding(
-            get: { photoAnnotationError != nil },
-            set: { if !$0 { photoAnnotationError = nil } }
-        )) {
+        .alert("标注提示", isPresented: photoAnnotationErrorPresented) {
             Button("知道了") { photoAnnotationError = nil }
         } message: {
             Text(photoAnnotationError ?? "")
         }
+    }
+
+    /// 抽出 Binding<Bool> helper — 内联 Binding(get:set:) 在 mainBody 末尾 4 个 alert 里
+    /// 触发 Swift type-check 爆炸,改 computed property 后类型简单一截。
+    private var assignErrorPresented: Binding<Bool> {
+        Binding(get: { assignError != nil }, set: { if !$0 { assignError = nil } })
+    }
+    private var aiErrorPresented: Binding<Bool> {
+        Binding(get: { aiError != nil }, set: { if !$0 { aiError = nil } })
+    }
+    private var photoAnnotationErrorPresented: Binding<Bool> {
+        Binding(get: { photoAnnotationError != nil }, set: { if !$0 { photoAnnotationError = nil } })
     }
 
     // MARK: - 0. 归属巡检报告 banner
@@ -377,6 +380,54 @@ struct NoteDetailView: View {
         }
     }
 
+
+    /// 抽出来防 mainBody modifier 链类型推断爆炸。
+    @MainActor
+    private func loadAndAppendPickerItems(_ items: [PhotosPickerItem]) async {
+        var loaded: [UIImage] = []
+        for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let img = UIImage(data: data) {
+                loaded.append(img)
+            }
+        }
+        for img in loaded { appendPhoto(img) }
+        pickerItems = []
+    }
+
+    /// Engineer 视角:右上角 ✓ 完成按钮(PM 视角下返回空 toolbar 内容)。
+    /// 抽成 @ToolbarContentBuilder 避免在 mainBody 里把 .toolbar { if ... } 嵌进
+    /// 一长串 modifier 后 Swift 类型推断爆炸("expression too complex")。
+    @ToolbarContentBuilder
+    private var engineerDoneToolbar: some ToolbarContent {
+        if isEngineerProfile {
+            ToolbarItem(placement: .confirmationAction) {
+                Button {
+                    // SwiftData @Bindable 已自动持久化 transcription 等绑定字段,
+                    // 这里 explicit save 是双保险,防止 dismiss 时还没 flush。
+                    try? modelContext.save()
+                    dismiss()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Ink.fg)
+                }
+                .accessibilityLabel(String(localized: "完成"))
+            }
+        }
+    }
+
+    /// 标平面图位置时的工地上下文。
+    /// - 巡检中 note(inspectionSessionID 非空且 report 能查到)→ 用 report.location(= siteTag = address)
+    /// - 否则 → 用 note.siteTag(可能是 nil,FloorPlanMarkView 会回到工地选择器)
+    /// 非空字符串等同 FloorPlanMarkView 的 lockedSite 语义,只显示该工地的平面图。
+    private var floorPlanSiteContext: String? {
+        if let sid = note.inspectionSessionID, let report = fetchReport(for: sid) {
+            let loc = report.location.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !loc.isEmpty { return loc }
+        }
+        return note.siteTag
+    }
 
     /// 这条 note 的图钉颜色。和 FloorPlanLookupView 的 pinColor 逻辑一致。
     var pinColorForThisNote: Color {

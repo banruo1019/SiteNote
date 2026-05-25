@@ -139,9 +139,11 @@ struct ProfileSelectorView: View {
     }
 
     private func themeColor(_ kind: ProfileKind) -> Color {
+        // v1.6 (en-v1):两个角色统一用黑色 accent,跟整体 monochrome 工业风一致。
+        // 原 Engineer 用蓝色与 Site Team 用黑色不协调(用户反馈)。
         switch kind {
-        case .pm: return Ink.accent          // 工地橙
-        case .engineer: return Ink.accentBlue
+        case .siteTeam: return Ink.fg
+        case .engineer: return Ink.fg
         }
     }
 }

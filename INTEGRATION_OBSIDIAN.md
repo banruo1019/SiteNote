@@ -82,8 +82,8 @@ intake.py 用 `vault/01_Projects/_aliases.json` 找项目。你在 SiteNote 里�
 
 | 项目目录 | 在 SiteNote 里 siteTag 可以填 |
 |---|---|
-| 20-Forsyth | "20 Forsyth" / "20 Forsyth St" / "20-Forsyth" |
-| 38-Forsyth | "38 Forsyth" / "38 Forsyth St" |
+| 20-Sample | "20 Sample" / "20 Sample St" / "20-Sample" |
+| 38-Sample | "38 Sample" / "38 Sample St" |
 | 2-Stan | "2 Stan" / "2 Stan St" |
 | 39-Pearl-Bay | "39 Pearl Bay" / "Pearl Bay" |
 | 39-Pearl-Bay-Lift | "39 Pearl Bay Lift" |
@@ -132,7 +132,7 @@ intake.py 用 `vault/01_Projects/_aliases.json` 找项目。你在 SiteNote 里�
                      ▼
 ┌────────────────────────────────────────────────┐
 │ try_handle_sitenote()                          │
-│ site="20 Forsyth" → 匹配到 20-Forsyth-...     │
+│ site="20 Sample" → 匹配到 20-Sample-...     │
 │ 移动到 {项目}/14_Daily_Log/                   │
 │ hazard=true → 写一条 followup                 │
 └────────────────────┬───────────────────────────┘

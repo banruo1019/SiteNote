@@ -34,6 +34,13 @@ struct StartInspectionSheet: View {
 
     @State private var siteTag: String = ""
     @State private var inspectionType: String = ""
+    /// **R7#1**:跟踪用户是否手改过 inspectionType。
+    /// 没手改过 → 切 site preset 时覆盖 preset.defaultInspectionType。
+    /// 手改过 → 保留用户输入(尊重 explicit choice)。
+    @State private var inspectionTypeUserEdited: Bool = false
+    /// v1.5:availableBuilders 改成 Contact 列表(原来是 Builder 扁平列表)。
+    /// 命名保留是为了少改变量,本质装的是 ContactsStorage.load()。
+    @State private var availableContacts: [Contact] = []
     @State private var availableBuilders: [Builder] = []
     @State private var selectedBuilderIDs: Set<UUID> = []
     @State private var showsNewSite: Bool = false
@@ -52,13 +59,19 @@ struct StartInspectionSheet: View {
         return sitePresets.first { $0.siteTag == siteTag }
     }
 
-    /// 当前 site preset linked 的联系人列表(从 BuildersStorage 拉)。
+    /// 当前 site preset linked 的联系人列表(v1.5 起从 ContactsStorage 拉,id 指 Contact)。
     /// 没绑联系人 → 空(空态引导用户去设置 → 工地详情加联系人)。
-    /// v1.4:从"按 clientName 公司匹配"改成"按 SitePreset.linkedContactIDs 显式绑定"。
-    private var siteContacts: [Builder] {
+    /// **R10 修**:按 `preset.linkedContactIDs` 顺序构造,与 attn/builderID 决议顺序一致。
+    /// 否则 UI 显示第一个 vs attn 拿到的"第一个 selected" 可能不是同一人。
+    private var siteContacts: [Contact] {
         guard let preset = selectedPreset else { return [] }
-        let ids = Set(preset.linkedContactIDs)
-        return availableBuilders.filter { ids.contains($0.id) }
+        let byID = Dictionary(uniqueKeysWithValues: availableContacts.map { ($0.id, $0) })
+        return preset.linkedContactIDs.compactMap { byID[$0] }
+    }
+
+    /// 通过 Contact.builderID 反查公司名(用于 row 显示)。
+    private func companyName(for contact: Contact) -> String {
+        availableBuilders.first(where: { $0.id == contact.builderID })?.name ?? ""
     }
 
     /// 表单是否可提交:必须选工地 + 填类型。
@@ -67,11 +80,6 @@ struct StartInspectionSheet: View {
             && !inspectionType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// 预览用的下一个报告号 — 实际生成在 manager.start 时,这里只展示占位提示。
-    /// 不复用 manager 的内部序号生成器(避免提前消耗 counter),用占位文本即可。
-    private var previewReportNoPlaceholder: String {
-        String(localized: "自动分配", locale: locale)
-    }
 
     // MARK: - body
 
@@ -82,7 +90,6 @@ struct StartInspectionSheet: View {
                     siteSection
                     inspectionTypeSection
                     recipientsSection
-                    previewSection
                     actionRow
                     Spacer(minLength: 0)
                 }
@@ -114,6 +121,7 @@ struct StartInspectionSheet: View {
             }
             .sheet(isPresented: $showsBuildersEditor, onDismiss: {
                 // 编辑联系人回来后重新 load(可能新增)。
+                availableContacts = ContactsStorage.load()
                 availableBuilders = BuildersStorage.load()
             }) {
                 NavigationStack {
@@ -199,7 +207,14 @@ struct StartInspectionSheet: View {
 
             TextField(
                 String(localized: "如 level 1 reo", locale: locale),
-                text: $inspectionType
+                text: Binding(
+                    get: { inspectionType },
+                    set: { newValue in
+                        inspectionType = newValue
+                        // R7#1:用户手敲过 → 锁住,不再被切 preset 覆盖
+                        inspectionTypeUserEdited = true
+                    }
+                )
             )
             .focused($typeFocused)
             .font(.system(size: 15))
@@ -281,21 +296,22 @@ struct StartInspectionSheet: View {
         }
     }
 
-    private func builderRow(_ builder: Builder) -> some View {
-        let checked = selectedBuilderIDs.contains(builder.id)
+    private func builderRow(_ contact: Contact) -> some View {
+        let checked = selectedBuilderIDs.contains(contact.id)
+        let company = companyName(for: contact)
         return Button {
-            toggleBuilder(builder.id)
+            toggleBuilder(contact.id)
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: checked ? "checkmark.square.fill" : "square")
                     .font(.system(size: 18))
                     .foregroundStyle(checked ? Ink.fg : Ink.fgDim)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(builder.name)
+                    Text(contact.name)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(Ink.fg)
-                    if !builder.company.isEmpty {
-                        Text(builder.company)
+                    if !company.isEmpty {
+                        Text(company)
                             .font(.system(size: 11))
                             .foregroundStyle(Ink.fgDim)
                     }
@@ -310,52 +326,6 @@ struct StartInspectionSheet: View {
             )
         }
         .buttonStyle(.plain)
-    }
-
-    // MARK: - 预览 section
-
-    private var previewSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Rectangle().fill(Ink.line).frame(height: 1)
-                Text(String(localized: "预览", locale: locale))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Ink.fgDim)
-                Rectangle().fill(Ink.line).frame(height: 1)
-            }
-            .padding(.horizontal, 4)
-
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "doc.text")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Ink.fg)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(previewReportNoPlaceholder)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Ink.fg)
-                    Text(previewSubtitle)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Ink.fg2)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Ink.card)
-            )
-        }
-    }
-
-    private var previewSubtitle: String {
-        let site = siteTag.isEmpty
-            ? String(localized: "未选工地", locale: locale)
-            : siteTag
-        let type = inspectionType.isEmpty
-            ? String(localized: "未填类型", locale: locale)
-            : inspectionType
-        return "\(site) · \(type)"
     }
 
     // MARK: - 按钮行
@@ -414,9 +384,10 @@ struct StartInspectionSheet: View {
         .padding(.horizontal, 4)
     }
 
-    /// 初始化:load presets / builders,处理 prefill。
+    /// 初始化:load presets / contacts / builders,处理 prefill。
     private func initialLoad() {
         sitePresets = SitePresetStorage.load()
+        availableContacts = ContactsStorage.load()
         availableBuilders = BuildersStorage.load()
 
         // 1) prefill 工地
@@ -430,12 +401,13 @@ struct StartInspectionSheet: View {
     }
 
     /// 选了工地之后:自动 prefill 巡检类型 + 默认收件人勾选。
-    /// 用户已经手改过类型时不覆盖。
+    /// **R7#1**:用户手改过 inspectionType(inspectionTypeUserEdited=true)→ 保留;
+    /// 否则始终用新 preset 的 defaultInspectionType(即使旧 preset 已经填了类型)。
     /// 切换工地时清掉不在新 site linked 范围的勾选(避免把别的工地的联系人留下来)。
     private func applyPresetDefaults() {
         guard let preset = selectedPreset else { return }
 
-        if inspectionType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if !inspectionTypeUserEdited {
             inspectionType = preset.defaultInspectionType
         }
 
@@ -471,12 +443,18 @@ struct StartInspectionSheet: View {
 
         let preset = selectedPreset
 
-        // 默认 attn:选了 builder 取第一个;否则 fallback 到 preset.defaultAttn。
+        // **R8#3**:默认 attn 取联系人的"第一个" — 之前 `selectedBuilderIDs.first` 从 Set 取
+        // 顺序未定,可能任意 selected contact。改:按 preset.linkedContactIDs 的固定顺序找
+        // 第一个被勾选的,保证用户看到的 UI 顺序 = report.attn 选用顺序。
         let attn: String = {
-            if let firstSelected = selectedBuilderIDs.first,
-               let b = availableBuilders.first(where: { $0.id == firstSelected }) {
-                return b.name
+            if let preset {
+                for id in preset.linkedContactIDs where selectedBuilderIDs.contains(id) {
+                    if let c = availableContacts.first(where: { $0.id == id }) {
+                        return c.name
+                    }
+                }
             }
+            // 无 preset / 没匹配 → fallback 到 preset.defaultAttn
             return preset?.defaultAttn ?? ""
         }()
 
@@ -491,11 +469,18 @@ struct StartInspectionSheet: View {
             in: modelContext
         )
 
-        // 若选了多个 builder,把第一个 builderID 写到 report,方便后续一键发邮件。
-        // 其余多收件人由 export 流程从 selectedBuilderIDs 取(本 sheet 暂不持久化多选,后续可扩展)。
-        // TODO: 多收件人持久化 — 当前 InspectionReport 只存单个 builderID,
-        //       多收件人交给 EndInspection / Export 时再让用户确认列表。
-        if let firstID = selectedBuilderIDs.first {
+        // **R9 修**:builderID 必须用与 `attn` 同样的 ordered 决议 — 之前 `selectedBuilderIDs.first`
+        // 从 Set 取顺序未定 → attn 显示 A 但 builderID 指向 B → 一键邮件发错人。
+        // 这里复用 attn 决议的同款逻辑:按 preset.linkedContactIDs 顺序找第一个 selected。
+        let chosenBuilderID: UUID? = {
+            if let preset {
+                for id in preset.linkedContactIDs where selectedBuilderIDs.contains(id) {
+                    return id
+                }
+            }
+            return selectedBuilderIDs.first  // 无 preset 时 fallback
+        }()
+        if let firstID = chosenBuilderID {
             report.builderID = firstID.uuidString
             try? modelContext.save()
         }

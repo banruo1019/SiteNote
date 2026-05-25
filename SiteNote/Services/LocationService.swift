@@ -57,6 +57,8 @@ final class LocationService: NSObject {
     /// - Returns: 当前位置。`address` 字段可能为 `nil`（反查失败不影响坐标）。
     /// - Throws: `LocationError.notAuthorized` 或 `LocationError.unavailable`。
     func getCurrentLocation() async throws -> Location {
+        // v1.6 (en-v1):截图模式 直接抛 — 不去碰 CLLocationManager。
+        if MockDataSeeder.isActive { throw LocationError.notAuthorized }
         let status = await resolveAuthorization()
         guard status == .authorizedWhenInUse || status == .authorizedAlways else {
             throw LocationError.notAuthorized
@@ -103,7 +105,9 @@ final class LocationService: NSObject {
     }
 
     /// 若权限未决定则发起请求并等待用户选择；否则直接返回当前状态。
+    /// v1.6 (en-v1):截图模式 永远返回 denied,杜绝 location dialog 污染截图。
     private func resolveAuthorization() async -> CLAuthorizationStatus {
+        if MockDataSeeder.isActive { return .denied }
         let current = manager.authorizationStatus
         guard current == .notDetermined else { return current }
 
@@ -114,7 +118,7 @@ final class LocationService: NSObject {
     }
 
     /// 反向地理编码：返回 "Suburb, State" 简名格式（工地场景只关心 "哪个区"）。
-    /// 例如 "Willoughby, NSW"。无法拼出时返回 nil。
+    /// 例如 "Sydney, NSW"。无法拼出时返回 nil。
     private func reverseGeocode(_ location: CLLocation) async throws -> String? {
         let placemarks = try await geocoder.reverseGeocodeLocation(location)
         guard let mark = placemarks.first else { return nil }

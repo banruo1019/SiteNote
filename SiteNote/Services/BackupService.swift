@@ -169,20 +169,30 @@ enum BackupService {
     /// 一旦未来引入第三方库往 settings.xxx 写键就被一并备份了。这里给所有当前确认要备份的键
     /// 列出来,让审计/将来 PR 加键时一眼能看到"这条要不要进备份"。
     /// 仍然保留前缀兜底,避免漏掉个别小工具自加的 settings.xxx 临时键。
+    ///
+    /// **SitePreset 已迁 SwiftData** — 备份 zip 通过 store snapshot(`Application Support/<store>.sqlite`)覆盖。
+    /// legacy `settings.sitePresets.v1` 不再写入,但还原老版本备份会被 `migrateFromUserDefaultsOnce` 消费。
     static let backupKeys: [String] = [
-        // 语言 / 角色
+        // 语言 / 角色 / 显示名(本地业务信息)
         "settings.appLanguage",
         "settings.userProfile",
         "settings.userProfile.selected",
+        "settings.userProfile.displayName",
         // 录入 / 提醒
         "settings.speechLanguage",
         "settings.morningReminderHour",
         "settings.morningReminderMinute",
         "settings.dailyDigestEnabled",
         "settings.inspectorName",
-        // AI 总开关 / Polish 开关(v1.2 起 AI 精简到只 Polish)
+        // AI 开关(v1.2 起 AI 精简到只本地 Polish)
         "settings.aiMasterEnabled",
         "settings.aiPolishEnabled",
+        // 联系人 / 公司簿 / 邮件模板 / 工程师抬头(R4 P1 #183 补充)
+        "settings.builders.v1",
+        "settings.contacts.v1",
+        "settings.emailTemplate.v1",
+        "settings.engineerCompanyName",
+        "settings.engineerABN",
         // 用户内容列表
         "settings.siteTags",
         "settings.subTagsGlobalV1",
@@ -190,21 +200,31 @@ enum BackupService {
         "settings.clauseRefs.seeded",
         "settings.floorPlans",
         "settings.siteCentroids.v1",
-        // (Obsidian 已下架,这两个 key 留作 legacy 兼容,旧用户备份能恢复)
-        "settings.obsidian.exportFolderPath",
         // 引导
         "settings.onboarding.dismissed.v1",
-        "settings.aiKeyHint.dismissed.v1",
+        // legacy(Obsidian 已下架 / aiKeyHint 已废弃)— 留 fallthrough 保证老 backup 恢复语义不破
+        "settings.obsidian.exportFolderPath",
     ]
 
     /// 把 SiteNote 自己的 UserDefaults 键序列化为 JSON 写到 metaDir/userdefaults.json。
     /// 用 `backupKeys` 显式白名单,避免误备份第三方/系统键。
+    ///
+    /// **P0 R3#1**:`Data` 类型值(builders.v1 / contacts.v1 / emailTemplate.v1 / floorPlans /
+    /// siteCentroids.v1 等所有用 JSONEncoder 存的)**不是合法 JSON object**,之前
+    /// `JSONSerialization.isValidJSONObject([value])` 直接 reject → 这些 key 静默不备份 →
+    /// 还原后联系人/邮件模板/平面图索引全丢。
+    ///
+    /// 修:Data 值用 base64 包装成字典 `{"__data_b64__": "<base64>"}`,future restore 路径
+    /// (v2 实现)反向解开。
     private static func snapshotUserDefaults(into metaDir: URL) {
         let defaults = UserDefaults.standard
         var picked: [String: Any] = [:]
         for key in backupKeys {
             guard let value = defaults.object(forKey: key) else { continue }
-            if JSONSerialization.isValidJSONObject([value]) {
+            if let data = value as? Data {
+                // Data 类型 → base64
+                picked[key] = ["__data_b64__": data.base64EncodedString()]
+            } else if JSONSerialization.isValidJSONObject([value]) {
                 picked[key] = value
             }
         }

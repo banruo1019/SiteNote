@@ -108,6 +108,24 @@ enum FloorPlansStorage {
         return all.first(where: { $0.name == name })
     }
 
+    /// P2 #187:按 UUID 查 — 稳定引用,改名不丢绑定。
+    /// 老数据 Note 没 floorPlanID 时,caller 走 find(name:) fallback。
+    static func find(id: UUID) -> FloorPlan? {
+        load().first(where: { $0.id == id })
+    }
+
+    /// P2 #187:fallback chain — 优先 id,fallback name,都没就 nil。
+    /// 给 view / PDF builder 用,统一一处。
+    static func resolve(id: UUID?, name: String?, siteTag: String? = nil) -> FloorPlan? {
+        if let id, let byID = find(id: id) {
+            return byID
+        }
+        if let name {
+            return find(name: name, siteTag: siteTag)
+        }
+        return nil
+    }
+
     static func absoluteURL(forRelative relative: String) -> URL? {
         guard let docs = FileManager.default.urls(
             for: .documentDirectory,

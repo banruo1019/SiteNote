@@ -48,7 +48,7 @@ enum ReportNumbering {
         guard let scalar = parsed.revision.unicodeScalars.first else { return number }
         // 已经到 Z,封顶。
         if scalar.value >= Unicode.Scalar("Z").value { return number }
-        let next = Unicode.Scalar(scalar.value + 1)!
+        guard let next = Unicode.Scalar(scalar.value + 1) else { return number }
         let nextLetter = String(Character(next))
         return format(projectNo: parsed.projectNo, visitIndex: parsed.visitIndex, revision: nextLetter)
     }

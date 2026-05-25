@@ -10,20 +10,25 @@ import Foundation
 import SwiftData
 import UIKit
 import Observation
+import os
 
-/// 最近一次保存的快照——供 UndoToast 撤销。
+/// 最近一次保存的快照——供 UndoToast 撤销 + 快捷改 deadline。
 struct LastSaveSnapshot {
     let noteID: UUID
     let summary: String
     /// 上次保存时一并落盘的相对路径,如果撤销要一起删掉。
     let audioRelativePath: String?
     let photoRelativePaths: [String]
+    /// 当前 deadline — UndoToast 上的 chip 用它决定高亮哪一个。
+    /// `var` 因为 toast 点 chip 后可以更新这条 snapshot 让高亮跟随。
+    var deadline: Deadline
 }
 
 /// 录音+拍照的业务协调器。
 @MainActor
 @Observable
 final class HomeViewModel {
+    private static let logger = Logger(subsystem: "com.banruo.sitenote", category: "HomeViewModel")
     private(set) var isRecording: Bool = false
     var partialTranscription: String = ""
     /// 实时音量(0-1),供 RecordView 波形动画用。录音中 VoiceCaptureService 喂入,停录时归零。
@@ -329,6 +334,16 @@ final class HomeViewModel {
             weather: weatherInfo
         )
 
+        // PM 模式 GPS 自动定位:fresh GPS 拿到后找最近已知工地(< 200m),
+        // 守门:note.siteTag 仍 nil 才填(不覆盖 user 手动选的);Engineer 走 session 流程,跳过。
+        if let freshLoc, UserProfileManager.shared.current == .siteTeam,
+           let suggested = SiteSuggestionService.nearestSite(
+            latitude: freshLoc.latitude,
+            longitude: freshLoc.longitude
+           ) {
+            updateNoteSiteTagIfNil(noteID: noteID, siteTag: suggested.name)
+        }
+
         // 如果双语回退改写了转写,重新跑一次 AI polish(commitDirectly 里那次是基于旧转写)。
         // E1.3:严格串行——上面 await 已经完成 GPS / 天气写入,这里再 await polish。
         // Engineer:全面禁 AI(包括双语重试 polish)。
@@ -338,13 +353,16 @@ final class HomeViewModel {
             if aiEnabled, !improvedTranscription.isEmpty {
                 do {
                     let polished = try await AIService.shared.polishTranscription(improvedTranscription)
-                    if polished != improvedTranscription {
+                    // P1 #195 防御:polish 返回空 / 仅空白 → 视为失败,**保留原文**,不写回
+                    let trimmed = polished.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty, polished != improvedTranscription {
                         applyPolishedTranscription(noteID: noteID, polished: polished)
+                    } else if trimmed.isEmpty {
+                        Self.logger.warning("AI polish (bilingual retry) returned empty — keeping original")
                     }
                 } catch {
-                    #if DEBUG
-                    print("[SiteNote] AI polish (bilingual retry) failed: \(error.localizedDescription)")
-                    #endif
+                    // Apple Intelligence 不可用 / 网络失败 — 静默保留原 transcription
+                    Self.logger.error("AI polish (bilingual retry) failed: \(error.localizedDescription)")
                 }
             }
         }
@@ -410,6 +428,21 @@ final class HomeViewModel {
         try? ctx.save() // B6:落盘后台 enrich 字段。
     }
 
+    /// PM 模式 GPS 自动定位:fresh GPS 找到 < 200m 工地后调用。
+    /// 守门:
+    ///   1. note.siteTag 已有(用户手动选过)→ 不覆盖
+    ///   2. note 已软删(deletedAt 非 nil)→ 跳过
+    ///   3. fetch 不到对应 note → 跳过
+    private func updateNoteSiteTagIfNil(noteID: UUID, siteTag: String) {
+        guard let ctx = modelContext else { return }
+        let desc = FetchDescriptor<Note>(predicate: #Predicate<Note> { $0.id == noteID })
+        guard let note = try? ctx.fetch(desc).first else { return }
+        guard (note.siteTag ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard note.deletedAt == nil else { return }
+        note.siteTag = siteTag
+        try? ctx.save()
+    }
+
     // MARK: - 拍照
 
     /// 加一张刚拍/选完的照片到暂存区。
@@ -418,44 +451,60 @@ final class HomeViewModel {
     }
 
     /// 把暂存照片直接保存为 photo-only note。
+    ///
+    /// **延迟优化**:原实现 `await getCurrentLocation()` + `await weather.fetch()`
+    /// 阻塞 1-5 秒才 commit → "直接存"按钮到详情页有明显空窗。
+    /// 现在与 `stopAndSave()` 对齐:cached location 立即 commit,真 GPS / 天气在后台补齐。
+    /// 用户按 → 详情页几乎瞬时,enrichment 字段稍后写回(SwiftData @Bindable 自动刷新)。
     func savePhotosOnly() {
         let photos = stagedPhotos
         guard !photos.isEmpty else { return }
         stagedPhotos = []
 
-        Task {
-            // 先试实时定位,失败再回退到上次位置。明确记录是否回退,避免重复调用。
-            let primary = try? await location.getCurrentLocation()
-            let loc: LocationService.Location? = primary ?? LocationService.lastSuccessfulLocation()
-            let isFallback = primary == nil && loc != nil
+        let capturedAt = Date()
+        let cachedLoc = LocationService.lastSuccessfulLocation()
 
+        commitDirectly(
+            capturedAt: capturedAt,
+            transcription: "",
+            audioRelativePath: nil,
+            location: cachedLoc,
+            isLocationFallback: cachedLoc != nil,
+            weather: nil,
+            deadline: .inbox,
+            photos: photos,
+            siteTag: nil,
+            isHazard: false,
+            templateName: nil,
+            checkedItems: [],
+            contractClauseRef: nil,
+            floorPlanRef: nil,
+            floorPlanX: nil,
+            floorPlanY: nil
+        )
+
+        // 后台补真 GPS + 天气,写回 Note。失败静默降级。
+        guard let noteID = lastSave?.noteID else { return }
+        let bgTask: Task<Void, Never> = Task { [weak self] in
+            guard let self else { return }
+            let freshLoc = try? await self.location.getCurrentLocation()
             var weatherInfo: WeatherService.Weather?
-            if let loc {
-                weatherInfo = try? await weather.fetch(
-                    latitude: loc.latitude,
-                    longitude: loc.longitude
+            if let freshLoc {
+                weatherInfo = try? await self.weather.fetch(
+                    latitude: freshLoc.latitude,
+                    longitude: freshLoc.longitude
                 )
             }
-
-            commitDirectly(
-                capturedAt: Date(),
-                transcription: "",
-                audioRelativePath: nil,
-                location: loc,
-                isLocationFallback: isFallback,
-                weather: weatherInfo,
-                deadline: .inbox,
-                photos: photos,
-                siteTag: nil,
-                isHazard: false,
-                templateName: nil,
-                checkedItems: [],
-                contractClauseRef: nil,
-                floorPlanRef: nil,
-                floorPlanX: nil,
-                floorPlanY: nil
+            // updateNoteEnrichment 自带 Task.isCancelled / deletedAt 守卫;
+            // 整个 class 是 @MainActor,直接调用即可,不需要再 hop 一次。
+            self.updateNoteEnrichment(
+                noteID: noteID,
+                transcription: nil,
+                location: freshLoc,
+                weather: weatherInfo
             )
         }
+        enrichTasks[noteID, default: []].append(bgTask)
     }
 
     /// 丢弃所有暂存照片(用户反悔)。
@@ -518,6 +567,25 @@ final class HomeViewModel {
         dismissUndoToast()
     }
 
+    /// UndoToast 上点「今日 / 3 天 / 7 天」chip 时调用:更新 note.deadline + dueDate,
+    /// 重排推送,并同步 snapshot 让 chip 高亮跟随。
+    /// 如果 snapshot 为空或对应 note 已删 — 静默 no-op。
+    func setLastSaveDeadline(_ newDeadline: Deadline) {
+        guard let snapshot = lastSave, let ctx = modelContext else { return }
+        // 同 deadline 不重复写盘
+        guard snapshot.deadline != newDeadline else { return }
+        let id = snapshot.noteID
+        let descriptor = FetchDescriptor<Note>(predicate: #Predicate<Note> { $0.id == id })
+        guard let note = try? ctx.fetch(descriptor).first else { return }
+        note.deadline = newDeadline
+        note.dueDate = newDeadline.dueDate(from: note.createdAt)
+        try? ctx.save()
+        // 重排通知队列(inbox / archive deadline 自动跳过 schedule)
+        NotificationService.shared.schedule(for: note)
+        // 同步 snapshot,让 toast chip 高亮立即跟随
+        lastSave?.deadline = newDeadline
+    }
+
     // MARK: - 核心 commit
 
     private func commitDirectly(
@@ -538,7 +606,12 @@ final class HomeViewModel {
         floorPlanX: Double? = nil,
         floorPlanY: Double? = nil
     ) {
-        let photoPaths = PhotoStorage.save(photos)
+        // 性能:JPEG 编码 + 写盘是 CPU/I/O 阻塞,1080p × 3 张 ~150ms,
+        // 直接卡住主线程 → "直接存" 到详情页有明显延迟。
+        // 优化:先在主线程瞬时分配 UUID 路径(零 I/O),Note 立即带上 photoPaths,
+        // 真正的编码+写盘交给 Task.detached,与 NavigationStack push 动画并行。
+        // 动画 ~400ms,详情页 body 评估时文件已就绪,无观感差异。
+        let photoPaths = PhotoStorage.reservePaths(count: photos.count)
 
         let note = Note(
             transcription: transcription,
@@ -562,15 +635,105 @@ final class HomeViewModel {
             floorPlanX: floorPlanX,
             floorPlanY: floorPlanY
         )
+        // v1.5:这条 note 归属当前角色(PM / Engineer)。切角色时 UI 按此过滤。
+        note.createdByRoleRaw = UserProfileManager.shared.current.rawValue
         modelContext?.insert(note)
-        // B6:insert 后立刻显式落盘。autosave 也会落,但同 task 的 polish 一秒后回来
-        // 改这条 note,在 autosave 触发前 app 被挂起 → polish 改动丢失。显式 save 缩短脏窗口。
-        try? modelContext?.save()
-        // v1.4 巡检 session — 如果有 active session,把这条 note 绑过去
-        if let ctx = modelContext {
-            InspectionSessionManager.shared.attachIfNeeded(noteID: note.id, in: ctx)
+
+        // P2 #201:**同步 save**,不再推到 Task — 之前推迟 5-20ms 换不到任何感知收益,
+        // 反而埋了竞态:
+        //  - NavigationStack push 后 DetailView fetch 可能拿不到 note(未 commit)
+        //  - enrichNoteAfterCommit 后台 Task 与未 commit 的 insert 竞争
+        //  - app 被杀 → insert 丢,但音频 / 照片文件已分配 → 永久孤儿
+        // SwiftData modelContext.save() 是 main actor 同步调用,这里 5-20ms 在录音落盘已耗的
+        // 几百 ms 路径里完全可以接受。
+        //
+        // **Codex#9**:save 失败时必须撤销所有 side effects(否则 lastSave / photos / session
+        // 全错位 → 用户看到 UI 改变了但磁盘没改,Undo / 撤销失效)。
+        do {
+            try modelContext?.save()
+        } catch {
+            Self.logger.error("commitDirectly save failed; rolling back side effects: \(error.localizedDescription)")
+            // 删已预留的音频 / 照片路径(reservePaths 是占位 UUID,实际还没文件;但音频已写)
+            if let audioRel = audioRelativePath,
+               let audioURL = VoiceCaptureService.absoluteURL(forRelative: audioRel) {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+            // photoPaths 此时还没有 saveImages,但保险:删任何已存在的
+            for relPath in photoPaths {
+                if let url = PhotoStorage.absoluteURL(forRelative: relPath) {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+            // 不设 lastSave,不 push navigation,不 startUndoCountdown,不 attach session
+            return
         }
-        NotificationService.shared.schedule(for: note)
+
+        // 性能:lastSave 立即设 → RecordView 的 onChange 立刻 push navigation。
+        // 这是路径上最早能 fire 导航的位置。
+        lastSave = LastSaveSnapshot(
+            noteID: note.id,
+            summary: summaryText(for: transcription, photoCount: photoPaths.count),
+            audioRelativePath: audioRelativePath,
+            photoRelativePaths: photoPaths,
+            deadline: deadline
+        )
+        // 通知列表高亮这条新记录(跨 tab)。
+        HighlightTracker.shared.markJustAdded(note.id)
+        startUndoCountdown()
+
+        // 性能:照片落盘交给后台。UUID 路径已写到 Note.photoPaths,
+        // 详情页 body 评估时(NavigationStack push 动画结束)文件已就绪。
+        // detached + userInitiated 让 JPEG encode 抢到 CPU,不阻塞主线程动画/手势。
+        // 写盘 task 句柄进 enrichTasks → undoLastSave 撤销时一并 cancel,
+        // 避免用户 5s 内反悔却已把文件落盘(orphan 文件)。
+        if !photos.isEmpty {
+            let pathsCopy = photoPaths
+            let imagesCopy = photos
+            let noteID = note.id
+            let writeTask: Task<Void, Never> = Task.detached(priority: .userInitiated) { [weak self] in
+                // 用户已点 Undo → Task.cancel 在 enrichTasks 那一批被触发,
+                // 这里早 return 不再落盘(reservePaths 阶段没有写过任何文件)。
+                if Task.isCancelled { return }
+                let written = PhotoStorage.saveImages(imagesCopy, toRelativePaths: pathsCopy)
+                if Task.isCancelled {
+                    // 落盘和 cancel 之间的竞态:文件已经写到了 disk,但用户已 Undo。
+                    // undoLastSave 走的是 snapshot.photoRelativePaths(等于 reservePaths
+                    // 返回的预分配路径),所以那段 removeItem 循环会扫到这些已写文件并删掉。
+                    // 这里不再做额外清理,避免 double-delete 跑错时机。
+                    return
+                }
+                // 写盘失败的张数(罕见,磁盘满才会)从 Note.photoPaths 修剪掉,
+                // 避免详情页一直显示占位灰框。回主线程改 SwiftData 字段。
+                if written.count != pathsCopy.count {
+                    await MainActor.run {
+                        guard let self else { return }
+                        guard let ctx = self.modelContext else { return }
+                        let desc = FetchDescriptor<Note>(predicate: #Predicate<Note> { $0.id == noteID })
+                        if let n = try? ctx.fetch(desc).first, n.deletedAt == nil {
+                            n.photoPaths = written
+                            try? ctx.save()
+                        }
+                    }
+                }
+            }
+            enrichTasks[noteID, default: []].append(writeTask)
+        }
+
+        // v1.4 巡检 session — 如果有 active session,把这条 note 绑过去。
+        // 性能:attachIfNeeded 内部做 2 次 SwiftData fetch + 1 次 save,~5-15ms 但属可推迟工作。
+        // 用 Task @MainActor 推到下一 runloop,navigation push 动画启动期间执行,
+        // 详情页 onAppear 时绑定已完成。
+        if let ctx = modelContext {
+            let noteID = note.id
+            Task { @MainActor [weak self] in
+                guard self != nil else { return }
+                InspectionSessionManager.shared.attachIfNeeded(noteID: noteID, in: ctx)
+            }
+        }
+        // 通知调度:几十毫秒,推到下个 runloop。
+        Task { @MainActor in
+            NotificationService.shared.schedule(for: note)
+        }
 
         // GPS 学习:若保存时已有 siteTag + 坐标,把这条样本喂给 centroid。
         // Phase A 用这个数据推荐工地(用户不标也能学到常去的地方)。
@@ -587,16 +750,6 @@ final class HomeViewModel {
           site: \(siteTag ?? "nil") template: \(templateName ?? "nil")
         """)
         #endif
-
-        lastSave = LastSaveSnapshot(
-            noteID: note.id,
-            summary: summaryText(for: transcription, photoCount: photoPaths.count),
-            audioRelativePath: audioRelativePath,
-            photoRelativePaths: photoPaths
-        )
-        // 通知列表高亮这条新记录(跨 tab)。
-        HighlightTracker.shared.markJustAdded(note.id)
-        startUndoCountdown()
 
         // AI 链:polish → classify。两步串行共用一个 Task。
         // 两个独立开关,任一关闭那步跳过。默认全 on。
@@ -618,14 +771,16 @@ final class HomeViewModel {
                 if !Task.isCancelled {
                     do {
                         let polished = try await AIService.shared.polishTranscription(transcription)
-                        if !Task.isCancelled, polished != transcription {
+                        let trimmed = polished.trimmingCharacters(in: .whitespacesAndNewlines)
+                        // P1 #195 防御:polish 返回空 → 保留原 transcription,不要写回空
+                        if !Task.isCancelled, !trimmed.isEmpty, polished != transcription {
                             self.applyPolishedTranscription(noteID: noteID, polished: polished)
+                        } else if trimmed.isEmpty {
+                            Self.logger.warning("AI polish returned empty — keeping original")
                         }
                     } catch {
                         // Apple Intelligence 不可用时静默退化(polishTranscription 已经返回原文)。
-                        #if DEBUG
-                        print("[SiteNote] AI polish unavailable/failed: \(error.localizedDescription)")
-                        #endif
+                        Self.logger.error("AI polish unavailable/failed: \(error.localizedDescription)")
                     }
                 }
             }

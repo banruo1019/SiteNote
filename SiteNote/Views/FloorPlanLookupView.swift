@@ -15,6 +15,14 @@ import SwiftUI
 import SwiftData
 
 struct FloorPlanLookupView: View {
+    /// 当从"具体工地"context 进入时锁定该 site —— 隐藏 site 选择条。
+    /// `nil` 时保持原 free-select 行为(从设置 / 总览入口进入)。
+    let lockedSite: String?
+
+    init(lockedSite: String? = nil) {
+        self.lockedSite = lockedSite
+    }
+
     @Query(
         filter: #Predicate<Note> { $0.deletedAt == nil },
         sort: \Note.createdAt,
@@ -49,7 +57,22 @@ struct FloorPlanLookupView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if siteTags.isEmpty {
+            if lockedSite != nil {
+                // 锁定 site:跳过 siteTags.isEmpty 检查 + 隐藏 siteSelector
+                if plansForSelectedSite.isEmpty {
+                    Spacer()
+                    Text(selectedSite.map { String(localized: "\($0) 还没有楼层", locale: AppLanguageManager.currentLocale) } ?? String(localized: "暂无楼层", locale: AppLanguageManager.currentLocale))
+                        .font(.system(size: DesignTokens.FontSize.body))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                } else {
+                    planSelector
+                    Divider()
+                    if let plan = selectedPlan {
+                        planCanvas(plan: plan)
+                    }
+                }
+            } else if siteTags.isEmpty {
                 noSitesState
             } else {
                 siteSelector
@@ -69,7 +92,7 @@ struct FloorPlanLookupView: View {
                 }
             }
         }
-        .navigationTitle("平面图查看")
+        .navigationTitle(lockedSite.map { String(localized: "\($0) 平面图", locale: AppLanguageManager.currentLocale) } ?? String(localized: "平面图查看", locale: AppLanguageManager.currentLocale))
         .navigationBarTitleDisplayMode(.inline)
         .industrialForm()
         .toolbar {
@@ -80,13 +103,15 @@ struct FloorPlanLookupView: View {
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                     }
-                    .accessibilityLabel("复位缩放")
+                    .accessibilityLabel(String(localized: "复位缩放"))
                 }
             }
         }
         .onAppear {
             siteTags = SiteTagsStorage.load()
-            if selectedSite == nil {
+            if let locked = lockedSite {
+                selectedSite = locked
+            } else if selectedSite == nil {
                 selectedSite = siteTags.first
             }
             syncSelection()
